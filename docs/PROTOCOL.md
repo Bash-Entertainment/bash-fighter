@@ -107,6 +107,32 @@ Any frame that isn't exactly 15 bytes, or whose first byte isn't `1`, is
 silently dropped — never trusted, never allowed to reach the sim or crash
 the tick loop.
 
+#### Worked example: encoding one input frame
+
+A player at tick 4720 holds jump and attack together, stick pushed full
+right, stick Y neutral. `JUMP` is bit 0 and `ATTACK` is bit 1
+(`BUTTON_JUMP | BUTTON_ATTACK` = `0x0003`), the stick axes are Q16.16
+signed fixed point so full right (+1.0) encodes as 65536 (`0x00010000`),
+and every multi-byte field is little-endian. `encodeInput` produces:
+
+```
+01 70 12 00 00 03 00 00 00 01 00 00 00 00 00
+```
+
+| Offset | Bytes | Field | Value |
+|---|---|---|---|
+| 0 | `01` | `tag` | `INPUT` |
+| 1 | `70 12 00 00` | `tick` | 4720 (`0x00001270` LE) |
+| 5 | `03 00` | `buttons` | `0x0003` = `BUTTON_JUMP \| BUTTON_ATTACK` |
+| 7 | `00 00 01 00` | `stickX` | 65536 = +1.0 (full right), Q16.16 LE |
+| 11 | `00 00 00 00` | `stickY` | 0 (neutral) |
+
+Reading it back with `decodeInput` yields
+`{ tick: 4720, buttons: 3, stickX: 65536, stickY: 0 }`. A debugging trick
+that falls out of this layout: byte 0 is always the tag, so a hex dump of
+any binary frame starts with `01` (input), `02` (full snapshot), or `03`
+(delta), and an input frame is always exactly 15 bytes.
+
 ## Binary: snapshot (server -> client), two shapes
 
 Sent to every connected client (players and spectators) at `SNAPSHOT_HZ`
