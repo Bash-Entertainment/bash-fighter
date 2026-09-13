@@ -271,15 +271,12 @@ const settingsPanel = new SettingsPanel(
 );
 startScreen.updateBindings(currentBindings.p1, currentBindings.p2);
 
-// Attract mode: a silent, self-running 20-bot match rendered behind the
-// start screen's hero content (see attract-mode.ts). Mounted as the
-// start screen's first child so it sits underneath .hero/.below-fold in
-// paint order; those sections get their own near-opaque backing colour
-// in style.css so the hero content's contrast is never affected by
-// whatever is moving behind it.
-const attractRoot = document.createElement('div');
-attractRoot.id = 'attract-root';
-startScreen.root.insertBefore(attractRoot, startScreen.root.firstChild);
+// Attract mode: a silent, self-running bot match in its own framed
+// window on the start screen, directly below the pitch line (see
+// #attract-frame in start-screen.ts/style.css and attract-mode.ts). It
+// is not a background layer under the hero text, so nothing else on
+// the page needs special contrast handling for it.
+const attractRoot = startScreen.root.querySelector('#attract-root') as HTMLDivElement;
 const attractMode = new AttractMode(attractRoot, () => reducedMotionPref);
 let startScreenActive = true;
 

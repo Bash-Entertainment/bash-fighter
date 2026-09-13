@@ -1,21 +1,28 @@
-// Attract mode: a silent, self-running 20-bot match rendered behind the
-// start screen's hero content, so a first-time visitor sees the game
-// moving before they decide to press Play. Reuses the exact same Match
+// Attract mode: a silent, self-running bot match rendered in its own
+// framed window on the start screen (#attract-frame, see style.css), so
+// a first-time visitor sees the game moving before they decide to press
+// Play. Reuses the exact same Match
 // (real Sim via createMatchSim, real Renderer) every real local/online
 // match uses -- see docs/LOCAL_CROWD_TESTING.md and ?crowd20=1 for the
 // existing dev harness this mirrors -- rather than forking a second sim
 // or render path. This file is the *only* thing that decides when that
-// background match runs; main.ts just tells it to start/stop.
+// demo match runs; main.ts just tells it to start/stop.
 import { Match } from './match.ts';
 import { ALL_CHARACTERS, ALL_ARENAS } from '@bash-fighter/content';
 import { AudioManager } from '@bash-fighter/audio';
 
-const NUM_FIGHTERS = 20;
+// A small roster, not the full 20-fighter crowd: this plays inside a
+// bounded ~640x220 frame on the start screen (see #attract-frame in
+// style.css), and 20 fighters at that scale read as specks, not as
+// "the game is moving" -- the whole point of attract mode. Fewer,
+// bigger, readable fighters communicate the game far better than a
+// technically-accurate crowd size.
+const NUM_FIGHTERS = 8;
 
 /** Below this CSS width, attract mode never runs (a static frame is
  * shown instead): this is the same 390px-class phone layout the rest of
  * the client treats as narrow (see style.css's mobile breakpoints), and
- * running a 20-fighter sim+render loop for pure decoration is not worth
+ * running the attract-mode sim+render loop for pure decoration is not worth
  * the battery/CPU cost on a phone. */
 const NARROW_WIDTH_PX = 700;
 
@@ -81,7 +88,7 @@ export class AttractMode {
     return id;
   }
 
-  /** Starts (or restarts) the animated background match. No-op if
+  /** Starts (or restarts) the animated demo match. No-op if
    * already running -- callers don't need to track that themselves. */
   async start(): Promise<void> {
     if (this.running) return;

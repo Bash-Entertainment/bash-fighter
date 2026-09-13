@@ -59,6 +59,10 @@ export class StartScreen {
       <div class="hero">
         <div class="wordmark">BASH FIGHTER</div>
         <div class="subtitle">Twenty fighters, a different arena every match, last one standing. Free and open source, plays in your browser.</div>
+        <div id="attract-frame">
+          <div id="attract-root"></div>
+        </div>
+        <p class="attract-caption">A live match, played by bots</p>
         <div class="name-entry-row">
           <label class="name-entry-label" for="player-name-input">Your name</label>
           <input

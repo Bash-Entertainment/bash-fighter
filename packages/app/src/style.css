@@ -73,43 +73,32 @@ html, body {
   padding: 0;
 }
 
-/* The start screen alone shows the attract-mode demo match underneath
-   its content (see #attract-root below), so it can't have the shared
-   opaque .screen background painting over that canvas. */
-#start-screen {
-  background: transparent;
+/* Attract mode (packages/app/src/attract-mode.ts): a silent, self-
+   running bot match, framed as its own bounded "window" directly below
+   the pitch line -- not a background layer under the hero text. It
+   never sits underneath anything a visitor needs to read, so nothing
+   else on the start screen needs a special backing colour for it. */
+#attract-frame {
+  width: 100%;
+  max-width: 640px;
+  height: 220px;
+  margin: 4px 0 2px;
+  border: 1px solid var(--ink-dim);
+  background: var(--bg);
+  overflow: hidden;
+  position: relative;
 }
 
-/* Attract mode (packages/app/src/attract-mode.ts): a silent, self-
-   running bot match rendered behind the start screen's hero content.
-   Mounted as #start-screen's first child, so it paints under .hero and
-   .below-fold in source order; pointer-events are off because this is
-   scenery, never something a visitor can click through into. The solid
-   --bg fallback is what a visitor sees before the first frame paints,
-   on reduced-motion's single still frame, and on narrow/touch layouts
-   where attract-mode.ts never starts a match at all. */
 #attract-root {
   position: absolute;
   inset: 0;
-  z-index: 0;
-  background: var(--bg);
-  overflow: hidden;
   pointer-events: none;
 }
 
-/* .hero and .below-fold sit above #attract-root (later siblings paint
-   on top regardless of z-index 0) but also need their own near-opaque
-   backing colour: without it, the demo match moving directly behind the
-   wordmark/pitch/name field/character grid would be visible through gaps
-   around the text and could reduce contrast depending on which colours
-   happen to land under a given glyph at a given instant. A flat,
-   near-solid panel behind the content removes that risk entirely rather
-   than relying on the demo happening to stay dark under text -- checked
-   against the actual rendered result, not assumed. */
-.hero,
-.below-fold {
-  position: relative;
-  background: rgba(11, 13, 16, 0.92);
+.attract-caption {
+  margin: 0 0 18px;
+  color: var(--ink-dim);
+  font-size: 0.85rem;
 }
 
 /* Title, pitch and the primary action ("Play online") always fit above
