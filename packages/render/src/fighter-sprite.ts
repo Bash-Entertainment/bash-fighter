@@ -162,16 +162,22 @@ export class FighterSprite {
    * measurements here. */
   static readonly HEAD_TOP_OFFSET_WORLD = BODY_HEIGHT + HEAD_RADIUS * 2;
 
-  /** A small downward-pointing chevron hovering above the fighter's head,
-   * flat white against the dark arena, plus a thin ring around the feet.
-   * Two independent cues so the marker still reads even if the crowd
-   * partially occludes one of them, without adding any colour, glow, or
-   * animation that could be mistaken for game state. */
+  /** A thin flat ring around the local player's own feet -- the
+   * close-range "this one is you" confirmation. This used to be paired
+   * with a small chevron drawn above the head in this same *world*
+   * space, but that chevron was sized in world units and scaled down
+   * by camera zoom exactly like the fighter's own body: at true
+   * 20-fighter zoom on a wide stage it shrank to a few illegible
+   * pixels, which is exactly the readability gap a real player
+   * reported ("which one is me"). The long-range, zoom-proof version of
+   * that cue is now the screen-space pointer drawn once, above the
+   * local player's badge, by Renderer.drawLocalPointer in index.ts
+   * (constant pixel size, unaffected by cam.scale) -- this ring is kept
+   * only as the close-range subtle treatment, since up close it never
+   * needed to fight camera zoom in the first place. No colour, glow, or
+   * animation, so it can't be mistaken for game state. */
   private drawLocalMarker(): void {
-    const markerY = -(BODY_HEIGHT + HEAD_RADIUS * 2 + 10);
     const m = this.localMarker;
-    m.moveTo(-6, markerY).lineTo(0, markerY + 7).lineTo(6, markerY).closePath();
-    m.fill({ color: PALETTE.hud });
     m.circle(0, -1, BODY_WIDTH * 0.85);
     m.stroke({ color: PALETTE.hud, width: 2, alpha: 0.9 });
   }

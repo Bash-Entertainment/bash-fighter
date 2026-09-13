@@ -24,6 +24,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   computeBadgePlacements,
+  computeLocalPointer,
+  LOCAL_POINTER_GAP_PX,
   type BadgeCandidate,
   type BodyBox,
 } from '../src/badge-layout.ts';
@@ -213,4 +215,52 @@ test('the local player is exempt from being dropped even when truly packed, but 
   const local = placements.find((p) => p.candidate.isLocalPlayer);
   assert.ok(local, 'local player badge must always be placed, even here');
   assert.equal(local!.label, '1', 'local player still degrades to the number fallback before being kept overlapping');
+});
+
+// Regression coverage for the local-player pointer (the "which one is
+// me" fix): a single constant-pixel-size marker drawn in screen space,
+// anchored off the local player's own already-placed badge box rather
+// than recomputed independently in world space. Pinned here at the
+// source level (computeLocalPointer is pure, no Pixi/DOM) per this
+// project's no-jsdom convention -- see fighter-sprite.test.ts and
+// index.ts's Renderer.drawLocalPointer for the Pixi-side consumer.
+test('computeLocalPointer: sits a fixed gap above the local player\'s own badge box, following its x', () => {
+  const bodyBoxes: BodyBox[] = [makeBodyBox(0, 400, 300), makeBodyBox(1, 500, 300)];
+  const candidates: BadgeCandidate[] = [makeCandidate(0, 400, 300, true), makeCandidate(1, 500, 300, false)];
+  const names = ['Rook', 'Fizz'];
+  const placements = computeBadgePlacements(candidates, bodyBoxes, names);
+  const local = placements.find((p) => p.candidate.isLocalPlayer);
+  assert.ok(local);
+  const pointer = computeLocalPointer(placements);
+  assert.ok(pointer, 'a local-player placement must produce a pointer position');
+  assert.equal(pointer!.x, local!.candidate.headX, 'pointer stays horizontally centred on the local player\'s own head');
+  assert.equal(
+    pointer!.y,
+    local!.box.top - LOCAL_POINTER_GAP_PX,
+    'pointer sits a fixed gap above the top of the local player\'s own badge box, never inside or touching it',
+  );
+});
+
+test('computeLocalPointer: returns null when there is no local player (e.g. the attract-mode background match)', () => {
+  const bodyBoxes: BodyBox[] = [makeBodyBox(0, 400, 300), makeBodyBox(1, 500, 300)];
+  const candidates: BadgeCandidate[] = [makeCandidate(0, 400, 300, false), makeCandidate(1, 500, 300, false)];
+  const names = ['Rook', 'Fizz'];
+  const placements = computeBadgePlacements(candidates, bodyBoxes, names);
+  assert.equal(computeLocalPointer(placements), null);
+});
+
+test('computeLocalPointer: still returns a position even when the local badge degraded to its numeric fallback', () => {
+  // The local player's badge box is never dropped, but it can still
+  // shrink from a name to a bare number (see the exemption test above).
+  // The pointer must track whichever box actually got placed, not
+  // assume a name-sized box.
+  const bodyBoxes: BodyBox[] = [makeBodyBox(0, 400, 300), makeBodyBox(1, 415, 300)];
+  const candidates: BadgeCandidate[] = [makeCandidate(0, 400, 300, true), makeCandidate(1, 415, 300, false)];
+  const names = ['LocalPlayerVeryLongName', 'B'];
+  const placements = computeBadgePlacements(candidates, bodyBoxes, names);
+  const local = placements.find((p) => p.candidate.isLocalPlayer);
+  assert.ok(local);
+  const pointer = computeLocalPointer(placements);
+  assert.ok(pointer);
+  assert.equal(pointer!.y, local!.box.top - LOCAL_POINTER_GAP_PX);
 });

@@ -110,6 +110,33 @@ export function computeBadgePlacements(
   return placements;
 }
 
+/** Fixed screen-space gap, in pixels, between the top of the local
+ * player's own badge box and the bottom tip of the local-player pointer
+ * (see computeLocalPointer below). Kept separate from BADGE_BOX_MARGIN_PX
+ * so the pointer never visually touches the badge it sits above. */
+export const LOCAL_POINTER_GAP_PX = 4;
+
+/** Where to draw the one persistent "this is you" pointer, given this
+ * frame's badge placements. Screen-space and constant-size by design
+ * (see index.ts's drawLocalPointer): the old approach drew a marker in
+ * *world* space on the fighter itself, so it was scaled down by the
+ * camera zoom exactly like the fighter's own body -- at true 20-fighter
+ * zoom on a wide stage that shrank it to a few pixels, which is the
+ * actual defect a real player reported ("which one is me"). Anchoring
+ * off the local player's own badge placement (rather than recomputing
+ * head position independently) guarantees the pointer only ever appears
+ * when the local player has a real, placed badge to sit above -- so it
+ * can never appear with no local player (attract mode) and never floats
+ * disconnected from the identity cue it's reinforcing. Returns null when
+ * there is no local-player placement this frame. */
+export function computeLocalPointer(
+  placements: readonly BadgePlacement[],
+): { x: number; y: number } | null {
+  const local = placements.find((p) => p.candidate.isLocalPlayer);
+  if (!local) return null;
+  return { x: local.candidate.headX, y: local.box.top - LOCAL_POINTER_GAP_PX };
+}
+
 export const BADGE_FONT_SIZE = 13;
 // Rough monospace glyph width at BADGE_FONT_SIZE, used only to build an
 // approximate collision box -- no need for exact text metrics here.

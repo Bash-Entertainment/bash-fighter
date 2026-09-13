@@ -16,6 +16,7 @@ import { EffectsLayer } from './effects.ts';
 import { resolveAnimation } from '@bash-fighter/content';
 import {
   computeBadgePlacements,
+  computeLocalPointer,
   BADGE_FONT_SIZE,
   type BadgeCandidate,
   type BodyBox,
@@ -307,6 +308,13 @@ export class Renderer {
   // screen positions first. See layoutBadges() below.
   private readonly badgeContainer = new Container();
   private readonly badgeTexts: Text[] = [];
+  // The one persistent "this is you" pointer: a single Graphics object
+  // (not pooled per-fighter -- there is only ever at most one local
+  // player) living in screen space alongside the badges, so it renders
+  // at a constant pixel size regardless of camera zoom. See
+  // computeLocalPointer in badge-layout.ts for why this replaced the old
+  // world-space marker drawn on the fighter itself.
+  private readonly localPointer = new Graphics();
   private readonly debugText = makeDebugText();
   private stageBounds: StageBounds;
   private readonly effects = new EffectsLayer();
@@ -349,6 +357,7 @@ export class Renderer {
     this.debugText.visible = false;
     this.app.stage.addChild(this.debugText);
     this.app.stage.addChild(this.badgeContainer);
+    this.badgeContainer.addChild(this.localPointer);
 
     this.ready = true;
   }
@@ -474,6 +483,41 @@ export class Renderer {
     for (let i = textIndex; i < this.badgeTexts.length; i++) {
       (this.badgeTexts[i] as Text).visible = false;
     }
+    this.drawLocalPointer(placements);
+  }
+
+  /** Draws (or hides) the single constant-size "this is you" pointer --
+   * a small flat downward-pointing triangle in screen space, anchored
+   * just above the local player's own badge (see computeLocalPointer).
+   * Unlike everything else this renderer draws on a fighter, this never
+   * scales with camera zoom: that's the whole point -- at true
+   * 20-fighter zoom on a wide stage, a marker sized in *world* units
+   * (as fighter-sprite.ts's old chevron was) shrinks along with the
+   * fighter itself down to a few pixels, which is exactly the
+   * readability gap a real player reported. A fixed pixel size means
+   * this pointer reads exactly the same whether the local player is
+   * alone on screen or one of twenty. Flat cream fill, no glow, no
+   * gradient, matches the rest of this project's austere HUD language;
+   * no animation, so it costs nothing under reduced-motion. Hidden
+   * automatically whenever there is no local-player badge placement --
+   * i.e. whenever there is no local player at all (attract mode) -- by
+   * computeLocalPointer returning null. */
+  private drawLocalPointer(placements: ReturnType<typeof computeBadgePlacements>): void {
+    const pos = computeLocalPointer(placements);
+    this.localPointer.clear();
+    if (!pos) {
+      this.localPointer.visible = false;
+      return;
+    }
+    this.localPointer.visible = true;
+    const w = 7;
+    const h = 8;
+    this.localPointer
+      .moveTo(pos.x - w, pos.y - h)
+      .lineTo(pos.x + w, pos.y - h)
+      .lineTo(pos.x, pos.y)
+      .closePath()
+      .fill({ color: PALETTE.hud });
   }
 
   render(frame: RenderFrame): void {
