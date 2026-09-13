@@ -487,6 +487,17 @@ export class Match {
     }
     this.lastTickAt = Date.now();
     this.accumulatorMs = 0;
+    // [matchStart] production log (2026-09-13): journalctl had no way to
+    // tell which of the six stages players actually get -- [modeRotation]
+    // logs the mode at match-*creation* time, but arenaId is only chosen
+    // here in start() (see pickArenaId above). One line per match, emitted
+    // once the sim (and therefore the real resolved winCondition) exists.
+    console.log(`[matchStart] ${JSON.stringify({
+      matchId: this.id,
+      arenaId: this.arenaId,
+      winCondition: this.winCondition,
+      seatCount: this.seats.length,
+    })}`);
     this.timer = setInterval(() => this.loop(), TICK_MS);
     this.events.onStart?.();
   }
