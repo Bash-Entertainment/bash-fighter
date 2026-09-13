@@ -71,6 +71,7 @@ export function drawStage(
   viewWidth: number,
   viewHeight: number,
   preview?: BlastPreview | null,
+  suppressOuterWash = false,
 ): void {
   g.clear();
 
@@ -79,10 +80,21 @@ export function drawStage(
   // The wash goes OUTSIDE the blast zone, not inside it. Filling the inside
   // tinted the entire playable area red, which read as a permanent damage
   // vignette and made the whole game look like it was in an error state.
-  const outerTL = worldToScreen(bounds.blastMinX - 2000, bounds.blastMaxY + 2000, cam, viewWidth, viewHeight);
-  const outerBR = worldToScreen(bounds.blastMaxX + 2000, bounds.blastMinY - 2000, cam, viewWidth, viewHeight);
-  g.rect(outerTL.x, outerTL.y, outerBR.x - outerTL.x, outerBR.y - outerTL.y);
-  g.fill({ color: PALETTE.blastZone, alpha: 0.28 });
+  //
+  // `suppressOuterWash` (attract mode only, see index.ts's
+  // setAttractFraming): the start screen's demo camera frames tightly on
+  // the bot cluster rather than the whole arena floor, but a tight-zoomed
+  // camera can still have a lot of outside-blast-zone area in frame on a
+  // wide/tall stage -- for a first-time visitor that read as a permanent
+  // red error wash, not "danger zone". This is presentation-only: the
+  // real per-player edge-danger warning and the boundary dashed line
+  // below are untouched, and no real match ever sets this flag.
+  if (!suppressOuterWash) {
+    const outerTL = worldToScreen(bounds.blastMinX - 2000, bounds.blastMaxY + 2000, cam, viewWidth, viewHeight);
+    const outerBR = worldToScreen(bounds.blastMaxX + 2000, bounds.blastMinY - 2000, cam, viewWidth, viewHeight);
+    g.rect(outerTL.x, outerTL.y, outerBR.x - outerTL.x, outerBR.y - outerTL.y);
+    g.fill({ color: PALETTE.blastZone, alpha: 0.28 });
+  }
 
   const insideTL = worldToScreen(bounds.blastMinX, bounds.blastMaxY, cam, viewWidth, viewHeight);
   const insideBR = worldToScreen(bounds.blastMaxX, bounds.blastMinY, cam, viewWidth, viewHeight);

@@ -176,6 +176,64 @@ function cameraConfig(
   };
 }
 
+// Attract mode's framing (see Renderer.setAttractFraming): the demo on
+// the start screen is a small window meant to show recognisable
+// fighters trading blows, not "a fight somewhere in a big arena" the
+// way a real match's framing.ts floor deliberately guarantees. Real
+// matches never call this -- JUMP_HEADROOM_WORLD/FALL_HEADROOM_WORLD
+// and the population-aware floor in framing.ts are untouched.
+//
+// The "arena" handed to computeCamera() here is just a padded box
+// around the fighters themselves, clamped to the live blast rect so it
+// can never invent space beyond the stage (that clamp is also what
+// keeps the outer-blast-zone wash off-screen without needing
+// suppressOuterWash to do all the work by itself): computeCamera()
+// takes max(fighterSpan, arenaSpan) per axis, so an arena this close to
+// the fighters' own span acts as almost no floor at all, letting the
+// camera zoom in on the cluster instead of holding the whole stage.
+const ATTRACT_FIGHTER_PADDING_WORLD = 130;
+
+function attractCameraConfig(
+  stage: StageBounds,
+  viewWidth: number,
+  viewHeight: number,
+  positions: readonly { x: number; y: number }[],
+): CameraConfig {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const p of positions) {
+    minX = Math.min(minX, p.x);
+    maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y);
+    maxY = Math.max(maxY, p.y);
+  }
+  if (!Number.isFinite(minX)) {
+    // No living fighters to frame (freeze-frame after the match resolved,
+    // about to be torn down and respawned) -- fall back to the stage's
+    // own blast rect rather than an inverted/empty box.
+    minX = stage.blastMinX;
+    maxX = stage.blastMaxX;
+    minY = stage.blastMinY;
+    maxY = stage.blastMaxY;
+  }
+  const arena: ArenaBounds = {
+    minX: Math.max(minX - ATTRACT_FIGHTER_PADDING_WORLD, stage.blastMinX),
+    maxX: Math.min(maxX + ATTRACT_FIGHTER_PADDING_WORLD, stage.blastMaxX),
+    minY: Math.max(minY - ATTRACT_FIGHTER_PADDING_WORLD * 0.6, stage.blastMinY),
+    maxY: Math.min(maxY + ATTRACT_FIGHTER_PADDING_WORLD * 1.3, stage.blastMaxY),
+  };
+  return {
+    viewWidth,
+    viewHeight,
+    minScale: 1.6,
+    maxScale: 5.5,
+    paddingWorld: 20,
+    arena,
+  };
+}
+
 function mainGroundY(stage: StageBounds): number {
   return stage.platforms[0]?.y ?? 0;
 }
@@ -301,6 +359,15 @@ export class Renderer {
     this.badgeContainer.visible = show;
   }
 
+  /** Switches between real-match framing (framing.ts's population-aware
+   * floor, always shows "a fight in an arena") and attract mode's tight
+   * cluster-following camera + suppressed outer-blast-zone wash (see
+   * attractCameraConfig and drawStage's suppressOuterWash above). Only
+   * ever set by attract-mode.ts; real matches leave this false. */
+  setAttractFraming(on: boolean): void {
+    this.attractFraming = on;
+  }
+
   isDebug(): boolean {
     return this.debugOn;
   }
@@ -378,6 +445,7 @@ export class Renderer {
    * badges that survive are the ones for whoever is actually nearby --
    * exactly the fighters this player is about to fight or be hit by. */
   private names: readonly string[] | undefined;
+  private attractFraming = false;
 
   private layoutBadges(candidates: BadgeCandidate[], bodyBoxes: BodyBox[]): void {
     this.ensureBadgePool(candidates.length);
@@ -420,11 +488,14 @@ export class Renderer {
         }
       : this.stageBounds;
 
+    const fighterPositions = liveFighters.map((f) => ({ x: f.x, y: f.y }));
     const cam =
       frame.cameraOverride ??
       computeCamera(
-        liveFighters.map((f) => ({ x: f.x, y: f.y })),
-        cameraConfig(stageForDraw, vw, vh, liveFighters.length),
+        fighterPositions,
+        this.attractFraming
+          ? attractCameraConfig(stageForDraw, vw, vh, fighterPositions)
+          : cameraConfig(stageForDraw, vw, vh, liveFighters.length),
       );
 
     // Translate any hit/elimination effects the app layer observed since
@@ -471,7 +542,7 @@ export class Renderer {
     const shake = this.effects.update(dtMs);
     this.world.position.set(shake.x, shake.y);
 
-    drawStage(this.stageLayer, stageForDraw, cam, vw, vh, frame.previewArenaBounds);
+    drawStage(this.stageLayer, stageForDraw, cam, vw, vh, frame.previewArenaBounds, this.attractFraming);
 
     const badgeCandidates: BadgeCandidate[] = [];
     const bodyBoxes: BodyBox[] = [];

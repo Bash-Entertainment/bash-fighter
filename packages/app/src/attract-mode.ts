@@ -130,6 +130,7 @@ export class AttractMode {
     await match.init(this.parent);
     match.renderer.setShowBadges(false);
     match.renderer.setDebug(false);
+    match.renderer.setAttractFraming(true);
     if (this.isReducedMotion()) {
       // Reduced motion: render a handful of frames so the bots have
       // settled into a natural pose, then freeze -- a static picture of
