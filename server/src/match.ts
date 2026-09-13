@@ -727,10 +727,29 @@ export class Match {
 
   /** Ground-truth summary line for the match-duration measurement task
    *  (2026-09-09): one JSON line per match end, cheap (fires once),
-   *  observability only -- no effect on gameplay. */
+   *  observability only -- no effect on gameplay.
+   *
+   *  Diagnosed 2026-09-13 (pacing-anomaly investigation): remainingAlive
+   *  and humanSlotsEliminated both read Seat.eliminated, which the sim
+   *  deliberately never sets while respawns are enabled (currently just
+   *  'timedKO' -- see respawnsEnabled/checkBlastZone in packages/sim's
+   *  sim.ts). So a perfectly ordinary, combat-heavy timedKO match reports
+   *  remainingAlive: totalSeats and humanSlotsEliminated: 0 for its
+   *  entire duration -- identical to a match with zero combat -- and a
+   *  log reader has no way to tell the two apart. That produced a false
+   *  "bots aren't fighting" alarm for real production matches (m3/m7,
+   *  2026-09-13) that in fact had normal KOs throughout; see
+   *  getWinner()/getLeaderboard() picking a real (non-null) winner off
+   *  koCount as the tell. Fix: always log winCondition so readers know
+   *  when eliminated-based fields don't apply, plus totalKOs (sum of
+   *  every seat's koCount) and maxKoCount as a truthful, mode-agnostic
+   *  combat-happened signal that IS populated in every mode. */
   private logMatchSummary(endReason: 'resolved' | 'abandoned_by_humans' | 'max_duration'): void {
     const durationSec = ((this.tick - this.matchStartedAtTick) / 60).toFixed(1);
     const humanSlots = this.seats.filter((s) => !s.isBot).map((s) => s.slot);
+    const koCounts = this.sim
+      ? this.seats.map((seat) => this.sim!.getFighter(seat.slot).koCount)
+      : [];
     console.log(JSON.stringify({
       evt: 'matchSummary',
       matchId: this.id,
@@ -738,10 +757,13 @@ export class Match {
       durationSec,
       finalTick: this.tick,
       arenaId: this.arenaId,
+      winCondition: this.winCondition,
       totalSeats: this.seats.length,
       humanSeats: humanSlots.length,
       humanSlotsEliminated: humanSlots.filter((slot) => this.seats[slot].eliminated).length,
       remainingAlive: this.seats.filter((s) => !s.eliminated).length,
+      totalKOs: koCounts.reduce((sum, n) => sum + n, 0),
+      maxKoCount: koCounts.length ? Math.max(...koCounts) : 0,
     }));
   }
 
