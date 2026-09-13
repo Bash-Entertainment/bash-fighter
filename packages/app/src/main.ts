@@ -18,6 +18,7 @@ import { MoveReferencePanel } from './ui/move-reference-panel.ts';
 import { SettingsPanel } from './ui/settings-panel.ts';
 import { TouchControls } from './ui/touch-controls.ts';
 import { WaitingScreen } from './ui/waiting-screen.ts';
+import { AttractMode } from './attract-mode.ts';
 import {
   isTouchCapable,
   loadPersistedBindings,
@@ -144,12 +145,16 @@ const startScreen = new StartScreen(
   },
   () => {
     startScreen.hide();
+    startScreenActive = false;
+    attractMode.stop();
     replayScreen.show();
   },
 );
 
 const replayScreen = new ReplayScreen(appRoot, () => {
   startScreen.show();
+  startScreenActive = true;
+  refreshAttractMode();
 });
 
 // Online mode is additive: a second button on the same start screen, and a
@@ -249,6 +254,12 @@ const settingsPanel = new SettingsPanel(
       reducedMotionPref = reduced;
       localStorage.setItem(REDUCED_MOTION_KEY, String(reduced));
       setReducedMotion(reduced);
+      // Attract mode reads reducedMotionPref only when it (re)spawns a
+      // match, not every frame -- force a respawn now so flipping this
+      // setting while the start screen's demo is already running takes
+      // effect immediately instead of on the next match resolution.
+      attractMode.stop();
+      refreshAttractMode();
     },
     // Volume slider (repo issue #14): a separate, independently persisted
     // control from mute/unmute -- setting it to 0 sounds identical to
@@ -259,6 +270,30 @@ const settingsPanel = new SettingsPanel(
   },
 );
 startScreen.updateBindings(currentBindings.p1, currentBindings.p2);
+
+// Attract mode: a silent, self-running 20-bot match rendered behind the
+// start screen's hero content (see attract-mode.ts). Mounted as the
+// start screen's first child so it sits underneath .hero/.below-fold in
+// paint order; those sections get their own near-opaque backing colour
+// in style.css so the hero content's contrast is never affected by
+// whatever is moving behind it.
+const attractRoot = document.createElement('div');
+attractRoot.id = 'attract-root';
+startScreen.root.insertBefore(attractRoot, startScreen.root.firstChild);
+const attractMode = new AttractMode(attractRoot, () => reducedMotionPref);
+let startScreenActive = true;
+
+function refreshAttractMode(): void {
+  const shouldRun = startScreenActive && !document.hidden && !AttractMode.isNarrowViewport();
+  if (shouldRun) void attractMode.start();
+  else attractMode.stop();
+}
+
+document.addEventListener('visibilitychange', refreshAttractMode);
+window.addEventListener('resize', refreshAttractMode);
+// Fires once at boot too, since startScreenActive starts true and the
+// start screen is the first thing shown.
+refreshAttractMode();
 
 const settingsButton = document.createElement('button');
 settingsButton.className = 'btn btn-plain';
@@ -370,6 +405,8 @@ async function beginOnlineMatch(): Promise<void> {
   clearSpectateStallTimer();
   spectateChip.hide();
   startScreen.hide();
+  startScreenActive = false;
+  attractMode.stop();
   winScreen.hide();
   timedBrawlEndScreen.hide();
   spectatorBanner.hide();
@@ -627,6 +664,8 @@ async function beginMatch(): Promise<void> {
   winScreen.hide();
   timedBrawlEndScreen.hide();
   startScreen.hide();
+  startScreenActive = false;
+  attractMode.stop();
   spectatorBanner.hide();
   matchOverlay.hide();
   hud.show();

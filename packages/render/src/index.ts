@@ -291,6 +291,16 @@ export class Renderer {
     this.debugText.visible = on;
   }
 
+  /** Hides every slot-number/name badge without touching anything else
+   * this renders. Used by the start screen's attract-mode background
+   * match (see packages/app/src/attract-mode.ts): that match is scenery,
+   * not something a visitor is meant to read, so its badges would just
+   * be noise -- but it is still the same real Renderer everything else
+   * uses, not a stripped-down copy. */
+  setShowBadges(show: boolean): void {
+    this.badgeContainer.visible = show;
+  }
+
   isDebug(): boolean {
     return this.debugOn;
   }
