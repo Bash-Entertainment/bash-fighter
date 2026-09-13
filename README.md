@@ -37,6 +37,17 @@ the primary design target.
 See `docs/ARCHITECTURE.md` for how the simulation, rendering, and netcode
 fit together.
 
+## Feedback
+
+We want to know how the game actually feels to play — combat weight, camera
+readability, fun, touch ergonomics, lobby clarity. Two ways to tell us:
+
+- In-game: click the **Feedback** button (start screen, in-match HUD, or
+  match-end screen). It's a short form, free text plus optional 1-5 ratings,
+  needs no account, and posts straight to our server.
+- On GitHub: [open an issue](https://github.com/BashEntertainment/bash-fighter/issues)
+  if you prefer that route, especially for bugs or specific reproduction steps.
+
 ## Repository layout
 
 npm workspace monorepo:
