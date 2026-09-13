@@ -246,6 +246,36 @@ export class Match {
   private matchStartedAtTick = 0;
   private static readonly COMBAT_WINDOW_TICKS = 60;
   countdownTicksRemaining = -1;
+  /** Wall-clock deadline (ms epoch, Date.now() timebase) by which this
+   *  match will start even if nobody else joins -- the sooner of the
+   *  post-minimum countdown and the lone-player bot-fill grace period,
+   *  both set by RoomManager (server/src/rooms.ts) via noteStartDeadline.
+   *  null until the first deadline-setting timer starts (e.g. before the
+   *  very first seat exists), and after the match has started. Read via
+   *  remainingStartTicks() rather than directly, so callers always get a
+   *  live value computed from the actual clock instead of a number that
+   *  can go stale between broadcasts. */
+  startDeadlineAt: number | null = null;
+  /** Moves startDeadlineAt to atMs if that is sooner than what's already
+   *  recorded (or nothing is recorded yet). Never moves it later: once a
+   *  player has been told "starting in Ns", that promise must not
+   *  silently slip just because a second, later-firing timer also calls
+   *  in. */
+  noteStartDeadline(atMs: number): void {
+    if (this.startDeadlineAt === null || atMs < this.startDeadlineAt) {
+      this.startDeadlineAt = atMs;
+    }
+  }
+  /** Ticks remaining until startDeadlineAt, or -1 if no deadline is set.
+   *  Computed from wall-clock time on every call (not decremented on a
+   *  timer) so it's correct even if nothing has actively ticked it down
+   *  since the deadline was set -- the value a freshly-connecting client
+   *  gets is exactly as accurate as one that's been watching all along. */
+  remainingStartTicks(): number {
+    if (this.startDeadlineAt === null) return -1;
+    const msLeft = this.startDeadlineAt - Date.now();
+    return Math.max(0, Math.round((msLeft / 1000) * TICK_HZ));
+  }
   readonly events: MatchEvents;
   /** How many clients (playing seats or spectators) the transport layer
    *  currently has connected to this match. Set by the transport layer

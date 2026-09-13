@@ -252,6 +252,19 @@ export class NetMatch {
     this.input.attach(window);
   }
 
+  /** Sends the "Start now" request from the waiting screen's button: the
+   *  server fills the rest of this lobby with bots and starts right away
+   *  instead of waiting out the countdown/bot-fill grace period. Only
+   *  meaningful while sitting in a lobby with an open socket; a no-op
+   *  otherwise (server also validates seat + phase independently, so this
+   *  is just avoiding sending into a dead or pre-hello socket). */
+  requestStartNow(): void {
+    const ws = this.ws;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ t: 'startNow' }));
+    }
+  }
+
   connect(name: string, characterId: string = DEFAULT_CHARACTER_ID): void {
     this.name = name;
     this.characterId = characterId;

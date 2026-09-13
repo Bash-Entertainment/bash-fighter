@@ -82,7 +82,19 @@ export interface PongMessage {
   id: number;
 }
 
-export type ClientControlMessage = HelloMessage | SpectateMessage | PongMessage;
+/** Sent by a client sitting in a lobby who wants the match to start right
+ *  now instead of waiting out the countdown/bot-fill grace period -- the
+ *  "Start now" control on the waiting screen. The server only honours this
+ *  from a connection holding an actual seat in that lobby (never a
+ *  spectator, never a stranger to the match), and treats it as a no-op
+ *  once the match has left the lobby phase, so it's safe to send more
+ *  than once (e.g. a double click). Remaining empty seats are filled with
+ *  bots exactly as the normal bot-fill timer would. */
+export interface StartNowMessage {
+  t: 'startNow';
+}
+
+export type ClientControlMessage = HelloMessage | SpectateMessage | PongMessage | StartNowMessage;
 
 // ---------------------------------------------------------------------------
 // Control messages: server -> client
@@ -117,7 +129,14 @@ export interface LobbyMessage {
   capacity: number;
   /** Minimum players needed to start early. */
   minimum: number;
-  /** Ticks until the match starts anyway, or -1 if not counting down. */
+  /** Ticks until the match starts anyway, or -1 if no deadline is known
+   *  yet (a match with nobody in it, which never actually gets sent).
+   *  Covers both reasons a lobby ever ends: the post-minimum countdown
+   *  AND the bot-fill grace period a lone player sits in before bots pad
+   *  the rest of the lobby -- whichever is sooner. Computed server-side
+   *  from a wall-clock deadline each time this message is sent, so it's
+   *  always accurate even across broadcast gaps; the client may still
+   *  tick it down locally between messages for a smooth display. */
   countdownTicks: number;
   names: string[];
   /** Plain-language name of the mode this lobby's match will run, e.g.
@@ -481,6 +500,8 @@ export function parseClientControl(text: string): ClientControlMessage | null {
     }
     case 'spectate':
       return { t: 'spectate' };
+    case 'startNow':
+      return { t: 'startNow' };
     case 'pong':
       if (typeof obj.id !== 'number') return null;
       return { t: 'pong', id: obj.id };

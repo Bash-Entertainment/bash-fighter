@@ -32,13 +32,14 @@ anywhere. Any other message before `hello`, or a malformed message, gets
 | `hello` | `protocolVersion`, `name` | First message. Server assigns a match/slot and replies `welcome`. |
 | `spectate` | — | Client wants to only watch, not play (used after being assigned, or after elimination to keep watching without reconciliation). |
 | `pong` | `id` | Echo of a server `ping`, for RTT measurement. |
+| `startNow` | — | Sent by a client holding a seat in a still-filling lobby (the waiting screen's "Start now" button): fills the rest of that lobby with bots and starts immediately, instead of waiting out the countdown/bot-fill grace period. The server only honours this from a connection that actually holds a seat in that exact match (never a spectator, never a stranger); once the match has left the lobby phase, further `startNow` messages for it are a silent no-op, so a client may resend freely (e.g. a double click). |
 
 ## Control messages, server -> client
 
 | `t` | Fields | Meaning |
 |---|---|---|
 | `welcome` | `protocolVersion`, `clientId`, `slot`, `matchId` | Reply to `hello`. `slot` is `-1` for a pure spectator. |
-| `lobby` | `players`, `capacity`, `minimum`, `countdownTicks`, `names` | Sent while a match is filling. `countdownTicks` is `-1` until the minimum player count is reached, then counts down to match start. |
+| `lobby` | `players`, `capacity`, `minimum`, `countdownTicks`, `names` | Sent while a match is filling. `countdownTicks` is ticks (60/s) until the match starts anyway, or `-1` if no start deadline is known yet. As of 2026-09-13 this covers *both* reasons a lobby ever ends on its own: the post-minimum countdown once enough humans have joined, and the bot-fill grace period a lone player sits in before bots pad out the rest of the lobby -- whichever is sooner. It is computed server-side from a wall-clock deadline on every send, so it stays accurate across broadcast gaps; clients may tick it down locally between messages for a smooth display, but must treat `-1` as an honest "no deadline yet" state, never invent a countdown the server hasn't committed to. |
 | `matchStart` | `matchId`, `seed`, `numFighters`, `slot`, `settings`, `arenaId`, `names` | The match has started. Every client builds an identical `Sim` from `seed` + `numFighters` + `arenaId`. |
 | `eliminated` | `slot`, `placement`, `tick` | A fighter was eliminated. `placement` is `1` for the eventual winner (announced at match end), `N` for the first fighter out. |
 | `matchEnd` | `winner`, `leaderboard`, `tick` | Final result. `winner` is `null` only for a genuine simultaneous final KO. |

@@ -31,6 +31,13 @@ export class RoomManager {
   private nextId = 1;
   private countdownTimer: NodeJS.Timeout | null = null;
   private botFillTimer: NodeJS.Timeout | null = null;
+  // Broadcasts the lobby message once a second purely so a waiting
+  // client's countdown display stays fresh even when nothing else about
+  // the lobby has changed (no join, no elimination) -- otherwise the last
+  // number a client saw would sit frozen until the next real event.
+  // Started alongside the bot-fill timer (which runs for every fresh
+  // lobby) and cleared with it.
+  private displayTicker: NodeJS.Timeout | null = null;
   readonly capacity: number;
   readonly minimum: number;
   private readonly makeEvents: (matchId: string) => MatchEvents;
@@ -150,6 +157,7 @@ export class RoomManager {
   private startCountdown(match: Match): void {
     let ticksLeft = COUNTDOWN_SECONDS * TICK_HZ;
     match.countdownTicksRemaining = ticksLeft;
+    match.noteStartDeadline(Date.now() + COUNTDOWN_SECONDS * 1000);
     this.countdownTimer = setInterval(() => {
       ticksLeft -= TICK_HZ / 5;
       match.countdownTicksRemaining = Math.max(0, ticksLeft);
@@ -177,35 +185,73 @@ export class RoomManager {
    *  strangers, or wait at all beyond this short grace period. */
   private startBotFillTimer(match: Match): void {
     this.clearBotFillTimer();
+    match.noteStartDeadline(Date.now() + Math.max(0, BOT_FILL_SECONDS) * 1000);
     this.botFillTimer = setTimeout(() => {
       this.botFillTimer = null;
       if (match.phase !== 'lobby') return;
-      const target = Math.min(match.capacity, Math.max(BOT_FILL_TARGET, match.minimum));
-      // Bots get a character deterministically drawn from the roster, seeded
-      // from the match id + slot index (never Math.random), so every client
-      // that reconstructs the sim from the same match id picks the same
-      // characters -- see resolveCharacterId in match.ts for how seat
-      // characterId flows into createMatchSim. Human seats are untouched;
-      // this only fills in a characterId for the isBot=true seats added here.
-      const matchSeed = seedFromMatchId(match.id);
-      let botIndex = 0;
-      while (match.filledSlots < target) {
-        const slot = match.filledSlots;
-        const rng = seedRng((matchSeed ^ (slot * 0x9e3779b9)) >>> 0);
-        const draw = nextBounded(rng, ALL_CHARACTERS.length);
-        const characterId = ALL_CHARACTERS[draw.value].id;
-        match.addSeat(botName(botIndex), true, characterId);
-        botIndex++;
-      }
+      this.fillWithBots(match);
       this.clearCountdown();
       match.start();
       if (this.filling === match) this.filling = null;
     }, Math.max(0, BOT_FILL_SECONDS) * 1000);
+    this.displayTicker = setInterval(() => {
+      if (match.phase !== 'lobby') {
+        this.clearBotFillTimer();
+        return;
+      }
+      match.events.onLobbyUpdate?.();
+    }, 1000);
+  }
+
+  /** Fills every empty seat up to BOT_FILL_TARGET (never below whatever is
+   *  already filled, never above capacity) with bots. Shared by the
+   *  lone-player grace-period timer and the "start now" request so both
+   *  paths pick characters exactly the same deterministic way. */
+  private fillWithBots(match: Match): void {
+    const target = Math.min(match.capacity, Math.max(BOT_FILL_TARGET, match.minimum, match.filledSlots));
+    // Bots get a character deterministically drawn from the roster, seeded
+    // from the match id + slot index (never Math.random), so every client
+    // that reconstructs the sim from the same match id picks the same
+    // characters -- see resolveCharacterId in match.ts for how seat
+    // characterId flows into createMatchSim. Human seats are untouched;
+    // this only fills in a characterId for the isBot=true seats added here.
+    const matchSeed = seedFromMatchId(match.id);
+    let botIndex = 0;
+    while (match.filledSlots < target) {
+      const slot = match.filledSlots;
+      const rng = seedRng((matchSeed ^ (slot * 0x9e3779b9)) >>> 0);
+      const draw = nextBounded(rng, ALL_CHARACTERS.length);
+      const characterId = ALL_CHARACTERS[draw.value].id;
+      match.addSeat(botName(botIndex), true, characterId);
+      botIndex++;
+    }
+  }
+
+  /** Handles a seat-holder's "start now" request: fills the rest of this
+   *  lobby's seats with bots and starts immediately. Idempotent -- once
+   *  the match has left the lobby phase (this request already handled it,
+   *  or it started/ended some other way), later calls are a silent no-op
+   *  rather than a second start or an error, so a client can safely retry
+   *  or double-send. Callers (server/src/index.ts) are responsible for
+   *  verifying the requester actually holds a seat in this exact match
+   *  before calling this -- this method itself does not re-check that,
+   *  since by the time we're here "which match" has already collapsed to
+   *  a single Match object via the caller's own seat lookup. */
+  startNow(match: Match): boolean {
+    if (match.phase !== 'lobby') return false;
+    this.clearCountdown();
+    this.clearBotFillTimer();
+    this.fillWithBots(match);
+    match.start();
+    if (this.filling === match) this.filling = null;
+    return true;
   }
 
   private clearBotFillTimer(): void {
     if (this.botFillTimer) clearTimeout(this.botFillTimer);
     this.botFillTimer = null;
+    if (this.displayTicker) clearInterval(this.displayTicker);
+    this.displayTicker = null;
   }
 
   /** Drop matches that ended a while ago, so memory doesn't grow forever. */
