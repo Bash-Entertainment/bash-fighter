@@ -69,7 +69,13 @@ html, body {
   align-items: center;
   background: var(--bg);
   z-index: 10;
-  overflow: hidden;
+  /* Short viewports must be able to reach everything below the fold
+     (the character roster). A player reported the roster being
+     unreachable at 720px height on 2026-09-13: .below-fold scrolls, but
+     it collapses to almost nothing once the hero grows, so the screen
+     itself has to scroll as a fallback. */
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 0;
 }
 
@@ -81,7 +87,9 @@ html, body {
 #attract-frame {
   width: 100%;
   max-width: 640px;
-  height: 220px;
+  /* Shrinks on short viewports so it never pushes the roster out of
+     reach; see the .screen overflow note above. */
+  height: clamp(130px, 24vh, 220px);
   margin: 4px 0 2px;
   border: 1px solid var(--ink-dim);
   background: var(--bg);
