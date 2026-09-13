@@ -22,6 +22,7 @@ import { RoomManager, DEFAULT_CAPACITY, DEFAULT_MINIMUM } from './rooms.ts';
 import { tickMetricsSnapshot } from './tick-metrics.ts';
 import { modeDisplayName } from './mode-rotation.ts';
 import { SNAPSHOT_EVERY_N_TICKS, type Match } from './match.ts';
+import { createFeedbackHandler } from './feedback.ts';
 
 export interface ServerOptions {
   port?: number;
@@ -162,7 +163,7 @@ function broadcastLobby(match: Match): void {
     players: match.filledSlots,
     capacity: match.capacity,
     minimum: match.minimum,
-    countdownTicks: match.countdownTicksRemaining,
+    countdownTicks: match.remainingStartTicks(),
     names: match.seats.map((s) => s.name),
     modeName,
   };
@@ -264,7 +265,13 @@ const CAPACITY = Number(process.env.MATCH_CAPACITY ?? DEFAULT_CAPACITY);
 const MINIMUM = Number(process.env.MATCH_MINIMUM ?? DEFAULT_MINIMUM);
 const manager = new RoomManager(makeEventsFor, CAPACITY, MINIMUM);
 
+const feedbackHandler = createFeedbackHandler();
+
 const server = http.createServer((req, res) => {
+  if (req.url === '/api/feedback') {
+    feedbackHandler(req, res);
+    return;
+  }
   if (req.url === '/api/metrics') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify(tickMetricsSnapshot()));
@@ -603,6 +610,18 @@ function handleText(conn: ClientConn, text: string): void {
     }
     case 'pong': {
       // Round-trip measurement hook; nothing to do server-side yet.
+      break;
+    }
+    case 'startNow': {
+      // Only a connection holding an actual seat in a still-filling lobby
+      // can force the start -- never a spectator, never a stranger who
+      // hasn't even joined this match, and never once the match has left
+      // the lobby phase (RoomManager.startNow is itself idempotent on
+      // phase, so a double-send or a stale/duplicate request from the
+      // same client is a silent no-op, not an error or a second start).
+      if (!conn.match || conn.spectating || conn.slot < 0) break;
+      if (conn.match.phase !== 'lobby') break;
+      manager.startNow(conn.match);
       break;
     }
   }

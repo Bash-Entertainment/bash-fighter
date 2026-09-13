@@ -10,8 +10,13 @@ export class WinScreen {
   readonly root: HTMLDivElement;
   private readonly headline: HTMLDivElement;
   private readonly subtitle: HTMLDivElement;
+  private lastResult: 'won' | 'eliminated' | 'no_survivor' = 'no_survivor';
 
-  constructor(parent: HTMLElement, onRematch: () => void) {
+  // Feedback block for the moment a player has just formed an opinion
+  // (2026-09-13, see feedback-panel.ts) -- prominent but not pushy: a
+  // plain text line under the existing Play again button, not a second
+  // modal popped over the result.
+  constructor(parent: HTMLElement, onRematch: () => void, onOpenFeedback?: (result: string) => void) {
     this.root = document.createElement('div');
     this.root.className = 'screen hidden';
     this.root.id = 'win-screen';
@@ -19,11 +24,18 @@ export class WinScreen {
       <div class="win-headline" id="win-headline">&mdash;</div>
       <div class="subtitle" id="win-subtitle">Match over.</div>
       <button class="btn btn-primary" id="rematch-btn">Play again</button>
+      <div class="feedback-end-screen-block">
+        <div class="feedback-end-screen-copy">Got a minute? Tell us what felt off.</div>
+        <button type="button" class="feedback-link-btn" id="win-feedback-btn">Feedback</button>
+      </div>
     `;
     parent.appendChild(this.root);
     this.headline = this.root.querySelector('#win-headline') as HTMLDivElement;
     this.subtitle = this.root.querySelector('#win-subtitle') as HTMLDivElement;
     (this.root.querySelector('#rematch-btn') as HTMLButtonElement).addEventListener('click', onRematch);
+    (this.root.querySelector('#win-feedback-btn') as HTMLButtonElement).addEventListener('click', () =>
+      onOpenFeedback?.(this.lastResult),
+    );
   }
 
   /**
@@ -57,7 +69,9 @@ export class WinScreen {
       this.subtitle.textContent = won
         ? 'Last one standing out of twenty.'
         : 'Last one standing. Another match starts as soon as you are ready.';
+      this.lastResult = won ? 'won' : 'eliminated';
     }
+    if (winnerIndex === null) this.lastResult = 'no_survivor';
     this.root.classList.remove('hidden');
   }
 

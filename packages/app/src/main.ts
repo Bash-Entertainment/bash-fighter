@@ -16,6 +16,7 @@ import { MatchOverlay, SPECTATE_OFFER, type MatchOverlayContent } from './ui/mat
 import { ControlsHint } from './ui/controls-hint.ts';
 import { MoveReferencePanel } from './ui/move-reference-panel.ts';
 import { SettingsPanel } from './ui/settings-panel.ts';
+import { FeedbackPanel } from './ui/feedback-panel.ts';
 import { TouchControls } from './ui/touch-controls.ts';
 import { WaitingScreen } from './ui/waiting-screen.ts';
 import { AttractMode } from './attract-mode.ts';
@@ -177,7 +178,7 @@ netModeLine.id = 'net-mode-line';
 netModeLine.className = 'hidden';
 appRoot.appendChild(netModeLine);
 
-const waitingScreen = new WaitingScreen(appRoot, touchCapable);
+const waitingScreen = new WaitingScreen(appRoot, touchCapable, () => netMatch?.requestStartNow());
 
 function setNetStatus(state: ConnectionState, detail?: string): void {
   netStatus.classList.remove('hidden');
@@ -208,6 +209,33 @@ onlineButton.textContent = 'Play online';
 // Move reference (repo issue #5): reachable from the start screen at any
 // time, and from inside a match (bound below) without ending it.
 const movesPanel = new MoveReferencePanel(appRoot);
+
+// Account-free player feedback (2026-09-13, owner directive -- see
+// feedback-panel.ts and wiki "Bash Entertainment Overview"). One shared
+// panel instance; every entry point below just calls .show() with
+// whatever context it has. touchCapable is read once at load (same as
+// TouchControls itself), which is what lets a `?forceTouch=1` test see
+// the touch-ergonomics question.
+const feedbackPanel = new FeedbackPanel(appRoot, () => touchCapable);
+
+const feedbackButton = document.createElement('button');
+feedbackButton.className = 'btn btn-plain';
+feedbackButton.id = 'feedback-btn';
+feedbackButton.textContent = 'Feedback';
+feedbackButton.addEventListener('click', () => feedbackPanel.show());
+(startScreen.root.querySelector('#primary-actions') ?? startScreen.root).appendChild(feedbackButton);
+
+// In-match entry point lives in the same wrap-safe row as the mute and
+// (once shown) Controls/Moves buttons -- see the comment on
+// topRightControls above about why this row exists at all, and
+// feedback-panel.test.ts for the measured non-overlap proof at 1280x720
+// and 390px.
+const inMatchFeedbackButton = document.createElement('button');
+inMatchFeedbackButton.id = 'in-match-feedback-btn';
+inMatchFeedbackButton.className = 'in-match-moves-btn feedback-link-btn hidden';
+inMatchFeedbackButton.textContent = 'Feedback';
+inMatchFeedbackButton.addEventListener('click', () => feedbackPanel.show());
+topRightControls.appendChild(inMatchFeedbackButton);
 
 // Key-remapping settings (repo issue #9). Bindings live here at module
 // scope -- one source of truth applied to whichever InputManager(s) are
@@ -411,6 +439,7 @@ async function beginOnlineMatch(): Promise<void> {
   hud.hide();
       inMatchMovesButton.classList.add('hidden');
       inMatchSettingsButton.classList.add('hidden');
+      inMatchFeedbackButton.classList.add('hidden');
   touchControls.hide();
   const generation = ++matchGeneration;
 
@@ -479,6 +508,7 @@ async function beginOnlineMatch(): Promise<void> {
       hud.hide();
       inMatchMovesButton.classList.add('hidden');
       inMatchSettingsButton.classList.add('hidden');
+      inMatchFeedbackButton.classList.add('hidden');
       touchControls.hide();
       setNetStatus('match-complete');
       // 2026-09-09, round 3 (see wiki "Match-End Client Bugs and Session
@@ -611,6 +641,7 @@ async function beginOnlineMatch(): Promise<void> {
       hud.show();
       inMatchMovesButton.classList.remove('hidden');
       inMatchSettingsButton.classList.remove('hidden');
+      inMatchFeedbackButton.classList.remove('hidden');
       if (touchCapable) touchControls.show();
       const onlineSettings = netMatch.getMatchSettings();
       hud.update(
@@ -626,6 +657,7 @@ async function beginOnlineMatch(): Promise<void> {
       hud.hide();
       inMatchMovesButton.classList.add('hidden');
       inMatchSettingsButton.classList.add('hidden');
+      inMatchFeedbackButton.classList.add('hidden');
       touchControls.hide();
     }
     requestAnimationFrame(onlineHudTick);
@@ -637,24 +669,40 @@ async function beginOnlineMatch(): Promise<void> {
 // that was actually being played*, not unconditionally the local
 // two-player harness (that was a real bug: winning/finishing an online
 // match and clicking Rematch silently dropped you into local play).
-const winScreen = new WinScreen(appRoot, () => {
-  if (lastMatchWasOnline) {
-    void beginOnlineMatch();
-  } else {
-    void beginMatch();
-  }
-});
+const winScreen = new WinScreen(
+  appRoot,
+  () => {
+    if (lastMatchWasOnline) {
+      void beginOnlineMatch();
+    } else {
+      void beginMatch();
+    }
+  },
+  (result) =>
+    feedbackPanel.show({
+      mode: netModeLine.textContent || (lastMatchWasOnline ? 'online' : 'local'),
+      result,
+    }),
+);
 
 // Timed Brawl's own end screen (score standings, not "N of 20" placement
 // language) -- see timed-brawl-end-screen.ts. Same rematch routing as
 // winScreen: whichever mode was actually being played.
-const timedBrawlEndScreen = new TimedBrawlEndScreen(appRoot, () => {
-  if (lastMatchWasOnline) {
-    void beginOnlineMatch();
-  } else {
-    void beginMatch();
-  }
-});
+const timedBrawlEndScreen = new TimedBrawlEndScreen(
+  appRoot,
+  () => {
+    if (lastMatchWasOnline) {
+      void beginOnlineMatch();
+    } else {
+      void beginMatch();
+    }
+  },
+  (result) =>
+    feedbackPanel.show({
+      mode: netModeLine.textContent || (lastMatchWasOnline ? 'online' : 'local'),
+      result,
+    }),
+);
 
 async function beginMatch(): Promise<void> {
   lastMatchWasOnline = false;
@@ -668,6 +716,7 @@ async function beginMatch(): Promise<void> {
   hud.show();
       inMatchMovesButton.classList.remove('hidden');
       inMatchSettingsButton.classList.remove('hidden');
+      inMatchFeedbackButton.classList.remove('hidden');
   if (touchCapable) touchControls.show();
   controlsHint.maybeShow();
   const generation = ++matchGeneration;
@@ -742,6 +791,7 @@ async function beginMatch(): Promise<void> {
       hud.hide();
       inMatchMovesButton.classList.add('hidden');
       inMatchSettingsButton.classList.add('hidden');
+      inMatchFeedbackButton.classList.add('hidden');
       touchControls.hide();
       audio.play('match_end');
       if (isTimedBrawl(settings) && leaderboard) {

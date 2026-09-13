@@ -1305,10 +1305,17 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 18px;
+  gap: 14px;
   background: var(--bg);
   text-align: center;
   padding: 24px;
+  /* One more line and a button than this screen used to have; a short
+     viewport (small phones in landscape, or a squeezed preview window)
+     can now run out of vertical room. Scroll rather than clip or spill
+     into the fixed top-right controls / bottom-right debug hint --
+     verified by measured bounding boxes at 1280x720 and 390px wide, see
+     the overlap-check notes in this repo's test/verification history. */
+  overflow-y: auto;
 }
 
 .waiting-screen.hidden {
@@ -1339,9 +1346,61 @@ html, body {
   color: var(--ink-dim);
 }
 
-.waiting-hint {
+/* Countdown line: this is the answer to "is anything going to happen?",
+   so it is now the visually dominant line on the screen -- larger and in
+   the accent colour, ahead of the plain player-count line and well ahead
+   of the control hint. Amber per the design language's "primary action
+   or warning" rule: not a warning exactly, but the one number on this
+   screen whose passage the player should track. */
+.waiting-countdown {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink-dim);
+}
+
+.waiting-countdown.waiting-countdown-active {
+  color: var(--accent);
+}
+
+.waiting-explain {
   max-width: 480px;
   font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+/* "Start now": the one control on this screen, for the visitor who does
+   not want to wait out even the short grace period. Amber outline/text on
+   the flat dark panel fill -- primary action, not danger, so red is never
+   used here; no gradient, no glow, matching every other control in the
+   game. */
+.waiting-start-btn {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  padding: 8px 18px;
+  cursor: pointer;
+}
+
+.waiting-start-btn:hover {
+  color: var(--bg);
+  background: var(--accent);
+}
+
+.waiting-start-btn:disabled {
+  color: var(--ink-dim);
+  border-color: var(--ink-dim);
+  background: var(--panel);
+  cursor: default;
+}
+
+.waiting-hint {
+  max-width: 480px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--ink-dim);
 }
@@ -1350,6 +1409,10 @@ html, body {
   .waiting-wordmark {
     font-size: 30px;
   }
+  .waiting-countdown {
+    font-size: 17px;
+  }
+  .waiting-explain,
   .waiting-hint {
     max-width: 92vw;
   }
@@ -1722,4 +1785,169 @@ html, body {
 
 .spectate-chip.hidden {
   display: none;
+}
+
+/* Account-free player feedback (2026-09-13) -- packages/app/src/ui/feedback-panel.ts.
+   Reuses the .move-reference-panel modal shell; only the parts specific
+   to the comment box / rating scale / status line live here. */
+.feedback-inner {
+  width: min(520px, 90vw);
+}
+
+.feedback-hint {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--ink-dim);
+  margin-bottom: 8px;
+}
+
+.feedback-textarea {
+  width: 100%;
+  min-height: 84px;
+  resize: vertical;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid #2c3037;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  margin-bottom: 18px;
+  box-sizing: border-box;
+}
+
+.feedback-textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent-2);
+}
+
+.feedback-ratings {
+  margin-bottom: 8px;
+}
+
+.feedback-rating-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #23262b;
+  padding: 10px 0;
+}
+
+.feedback-ratings .feedback-rating-row:first-child {
+  border-top: none;
+}
+
+.feedback-rating-label {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--ink-dim);
+  flex: 1;
+}
+
+.feedback-rating-scale {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+.feedback-rating-btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 1px solid #2c3037;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+}
+
+.feedback-rating-btn:hover {
+  border-color: var(--ink-dim);
+  color: var(--ink);
+}
+
+.feedback-rating-btn.selected {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.feedback-status {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  min-height: 16px;
+  margin: 10px 0;
+}
+
+.feedback-status-ok {
+  color: var(--accent-2);
+}
+
+.feedback-status-error {
+  color: var(--danger);
+}
+
+.feedback-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.feedback-github-link {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--ink-dim);
+  text-decoration: underline;
+}
+
+.feedback-github-link:hover {
+  color: var(--ink);
+}
+
+/* The unobtrusive text entry points -- start screen and in-match HUD.
+   In-match, it lives inside #top-right-controls alongside the existing
+   mute/Controls/Moves buttons, which already wrap to avoid the debug
+   hint (bottom-right) and spectate chip -- see the overlap-measurement
+   test in feedback-panel.test.ts and the note on [[Client Traps Fixed
+   2026-09-11 Evening]] about this codebase's history of overlapping HUD
+   elements. */
+.feedback-link-btn {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 1px solid #2c3037;
+  padding: 6px 12px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.feedback-link-btn:hover,
+.feedback-link-btn:focus-visible {
+  color: var(--ink);
+  border-color: var(--ink-dim);
+}
+
+/* Prominent-but-not-pushy feedback invite on the win/Timed-Brawl end
+   screens -- the moment a player actually has an opinion. Amber is used
+   here only as the existing primary-action colour on the Submit button
+   inside the panel it opens, not as decoration on this block itself. */
+.feedback-end-screen-block {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #23262b;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.feedback-end-screen-copy {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--ink-dim);
 }
