@@ -155,8 +155,13 @@ describe('Arena shrink: fully-closed floor keeps shrinking below FINAL_RING_FIGH
 
   it('the-foundry seed 1003 at HARD resolves to exactly one survivor within the tick ceiling', () => {
     const seed = 1003;
-    const entry = ALL_ARENAS[seed % ALL_ARENAS.length]!;
-    assert.equal(entry.id, 'the-foundry', 'this regression is specifically about the-foundry; ALL_ARENAS order changed');
+    // Look this up by id, not by `seed % ALL_ARENAS.length` -- that modulo
+    // trick is exactly the kind of thing that silently breaks whenever a
+    // new stage is registered (see docs/ADDING_A_STAGE.md's gate-fragility
+    // note, added when The Quarry became the sixth arena and shifted every
+    // index-derived pick in this suite).
+    const entry = ALL_ARENAS.find((a) => a.id === 'the-foundry')!;
+    assert.ok(entry, 'the-foundry must remain registered in ALL_ARENAS for this regression test');
     const N = 20;
     const sim = new Sim(seed, N, undefined, entry.arena);
     const bots = Array.from({ length: N }, (_, i) => new BotController(i, BotDifficulty.HARD, deriveBotSeed(seed, i)));

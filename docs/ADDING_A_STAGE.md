@@ -1,9 +1,9 @@
 # Adding a new stage: a worked example
 
 There is no dedicated stage-authoring doc yet even though the roster of
-stages has grown to five (`battle-royale-20`, `the-undercroft`,
-`the-spire`, `the-foundry`, `the-atoll`) — this fills that gap. It
-mirrors [`ADDING_A_CHARACTER.md`](./ADDING_A_CHARACTER.md); read that
+stages has grown to six (`battle-royale-20`, `the-undercroft`,
+`the-spire`, `the-foundry`, `the-atoll`, `the-quarry`) — this fills that
+gap. It mirrors [`ADDING_A_CHARACTER.md`](./ADDING_A_CHARACTER.md); read that
 first if you haven't, the shape of the work is the same. "Stage" in
 prose and `ArenaData`/`arena` in code refer to the same thing — the name
 was kept from an earlier design pass and both spellings are used
@@ -27,7 +27,7 @@ cp packages/content/src/arenas/the-foundry/data.ts \
 Edit `my-stage/data.ts`:
 
 - Rename the exported constant (e.g. `MY_STAGE_ARENA`) and set `name`.
-- Pick a `accentColor` that is clearly distinct from the existing five
+- Pick a `accentColor` that is clearly distinct from the existing
   stages' accents and stays off the orange/amber band reserved for
   hazard/danger cues in `PALETTE` (`packages/render/src/palette.ts`).
 - Lay out `platforms` (solid or `kind: 'pass-through'`) and `walls`.
@@ -99,6 +99,19 @@ is sent over the wire in `MatchStartMessage.arenaId`, see
 `docs/PROTOCOL.md` — never change an existing id once it has shipped,
 or reconnecting clients on an older build will build the wrong `Sim`).
 
+**Registering a new arena changes `ALL_ARENAS.length`, and at least one
+existing test picks an arena with `ALL_ARENAS[seed % ALL_ARENAS.length]`**
+(`packages/sim/test/arena-shrink.test.ts`, the "the-foundry seed 1003"
+regression at the time of writing). Adding your sixth-or-later stage
+silently retargets that modulo onto a different arena and the test fails
+with an assertion like `expected 'the-foundry', actual: 'the-undercroft'`
+— this is not a bug in your stage, it is that test's own fragility, and
+it will keep recurring for whoever adds the seventh stage unless each
+occurrence is changed to look an arena up by `id` (`ALL_ARENAS.find(a =>
+a.id === 'the-foundry')`) instead of by position. Grep the whole repo for
+`% ALL_ARENAS.length` before you conclude a failing test means your
+stage is broken.
+
 ## 4. Give it a render treatment
 
 `packages/render/src/arena-adapter.ts` and `packages/render/src/stage.ts`
@@ -107,7 +120,7 @@ rect), so a new stage is visible with no render code changes at all.
 Stages that want a distinct visual identity beyond the generic renderer
 (background treatment, parallax, stage-specific decoration) add that in
 `packages/render/src/stage.ts`, keyed off the arena's `name` or `id` —
-look at how the existing five stages differ there for the pattern. This
+look at how the existing stages differ there for the pattern. This
 step is optional; skip it for a first draft.
 
 ## 5. Test it
@@ -115,13 +128,34 @@ step is optional; skip it for a first draft.
 - Run `npm test` — the determinism/N-fighter stress tests
   (`packages/sim/test`) run against every registered arena, so a broken
   stage (e.g. spawn points outside the blast rect) usually fails there
-  first.
-- Play it locally: `cd server && npm run dev`, then `cd packages/app &&
-  npm run dev`, and use the local "PLAY" (offline sim harness) button to
-  cycle through stages, or connect "PLAY ONLINE" to the local server
-  repeatedly — stage selection is server-random per match
-  (`server/src/rooms.ts`), there is no dev-only stage picker yet (a good
-  first issue in itself).
+  first. See the modulo-indexing pitfall in step 3 before you assume a
+  failure is about your stage's own geometry. The full suite is slow
+  (20+ minutes on a contended box; `packages/sim/test/arena-shrink.test.ts`
+  alone is 3+ minutes) — background it
+  (`nohup sh -c 'npm test > /tmp/test.log 2>&1; echo exit=$? >> /tmp/test.log' &`)
+  rather than assuming a long silence means it hung.
+- Add a `packages/content/test/<your-stage>.test.ts` for anything specific
+  to your stage's own geometry (e.g. "every raised platform is
+  pass-through", "the tiers are left/right symmetric") — the generic
+  suites in `packages/content/test/arenas.test.ts` and
+  `spawn-clearance.test.ts` already run against every registered arena
+  automatically, so you do not need to duplicate those checks, only add
+  ones unique to your layout.
+- Play it locally and actually watch full matches — do not verify a stage
+  by reasoning about the coordinates alone. There is no dev-only stage
+  picker in the normal client UI, and there is no button literally
+  labelled "PLAY": from `packages/app`, `npm run dev` and open the app,
+  expand "Play locally on one keyboard" and click "Start local match" to
+  play a 2-human/bots-fill match, **or**, for the actual 20-fighter offline
+  harness this doc is really pointing at, load the app with
+  `?crowd20=1&seed=<n>&arena=<your-stage-id>` in the URL and click the
+  "Start local match" button that appears — that runs a full offline
+  20-fighter bot match on exactly your stage and seed, with `TAB` to cycle
+  survivors and `F3` for the debug overlay. Watch several seeds through to
+  a result: look for firing-squad spawns, first-second deaths, a ring that
+  wipes everyone at once, and platforms that camouflage fighters. None of
+  this requires `server && npm run dev` — that is only needed for the
+  networked "Play online" path, not for offline stage iteration.
 - There is no automated visual test for stage geometry
   (`packages/render` has almost no test harness at all — see
   `docs/ARCHITECTURE.md`); a screenshot walkthrough in your PR
