@@ -221,8 +221,17 @@ function attractCameraConfig(
   const arena: ArenaBounds = {
     minX: Math.max(minX - ATTRACT_FIGHTER_PADDING_WORLD, stage.blastMinX),
     maxX: Math.min(maxX + ATTRACT_FIGHTER_PADDING_WORLD, stage.blastMaxX),
-    minY: Math.max(minY - ATTRACT_FIGHTER_PADDING_WORLD * 0.6, stage.blastMinY),
-    maxY: Math.min(maxY + ATTRACT_FIGHTER_PADDING_WORLD * 1.3, stage.blastMaxY),
+    // Downward (fall) padding is deliberately small: this is scenery,
+    // not a real match, so the frame doesn't need to warn a visitor a
+    // fighter is about to fall offstage the way real framing does --
+    // just enough that a knocked-down fighter is briefly visible below
+    // the ground line rather than a hard crop at the floor. The height
+    // that padding gives up goes to jump headroom above instead (see
+    // ATTRACT_FIGHTER_PADDING_WORLD * 1.6 below), where the fighters and
+    // platforms actually are, closing the empty band that used to sit
+    // below the ground line.
+    minY: Math.max(minY - ATTRACT_FIGHTER_PADDING_WORLD * 0.15, stage.blastMinY),
+    maxY: Math.min(maxY + ATTRACT_FIGHTER_PADDING_WORLD * 1.6, stage.blastMaxY),
   };
   return {
     viewWidth,
