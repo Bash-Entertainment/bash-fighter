@@ -50,6 +50,16 @@ export interface PlayOptions {
 }
 
 export function defaultAssetBase(): string {
+  // Relative, not absolute: an absolute '/audio/...' resolves against
+  // the *origin* root, which breaks when the app is served from a
+  // subdirectory (itch.io's HTML5 CDN hosting -- see
+  // docs/ITCH_BUILD.md). Deriving it from the current document's own
+  // URL keeps bashfighter.com (served from the domain root) and the
+  // itch build (served from a subdirectory) both correct without a
+  // build-time flag.
+  if (typeof document !== 'undefined' && document.baseURI) {
+    return new URL('audio/', document.baseURI).toString();
+  }
   return '/audio/';
 }
 
