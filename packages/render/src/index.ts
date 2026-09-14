@@ -918,11 +918,6 @@ export class Renderer {
   destroy(): void {
     this.parentResizeObserver?.disconnect();
     this.parentResizeObserver = null;
-    // A destroyed-while-context-lost renderer has no live `this.app.
-    // renderer` (see the viewSize guard above) -- Pixi's own destroy()
-    // already tolerates that internally, so no extra guard is needed
-    // here, but this comment exists so the next person doesn't have to
-    // re-derive that from scratch.
     // Hand the WebGL context back to the browser *now*, explicitly.
     //
     // A browser grants a page only a handful of live contexts (roughly a
@@ -934,15 +929,33 @@ export class Renderer {
     // context was lost") and refuses new ones, which is how a real match
     // ended up with a renderer that could never draw. WEBGL_lose_context
     // is the only portable way to release one deterministically.
-    const canvas: HTMLCanvasElement | null =
-      this.app.canvas instanceof HTMLCanvasElement ? this.app.canvas : null;
-    const gl =
-      (canvas?.getContext('webgl2') as WebGL2RenderingContext | null) ??
-      (canvas?.getContext('webgl') as WebGLRenderingContext | null);
-    if (gl && !gl.isContextLost()) {
-      const loseContext = gl.getExtension('WEBGL_lose_context');
-      loseContext?.loseContext();
+    // Every step here is defensive on purpose. `app.canvas` is a getter
+    // that reads through `app.renderer`, and a renderer whose init failed
+    // or whose context died has no `renderer` at all -- reading it throws
+    // "can't access property canvas, this.renderer is undefined". That
+    // threw out of destroy(), out of attract mode's teardown, and out of
+    // the caller that was trying to start a real match, so the match never
+    // began and the player got a black page. Teardown must never be able
+    // to break the thing tearing it down.
+    try {
+      const canvas: unknown = this.app.renderer ? this.app.canvas : null;
+      if (canvas instanceof HTMLCanvasElement) {
+        const gl =
+          (canvas.getContext('webgl2') as WebGL2RenderingContext | null) ??
+          (canvas.getContext('webgl') as WebGLRenderingContext | null);
+        if (gl && !gl.isContextLost()) {
+          gl.getExtension('WEBGL_lose_context')?.loseContext();
+        }
+      }
+    } catch {
+      // Nothing to release, or the browser refused to say. Either way this
+      // is a best-effort early return of a context, never a failure.
     }
-    this.app.destroy(true, { children: true });
+    try {
+      this.app.destroy(true, { children: true });
+    } catch {
+      // Same reasoning: a half-constructed Pixi application is exactly the
+      // case we are cleaning up after.
+    }
   }
 }

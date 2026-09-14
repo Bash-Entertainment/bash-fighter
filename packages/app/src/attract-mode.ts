@@ -178,8 +178,17 @@ export class AttractMode {
     // destroyed renderer.
     this.generation++;
     if (!this.match) return;
-    this.match.stop();
-    this.match.renderer.destroy();
+    const match = this.match;
+    // Belt and braces around the demo's own teardown: this runs on the
+    // path that starts a real match, and a background demo failing to
+    // clean itself up must never stop the player from playing. The
+    // container is cleared and the reference dropped either way.
+    try {
+      match.stop();
+      match.renderer.destroy();
+    } catch (error) {
+      console.warn('attract mode teardown failed', error);
+    }
     this.parent.innerHTML = '';
     this.match = null;
   }

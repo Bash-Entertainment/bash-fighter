@@ -68,6 +68,30 @@ test('an init that never settles is treated as a failure, not waited on forever'
   assert.match(MAIN, /const RENDERER_INIT_TIMEOUT_MS = 8000;/);
 });
 
+test('demo teardown can never break the match that triggered it', () => {
+  const destroy = ATTRACT.slice(ATTRACT.indexOf('private destroyMatch()'));
+  const body = destroy.slice(0, 900);
+  assert.match(body, /try \{/);
+  assert.match(body, /catch \(error\) \{/);
+  assert.ok(
+    body.indexOf("this.parent.innerHTML = '';") > body.indexOf('catch (error)'),
+    'the container must be cleared even when teardown throws',
+  );
+});
+
+test('renderer teardown tolerates a renderer that never came up', () => {
+  const render = readFileSync(
+    new URL('../../render/src/index.ts', import.meta.url),
+    'utf8',
+  );
+  const destroy = render.slice(render.indexOf('  destroy(): void {'));
+  assert.match(destroy, /this\.app\.renderer \? this\.app\.canvas : null/);
+  assert.ok(
+    destroy.split('catch').length - 1 >= 2,
+    'both the context release and Pixi\'s own destroy must be guarded',
+  );
+});
+
 test('destroying a renderer releases its WebGL context immediately', () => {
   const render = readFileSync(
     new URL('../../render/src/index.ts', import.meta.url),
@@ -75,9 +99,9 @@ test('destroying a renderer releases its WebGL context immediately', () => {
   );
   const destroy = render.slice(render.indexOf('  destroy(): void {'));
   assert.match(destroy, /WEBGL_lose_context/);
-  assert.match(destroy, /loseContext\?\.loseContext\(\)/);
+  assert.match(destroy, /getExtension\('WEBGL_lose_context'\)\?\.loseContext\(\)/);
   assert.ok(
-    destroy.indexOf('loseContext?.loseContext()') < destroy.indexOf('this.app.destroy('),
+    destroy.indexOf("getExtension('WEBGL_lose_context')") < destroy.indexOf('this.app.destroy('),
     'the context must be released before Pixi tears the app down',
   );
 });
