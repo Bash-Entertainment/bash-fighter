@@ -9,7 +9,9 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { WebSocket } from 'ws';
 import { PROTOCOL_VERSION, BinaryTag } from '@bash-fighter/net/src/protocol.ts';
 
-const PORT = 8111;
+// 8111 collided with server/test/player-names.test.ts's own hardcoded port;
+// moved (2026-09-14) -- see server/test/port-registry.test.ts.
+const PORT = 8209;
 const NUM_CLIENTS = 2;
 
 function waitForHealth(port: number, timeoutMs: number): Promise<void> {

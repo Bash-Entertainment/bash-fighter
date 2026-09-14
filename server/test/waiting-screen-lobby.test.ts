@@ -11,7 +11,9 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '@bash-fighter/net/src/protocol.ts';
 
-const PORT = 8099;
+// 8099 collided with server/test/integration.test.ts's own hardcoded port;
+// moved (2026-09-14) -- see server/test/port-registry.test.ts.
+const PORT = 8208;
 const CAPACITY = 6;
 
 function waitForHealth(port: number, timeoutMs: number): Promise<void> {

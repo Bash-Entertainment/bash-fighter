@@ -13,7 +13,13 @@ import { spawn, type ChildProcess } from 'node:child_process';
 
 // An uncommon port: a leaked server from another run holding it would make
 // these tests hang rather than fail, so keep it clear of the other suites.
-const PORT = 8107;
+// 8107 collided with server/test/reconnect.test.ts's own hardcoded port and
+// was the root cause of that file's "abandoned match" test reading a
+// phantom matchCount from whichever of the two servers won the race for the
+// port (2026-09-14) -- see server/test/port-registry.test.ts, which now
+// pins every test file to a distinct port so this can't happen silently
+// again.
+const PORT = 8207;
 
 function waitForHealth(port: number, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -35,10 +41,23 @@ function waitForHealth(port: number, timeoutMs: number): Promise<void> {
 let child: ChildProcess | undefined;
 
 before(async () => {
-  child = spawn('npx', ['tsx', 'server/src/index.ts'], {
-    env: { ...process.env, PORT: String(PORT), STATS_LOG_PATH: '/tmp/stats-test-public.jsonl' },
-    stdio: 'ignore',
-  });
+  // Spawn node directly on the source file (as every other server test file
+  // does), not `npx tsx ...`. npx execs through an extra shell/loader layer,
+  // so the process this test's ChildProcess handle refers to is not the one
+  // that actually binds the port -- `child.kill()` in `after` killed only the
+  // top of that chain and left the real server running forever as an orphan,
+  // holding the port for good. That leaked server was the root cause behind
+  // the reconnect.test.ts "abandoned match" phantom (2026-09-14): a stale,
+  // never-killed instance of this file's server, still bound to a port,
+  // answering health checks with its own stale state.
+  child = spawn(
+    process.execPath,
+    ['--experimental-strip-types', new URL('../src/index.ts', import.meta.url).pathname],
+    {
+      env: { ...process.env, PORT: String(PORT), STATS_LOG_PATH: '/tmp/stats-test-public.jsonl' },
+      stdio: 'ignore',
+    },
+  );
   await waitForHealth(PORT, 20000);
 });
 
