@@ -316,6 +316,9 @@ export class Renderer {
    * once per loss/restore; never thrown from inside a browser event
    * handler into caller code, so a handler that throws cannot re-break
    * the render loop it's trying to protect. */
+  /** Watches the canvas's container so the drawing surface always matches
+   * the space the player can actually see -- see `init`. */
+  private parentResizeObserver: ResizeObserver | null = null;
   onContextLost: (() => void) | null = null;
   onContextRestored: (() => void) | null = null;
   // 2026-09-14 follow-up: a lost context we never got the event for (see
@@ -410,24 +413,37 @@ export class Renderer {
       this.onContextRestored?.();
     });
 
-    // Defensive fix for a plausible timing bug in the same family: Pixi's
-    // `resizeTo` reads `parent.clientWidth/clientHeight` exactly once,
-    // synchronously, inside `app.init()` above, and only ever resizes
-    // again on a *window* resize event -- there is no ResizeObserver on
-    // `parent` itself. If `parent` measured 0x0 at that exact instant
-    // (mid-layout, e.g. right after the previous canvas was torn down in
-    // the same tick), the canvas is left at Pixi's 800x600 default and
-    // nothing ever corrects it, which matches the "canvas stuck at
-    // 800x600" symptom reported live. This re-reads the real size now,
-    // one microtask later, and corrects it if it's still wrong and the
-    // container is actually laid out. It cannot fix a genuinely dead
-    // renderer (see framesPresented/the watchdog for that), only a
-    // missed initial measurement.
-    if (parent.clientWidth > 0 && parent.clientHeight > 0) {
-      const { width, height } = this.viewSize;
-      if (width !== parent.clientWidth || height !== parent.clientHeight) {
-        this.app.renderer.resize(parent.clientWidth, parent.clientHeight);
-      }
+    // Pixi's `resizeTo` reads `parent.clientWidth/clientHeight` exactly
+    // once, synchronously, inside `app.init()` above, and afterwards only
+    // resizes on a *window* resize event -- it never observes `parent`
+    // itself. That is not a hypothetical: the stylesheet only insets
+    // `#canvas-root` by the HUD sidebar width once the fighter list turns
+    // dense, which a 20-fighter match does well after the renderer has
+    // taken its one measurement. The window never resizes afterwards, so
+    // the canvas stayed 200px wider than its container for the whole
+    // match -- a fifth of the world drawn off the right edge of the
+    // screen where no player could see it. The same one-shot read also
+    // leaves the canvas at Pixi's 800x600 default if `parent` happened to
+    // measure 0x0 mid-layout.
+    //
+    // Observing the container fixes both, and every later cause too
+    // (phone rotation, mobile browser chrome sliding away, the sidebar
+    // appearing or disappearing as the roster changes).
+    const syncToParent = (): void => {
+      if (this.contextLost) return;
+      const width = parent.clientWidth;
+      const height = parent.clientHeight;
+      if (width <= 0 || height <= 0) return;
+      const current = this.viewSize;
+      if (current.width === width && current.height === height) return;
+      this.app.renderer.resize(width, height);
+    };
+    syncToParent();
+    if (typeof ResizeObserver !== 'undefined') {
+      this.parentResizeObserver = new ResizeObserver(() => {
+        syncToParent();
+      });
+      this.parentResizeObserver.observe(parent);
     }
 
     this.world.addChild(this.stageLayer);
@@ -900,6 +916,8 @@ export class Renderer {
   }
 
   destroy(): void {
+    this.parentResizeObserver?.disconnect();
+    this.parentResizeObserver = null;
     // A destroyed-while-context-lost renderer has no live `this.app.
     // renderer` (see the viewSize guard above) -- Pixi's own destroy()
     // already tolerates that internally, so no extra guard is needed
