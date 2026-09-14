@@ -65,21 +65,22 @@ const TONE = {
   spireSky: 0x120f0d,
   spireTower: 0x1d1512,
   spireEmber: 0x3a2419,
-  foundryGirder: 0x17161a,
-  foundryGlow: 0x3a2113,
+  foundryGirder: 0x1c2228,
+  foundryTruss: 0x262e36,
+  foundryGlow: 0x2b3a44,
   atollSky: 0x0d1518,
   atollWater: 0x14262a,
   atollIsland: 0x11201f,
-  quarryStrata: 0x1a1712,
-  quarryStrataDim: 0x141210,
-  quarryDust: 0x232016,
+  quarryStrata: 0x3d3424,
+  quarryStrataDim: 0x2a2418,
+  quarryDust: 0x3a3222,
 } as const;
 
-/** Draws the backdrop for one frame. Called before drawStage so the
- * result sits strictly behind every platform, fighter, effect and HUD
- * element -- it never draws over stageLayer's own children because it
- * targets its own Graphics object, added to the world container before
- * stageLayer (see Renderer's constructor in index.ts). */
+/** Draws the backdrop for one frame. Called from drawStage(), first
+ * thing after g.clear(), onto the same Graphics object (stageLayer) as
+ * every other stage element -- platforms, walls and the blast-zone
+ * boundary are drawn after this call in painter's-algorithm order, so
+ * the backdrop always sits strictly behind them. */
 export function drawBackdrop(
   g: Graphics,
   backdropId: BackdropId,
@@ -130,30 +131,40 @@ export function drawBackdrop(
   }
 }
 
-// Bash Colosseum: neutral baseline stage -- concentric stand-like arcs
-// suggesting tiered seating around the arena. Fully static: the
-// original/baseline stage keeps the least ornamented backdrop, matching
-// its "no strong personality" accent colour in stage.ts.
+// Bash Colosseum: neutral baseline stage -- a dark bowl of crowd-less
+// tiers seen slightly from below, curving inward and dimming as they
+// rise, not a uniform grid of grey boxes. Fully static.
 function drawColosseum(g: Graphics, vw: number, vh: number, px: number, py: number): void {
-  // Tiered stand bands filling the upper ~70% of the frame, each a hair
-  // lighter than the near-black base so the eye reads "rows of seating
-  // receding into the dark" rather than "empty sky". Fully static --
-  // the baseline stage keeps the least ornamented, least eventful
-  // backdrop of the six.
-  const tiers = 8;
+  // Tiers are trapezoids, not full-width rects: each one is narrower and
+  // shorter than the one below it, so the stack reads as a bowl curving
+  // away overhead rather than a stack of equal shelves. Curvature is a
+  // simple quadratic taper (approximates the "seen from below" look
+  // without needing an actual curved-path primitive).
+  const tiers = 7;
+  const bowlTop = vh * 0.62;
+  let prevBottom = bowlTop + py * 0.1;
   for (let i = 0; i < tiers; i++) {
-    const y = (i / tiers) * vh * 0.72 + py * 0.1;
-    const h = (vh * 0.72) / tiers;
-    g.rect(0, y, vw, h - 2);
-    g.fill({ color: i % 2 === 0 ? TONE.colosseumStand : TONE.colosseumStandDim, alpha: 0.9 });
+    const frac = i / tiers; // 0 = lowest tier (nearest), 1 = highest (farthest/up)
+    const h = (vh * 0.5) / tiers * (1 - frac * 0.55); // shrinks toward the top
+    const top = prevBottom - h;
+    const inset = frac * frac * vw * 0.22; // curves inward quadratically, not linearly
+    const alpha = 0.85 - frac * 0.45; // dims toward the top
+    g.moveTo(inset, top);
+    g.lineTo(vw - inset, top);
+    g.lineTo(vw - inset * 0.55, prevBottom);
+    g.lineTo(inset * 0.55, prevBottom);
+    g.closePath();
+    g.fill({ color: i % 2 === 0 ? TONE.colosseumStand : TONE.colosseumStandDim, alpha });
+    prevBottom = top;
   }
-  // A handful of vertical divider struts, offset by camera pan, breaking
-  // up the tiers so they read as structure, not a flat gradient.
-  const cx = vw / 2 + px * 0.3;
-  for (let i = -4; i <= 4; i++) {
-    const x = cx + i * 170;
-    g.rect(x, 0, 6, vh * 0.72 + py * 0.1);
-    g.fill({ color: TONE.colosseumStandDim, alpha: 0.6 });
+  // A few short aisle dividers, irregularly placed and confined to the
+  // lower two tiers only -- breaks up flatness without marching a full
+  // grid of even verticals across the whole frame.
+  const aisleXFractions = [0.12, 0.31, 0.68, 0.87];
+  for (const f of aisleXFractions) {
+    const x = f * vw + px * 0.3;
+    g.rect(x, bowlTop * 0.55 + py * 0.1, 5, bowlTop * 0.45);
+    g.fill({ color: TONE.colosseumStandDim, alpha: 0.5 });
   }
 }
 
@@ -191,33 +202,46 @@ function drawSpire(g: Graphics, vw: number, vh: number, px: number, py: number, 
     const botX = cx + i * 130;
     g.moveTo(topX, -py * 0.1);
     g.lineTo(botX, vh);
-    g.stroke({ color: TONE.spireTower, width: 4, alpha: 0.55 });
+    g.stroke({ color: TONE.spireTower, width: 5, alpha: 0.72 });
   }
-  const emberCount = 14;
+  const emberCount = 20;
   for (let i = 0; i < emberCount; i++) {
     const seed = i * 37.13;
     const cycle = ((t * 18 * amp + seed) % vh + vh) % vh;
     const x = ((Math.sin(seed) * 0.5 + 0.5) * vw + px * 0.2) % vw;
     const y = vh - cycle;
     g.rect(x, y, 3, 3);
-    g.fill({ color: TONE.spireEmber, alpha: 0.5 });
+    g.fill({ color: TONE.spireEmber, alpha: 0.65 });
   }
 }
 
-// The Foundry: industrial chamber -- horizontal girders and a distant
-// furnace glow that pulses gently (a genuine light-source cue, kept
-// extremely subtle and warm-dim, never approaching PALETTE.hazardWarning
-// or PALETTE.danger in either hue or brightness).
+// The Foundry: industrial chamber -- a cool dark-grey structural truss
+// (deliberately off the arena's own warm orange platform hue, so the
+// backdrop never gets mistaken for more platforms) plus a distant,
+// cool-toned glow that pulses gently.
 function drawFoundry(g: Graphics, vw: number, vh: number, px: number, py: number, t: number, amp: number): void {
-  for (let i = 0; i < 4; i++) {
-    const y = vh * (0.2 + i * 0.2) + py * 0.15;
-    g.rect(0, y, vw, 8);
-    g.fill({ color: TONE.foundryGirder, alpha: 0.75 });
+  // Diagonal cross-braces read as "truss/lattice" rather than "platform",
+  // which a plain horizontal bar could be mistaken for.
+  const bayWidth = 220;
+  const trussTop = vh * 0.12 + py * 0.1;
+  const trussBottom = vh * 0.58 + py * 0.1;
+  for (let x = -bayWidth + (px * 0.4) % bayWidth; x < vw + bayWidth; x += bayWidth) {
+    g.moveTo(x, trussTop);
+    g.lineTo(x + bayWidth, trussBottom);
+    g.stroke({ color: TONE.foundryTruss, width: 5, alpha: 0.5 });
+    g.moveTo(x + bayWidth, trussTop);
+    g.lineTo(x, trussBottom);
+    g.stroke({ color: TONE.foundryTruss, width: 5, alpha: 0.5 });
   }
+  // Top and bottom chords of the truss.
+  g.rect(0, trussTop - 4, vw, 8);
+  g.fill({ color: TONE.foundryGirder, alpha: 0.8 });
+  g.rect(0, trussBottom - 4, vw, 8);
+  g.fill({ color: TONE.foundryGirder, alpha: 0.8 });
   const pulse = (Math.sin(t * 0.6) * 0.5 + 0.5) * amp;
   const glowX = vw * 0.5 + px * 0.5;
-  g.rect(glowX - 220, vh * 0.55, 440, 160);
-  g.fill({ color: TONE.foundryGlow, alpha: 0.12 + 0.08 * pulse });
+  g.rect(glowX - 220, vh * 0.6, 440, 140);
+  g.fill({ color: TONE.foundryGlow, alpha: 0.1 + 0.07 * pulse });
 }
 
 // The Atoll: open water and distant islands -- a horizon, a couple of
@@ -248,22 +272,24 @@ function drawAtoll(g: Graphics, vw: number, vh: number, px: number, py: number, 
 }
 
 // The Quarry: exposed rock strata -- static horizontal sediment bands
-// (a quarry wall doesn't sway) plus a very faint drift of dust motes,
-// the only ambient motion this backdrop gets.
+// (a quarry wall doesn't sway) plus a very faint drift of dust motes.
+// Lifted noticeably brighter than the first pass (which measured as
+// invisible on a normal screen, ~lum 18-23) while still kept dimmer
+// than PALETTE.stageFill (the platform colour, ~lum 31) via alpha.
 function drawQuarry(g: Graphics, vw: number, vh: number, px: number, py: number, t: number, amp: number): void {
   const bands = 7;
   for (let i = 0; i < bands; i++) {
     const y = (i / bands) * vh + py * 0.1;
     const h = vh / bands + 2;
     g.rect(0, y, vw, h);
-    g.fill({ color: i % 2 === 0 ? TONE.quarryStrata : TONE.quarryStrataDim, alpha: 0.8 });
+    g.fill({ color: i % 2 === 0 ? TONE.quarryStrata : TONE.quarryStrataDim, alpha: 0.85 });
   }
-  const dustCount = 10;
+  const dustCount = 12;
   for (let i = 0; i < dustCount; i++) {
     const seed = i * 53.7;
     const x = ((Math.sin(seed) * 0.5 + 0.5) * vw + px * 0.15 + t * 6 * amp) % vw;
     const y = ((Math.cos(seed * 1.3) * 0.5 + 0.5) * vh + py * 0.1) % vh;
-    g.rect(x, y, 2, 2);
-    g.fill({ color: TONE.quarryDust, alpha: 0.3 });
+    g.rect(x, y, 3, 3);
+    g.fill({ color: TONE.quarryDust, alpha: 0.4 });
   }
 }
