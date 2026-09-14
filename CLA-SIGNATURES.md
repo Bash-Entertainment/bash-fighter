@@ -18,3 +18,5 @@ to add it again on later PRs.
 ## Signed
 
 <!-- Add your line below this comment, one per contributor, alphabetically is fine but not required. -->
+
+- @ericseandevlin: I have read and agree to the Bash Fighter CLA (CLA.md).
