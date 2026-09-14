@@ -311,7 +311,7 @@ export function computeRawCamera(
   // picks a point *inside* the same never-crop-a-fighter safe range
   // documented below -- raising this constant cannot by itself introduce
   // cropping, jitter, or a second competing clamp.
-  const GROUND_BIAS = 0.85;
+  const GROUND_BIAS = 0.75;
   // With no fighters at all (e.g. a spectator view before anyone has
   // spawned) fMinY/fMaxY fall back to the whole arena above, and the
   // "whole arena" framing should stay plainly centered rather than
