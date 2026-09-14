@@ -47,6 +47,7 @@ persistent id, nothing that survives past this one connection):
 | `touchActive` | boolean | Whether a touch input source is active in this client. |
 | `viewportWidth` / `viewportHeight` | number | The viewport size in CSS pixels, clamped to `[0, 20000]`. |
 | `buildSha` | string | The build sha the client was served, capped at 64 characters. |
+| `qa` | boolean | Self-declared QA hint, sent only when the client was opened with `?qa=1` (see docs/MEASUREMENT.md). A HINT, not proof -- a real player could set it, a tester could forget it. |
 
 Every field is optional and independently dropped if malformed rather than
 rejecting the whole `hello` -- a garbled profile must never keep a player

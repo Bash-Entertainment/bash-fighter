@@ -98,6 +98,28 @@ test('hello.profile: wrong-typed fields are dropped individually, never crash th
   assert.equal(msg?.profile, undefined);
 });
 
+test('hello.profile: qa is validated as a plain boolean like any other field', () => {
+  const withQa = parseClientControl(
+    JSON.stringify({
+      t: 'hello',
+      protocolVersion: PROTOCOL_VERSION,
+      name: 'Al',
+      profile: { touchActive: false, qa: true },
+    }),
+  ) as HelloMessage | null;
+  assert.equal(withQa?.profile?.qa, true);
+
+  const withoutQa = parseClientControl(
+    JSON.stringify({ t: 'hello', protocolVersion: PROTOCOL_VERSION, name: 'Al', profile: { touchActive: false } }),
+  ) as HelloMessage | null;
+  assert.equal(withoutQa?.profile?.qa, undefined);
+
+  const wrongType = parseClientControl(
+    JSON.stringify({ t: 'hello', protocolVersion: PROTOCOL_VERSION, name: 'Al', profile: { qa: 'yes' } }),
+  ) as HelloMessage | null;
+  assert.equal(wrongType?.profile?.qa, undefined);
+});
+
 test('hello: still parses with no profile at all (older client)', () => {
   const msg = parseClientControl(JSON.stringify({ t: 'hello', protocolVersion: PROTOCOL_VERSION, name: 'Al' })) as HelloMessage | null;
   assert.ok(msg);

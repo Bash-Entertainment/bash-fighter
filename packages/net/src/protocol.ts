@@ -89,6 +89,13 @@ export interface ClientSessionProfile {
   viewportWidth?: number;
   viewportHeight?: number;
   buildSha?: string;
+  /** Self-declared QA hint, set only when the client was opened with
+   *  `?qa=1` (see docs/MEASUREMENT.md). This is a HINT, not proof: a real
+   *  player could set the parameter by accident, and a tester could
+   *  forget it. Never treated as authoritative -- see stats-report.mjs's
+   *  three-way grouping (all / not-marked-QA / marked-QA) and its note
+   *  that unmarked QA traffic is still possible. */
+  qa?: boolean;
 }
 
 /** Sent by a client that wants to keep watching after being eliminated. */
@@ -588,6 +595,10 @@ function sanitiseClientProfile(value: unknown): ClientSessionProfile | undefined
   if (height !== undefined) out.viewportHeight = Math.round(height);
   const buildSha = clampCappedString(input.buildSha, 64);
   if (buildSha) out.buildSha = buildSha;
+  // Self-declared QA hint (?qa=1). A boolean, nothing more -- see
+  // ClientSessionProfile.qa's doc comment for why this is never treated
+  // as proof.
+  if (typeof input.qa === 'boolean') out.qa = input.qa;
   return Object.keys(out).length > 0 ? out : undefined;
 }
 

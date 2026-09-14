@@ -111,6 +111,13 @@ export interface Seat {
    *  connection, so a reconnect mid-match doesn't reset the clock on
    *  "how long has this player been in this match". */
   joinedAt: number;
+  /** Self-declared QA hint from this seat's `hello.profile.qa` (see
+   *  packages/net/src/protocol.ts and docs/MEASUREMENT.md). False for a
+   *  bot seat and for any human seat whose client didn't opt in --
+   *  never inferred, only ever what the client explicitly claimed. Used
+   *  only to populate MatchSummary.qaSeats; never affects matchmaking,
+   *  bot fill, or anything sim-visible. */
+  qa: boolean;
 }
 
 export type MatchPhase = 'lobby' | 'playing' | 'ended';
@@ -132,6 +139,12 @@ export interface MatchSummary {
   remainingAlive: number;
   totalKOs: number;
   maxKoCount: number;
+  /** How many of this match's seats had a self-declared QA hint (see
+   *  Seat.qa). A truthful, honest "nobody but real players joined this
+   *  match" signal only when this is 0 -- any non-zero value just means
+   *  at least one seat opted in, not that every non-zero seat was a
+   *  tester and every zero seat was a real player (see docs/MEASUREMENT.md). */
+  qaSeats: number;
 }
 
 export interface MatchEvents {
@@ -345,7 +358,7 @@ export class Match {
     return this.seats.length;
   }
 
-  addSeat(name: string, isBot = false, characterId: string = DEFAULT_CHARACTER_ID): Seat {
+  addSeat(name: string, isBot = false, characterId: string = DEFAULT_CHARACTER_ID, qa = false): Seat {
     const slot = this.seats.length;
     // De-duplicate against every name already in this match (human or
     // bot -- a human called "Rex" showing up alongside a bot already
@@ -366,6 +379,7 @@ export class Match {
       resumeToken: isBot ? null : generateResumeToken(),
       disconnectedAt: null,
       joinedAt: Date.now(),
+      qa: !isBot && qa,
     };
     this.seats.push(seat);
     return seat;
@@ -797,6 +811,7 @@ export class Match {
       remainingAlive: this.seats.filter((s) => !s.eliminated).length,
       totalKOs: koCounts.reduce((sum, n) => sum + n, 0),
       maxKoCount: koCounts.length ? Math.max(...koCounts) : 0,
+      qaSeats: this.seats.filter((s) => s.qa).length,
     };
     console.log(JSON.stringify(summary));
     // Durable stats aggregation (server/src/stats-store.ts) is a separate

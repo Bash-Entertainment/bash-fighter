@@ -112,7 +112,7 @@ export class RoomManager {
   /** Finds or creates the match currently filling, adds a seat to it, and
    *  returns both. Starting the match (full, or countdown reaching zero) is
    *  handled here too so callers don't need to poll. */
-  joinLobby(name: string, characterId?: string): { match: Match; slot: number } {
+  joinLobby(name: string, characterId?: string, qa = false): { match: Match; slot: number } {
     let freshMatch = false;
     if (!this.filling || this.filling.phase !== 'lobby') {
       const matchNumber = this.nextId;
@@ -140,7 +140,7 @@ export class RoomManager {
       freshMatch = true;
     }
     const match = this.filling;
-    const seat = match.addSeat(name, false, characterId);
+    const seat = match.addSeat(name, false, characterId, qa);
     if (freshMatch) this.startBotFillTimer(match);
 
     if (match.filledSlots >= match.capacity) {

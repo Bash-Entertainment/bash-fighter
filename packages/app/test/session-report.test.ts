@@ -28,6 +28,15 @@ test('buildClientProfile: caps an overlong buildSha at 64 characters client-side
   assert.equal(profile.buildSha?.length, 64);
 });
 
+test('buildClientProfile: qa is sent only when true, never as an explicit false', () => {
+  const withQa = buildClientProfile({ touchActive: false, viewportWidth: 100, viewportHeight: 100, buildSha: null, qa: true });
+  assert.equal(withQa.qa, true);
+  const withoutQa = buildClientProfile({ touchActive: false, viewportWidth: 100, viewportHeight: 100, buildSha: null, qa: false });
+  assert.equal('qa' in withoutQa, false);
+  const omitted = buildClientProfile({ touchActive: false, viewportWidth: 100, viewportHeight: 100, buildSha: null });
+  assert.equal('qa' in omitted, false);
+});
+
 test('InputActivityTracker: firstInputMs is null until a non-neutral tick, then latches', () => {
   const tracker = new InputActivityTracker();
   assert.equal(tracker.getFirstInputMs(), null);

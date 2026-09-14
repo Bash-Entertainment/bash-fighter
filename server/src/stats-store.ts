@@ -39,6 +39,11 @@ export interface StoredMatchEndRecord {
   humanSeats: number;
   totalKOs: number;
   maxKoCount: number;
+  /** How many seats in this match had a self-declared QA hint (see
+   *  server/src/match.ts's Seat.qa / MatchSummary.qaSeats). Absent from
+   *  records written before this field existed -- the report treats
+   *  those as "unknown", never as 0. */
+  qaSeats: number;
 }
 
 export interface StoredSessionEndRecord {
@@ -54,6 +59,11 @@ export interface StoredSessionEndRecord {
   inputTicks: number | null;
   frameMedianMs: number | null;
   frameP95Ms: number | null;
+  /** Self-declared QA hint for this seat (see Seat.qa / ClientSessionProfile.qa).
+   *  Always present (true or false) on records written by this code;
+   *  absent from records written before this field existed, which the
+   *  report treats as "unknown", not as false. */
+  qa: boolean;
 }
 
 export type StatsRecord = StoredMatchEndRecord | StoredSessionEndRecord;
@@ -121,6 +131,7 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       humanSeats: summary.humanSeats,
       totalKOs: summary.totalKOs,
       maxKoCount: summary.maxKoCount,
+      qaSeats: summary.qaSeats,
     };
     appendStatsLine(logPath, record);
   }
@@ -148,6 +159,7 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       inputTicks: report?.inputTicks ?? null,
       frameMedianMs: report?.frameMedianMs ?? null,
       frameP95Ms: report?.frameP95Ms ?? null,
+      qa: seat.qa,
     };
     appendStatsLine(logPath, record);
   }

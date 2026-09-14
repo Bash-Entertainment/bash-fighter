@@ -62,6 +62,7 @@ function sampleSummary(overrides: Partial<MatchSummary> = {}): MatchSummary {
     remainingAlive: 1,
     totalKOs: 19,
     maxKoCount: 3,
+    qaSeats: 0,
     ...overrides,
   };
 }
@@ -99,7 +100,43 @@ test('recordMatchSummary: appends one matchEnd record with the expected shape', 
       humanSeats: 1,
       totalKOs: 19,
       maxKoCount: 3,
+      qaSeats: 0,
     });
+  } finally {
+    cleanup();
+  }
+});
+
+test('recordMatchSummary: carries a non-zero qaSeats count through to the matchEnd record', () => {
+  const { logPath, cleanup } = scratchDir();
+  try {
+    const recorder = createStatsRecorder({ logPath, now: () => 1_700_000_000_000 });
+    recorder.recordMatchSummary(sampleSummary({ matchId: 'match-2', qaSeats: 2 }));
+    const lines = readLines(logPath);
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0]?.qaSeats, 2);
+  } finally {
+    cleanup();
+  }
+});
+
+test('recordSessionEnd: carries the seat\'s self-declared qa flag, true and false', () => {
+  const { logPath, cleanup } = scratchDir();
+  try {
+    const match = new Match('stats-session-qa-test', 2, 1, noopEvents());
+    match.addSeat('human-a', false, undefined as unknown as string, true);
+    match.addSeat('human-b', false, undefined as unknown as string, false);
+    match.start();
+
+    const recorder = createStatsRecorder({ logPath, now: () => 1_700_000_010_000 });
+    recorder.recordSessionEnd(fakeConn({ slot: 0 }), match);
+    recorder.recordSessionEnd(fakeConn({ slot: 1 }), match);
+    match.stop();
+
+    const lines = readLines(logPath);
+    assert.equal(lines.length, 2);
+    assert.equal(lines[0]?.qa, true);
+    assert.equal(lines[1]?.qa, false);
   } finally {
     cleanup();
   }

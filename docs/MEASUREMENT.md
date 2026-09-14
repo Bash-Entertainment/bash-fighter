@@ -360,9 +360,25 @@ player-account system to attach it to even if we wanted to.
 
 **On `hello` (`packages/net/src/protocol.ts`, `HelloMessage.profile`):**
 a client sends `touchActive` (is a touch input source active),
-`viewportWidth`/`viewportHeight` (CSS pixels, clamped 0-20000), and
-`buildSha` (which build was served, capped at 64 chars). See
-`docs/PROTOCOL.md`'s `hello.profile` section for the exact wire shape.
+`viewportWidth`/`viewportHeight` (CSS pixels, clamped 0-20000),
+`buildSha` (which build was served, capped at 64 chars), and, only when
+set, `qa` (a boolean, nothing more). See `docs/PROTOCOL.md`'s
+`hello.profile` section for the exact wire shape.
+
+**Debug URL parameters (client-side, `packages/app/src/main.ts` and
+friends), added here so they live in one place:** `?crowd20=1` fills
+local play with 20 characters for solo layout testing (see
+[[Local Crowd Testing Tool 2026-09-11]]); `?forceTouch=1`
+(`packages/input/src/touch.ts`) forces touch-control detection on for
+testing touch UI without a touch device; `?bashTest=1`
+(`packages/app/src/main.ts`) exposes `window.__bashTestMatch` /
+`__bashTestTouch` / `__bashTestAudio` test hooks; and `?qa=1`
+(`packages/app/src/main.ts`'s `isQaSession`) sets `hello.profile.qa =
+true` for this session -- this is the only one of the four that gets
+recorded in the private stats. None of the four are secret and none
+are enforced server-side beyond `qa` being validated as a plain
+boolean like any other profile field; they are conveniences for testers
+and contributors, not access control.
 
 **Periodically during the match (`sessionReport`, every ~5s and once
 more, best-effort, when the tab is hidden):** `firstInputMs` (ms from
@@ -550,7 +566,10 @@ sessions; how many survived past a 15-second "opening seconds" threshold
 (chosen, not measured -- documented in the script); how many pressed a
 control at all; eliminated vs. left-while-alive; session duration
 distribution (min/median/p95/max); touch vs. keyboard share; client
-frame-time distribution; and feedback submission count (count only).
+frame-time distribution; feedback submission count (count only); and,
+broken out three ways (all / not marked QA / marked QA, plus an
+"unknown" count for pre-existing records), the self-declared `?qa=1`
+hint described in the privacy section below.
 
 ### Privacy stance, restated plainly for this store
 
@@ -572,9 +591,18 @@ frame-time distribution; and feedback submission count (count only).
   record in the store; anything before that only shows up if you pass
   `--extra-log` with an older export, and even then it's labelled
   separately.
-- **Our own QA traffic is not separated from real players' traffic** --
-  there is no flag distinguishing them, and the report says so plainly
-  rather than guessing.
+- **Our own QA traffic can be self-declared, but never proven.** A
+  client opened with `?qa=1` sends `hello.profile.qa = true`, which is
+  recorded on that seat's `sessionEnd` line and rolled up into a
+  `qaSeats` count on the match's `matchEnd` line (see "Debug URL
+  parameters" above). This adds exactly one boolean to the existing
+  fields -- still no IP, no user agent, no cookie, no fingerprint, no
+  persistent identifier. It is a self-declared hint, not proof: a real
+  player could set the parameter by accident, and a tester could
+  forget it, so `stats-report.mjs` always shows all three groups (all
+  sessions / not marked QA / marked QA, plus an "unknown" count for
+  records written before this field existed) and never drops or
+  silently reclassifies anything on the strength of this flag alone.
 
 See also: [[Player Feedback Channel 2026-09-13]], [[Production Traffic Reality Check 2026-09-13]].
 

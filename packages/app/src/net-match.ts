@@ -234,6 +234,11 @@ export class NetMatch {
 
   private readonly url: string;
   private readonly events: NetMatchEvents;
+  // Self-declared QA hint from `?qa=1` (see docs/MEASUREMENT.md), set once
+  // per NetMatch instance and carried on every hello (including a
+  // reconnect's fresh hello) via buildClientProfile. Never inferred --
+  // only ever what the caller (main.ts, reading the URL) passed in.
+  private readonly qaMode: boolean;
 
   // Engagement telemetry only (see docs/MEASUREMENT.md) -- presentation/
   // reporting, never read by tick()'s sim advance and never part of
@@ -256,12 +261,18 @@ export class NetMatch {
   // and Node's built-in type-stripping loader does not support parameter
   // properties (ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX) -- vite/tsc handle them
   // fine, but that test file needs to run outside that build pipeline.
-  constructor(url: string, events: NetMatchEvents = {}, audio: AudioManager = new AudioManager()) {
+  constructor(
+    url: string,
+    events: NetMatchEvents = {},
+    audio: AudioManager = new AudioManager(),
+    qaMode = false,
+  ) {
     this.url = url;
     this.events = events;
     this.renderer = new Renderer(STAGE_BOUNDS);
     this.audio = audio;
     this.effectsBridge = new EffectsAudioBridge(audio);
+    this.qaMode = qaMode;
   }
 
   async init(parent: HTMLElement): Promise<void> {
@@ -351,6 +362,7 @@ export class NetMatch {
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
         buildSha: readBuildSha() ?? null,
+        qa: this.qaMode,
       });
       ws.send(JSON.stringify(hello));
     });

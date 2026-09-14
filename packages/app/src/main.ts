@@ -412,6 +412,15 @@ function clearSpectateStallTimer(): void {
   }
 }
 
+// Opt-in QA hint: ?qa=1 marks this session's hello.profile.qa so the
+// private stats report (scripts/stats-report.mjs) can break out our own
+// testing traffic from real players. Self-declared only -- see
+// docs/MEASUREMENT.md; nobody, including us, is forced to set it, and a
+// real player could set it too, so the report never treats it as proof.
+function isQaSession(): boolean {
+  return new URLSearchParams(location.search).get('qa') === '1';
+}
+
 function serverUrl(): string {
   const params = new URLSearchParams(location.search);
   if (params.get('server')) return params.get('server') as string;
@@ -616,7 +625,7 @@ async function beginOnlineMatch(): Promise<void> {
         }
       }, SPECTATE_STALL_MS);
     },
-  }, audio);
+  }, audio, isQaSession());
   netMatch = net;
   net.input.setBinding(0, currentBindings.p1);
   net.input.setBinding(1, currentBindings.p2);

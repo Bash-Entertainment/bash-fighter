@@ -17,6 +17,11 @@ export function buildClientProfile(input: {
   viewportWidth: number;
   viewportHeight: number;
   buildSha: string | null;
+  /** Self-declared QA hint from `?qa=1` -- see docs/MEASUREMENT.md and
+   *  ClientSessionProfile.qa. Omitted entirely (not sent as `false`)
+   *  when the tester did not opt in, matching every other optional
+   *  profile field's "absent means unknown/not set" convention. */
+  qa?: boolean;
 }): ClientSessionProfile {
   const profile: ClientSessionProfile = {
     touchActive: input.touchActive,
@@ -24,6 +29,7 @@ export function buildClientProfile(input: {
     viewportHeight: Math.max(0, Math.round(input.viewportHeight)),
   };
   if (input.buildSha) profile.buildSha = input.buildSha.slice(0, MAX_BUILD_SHA_LENGTH);
+  if (input.qa) profile.qa = true;
   return profile;
 }
 
