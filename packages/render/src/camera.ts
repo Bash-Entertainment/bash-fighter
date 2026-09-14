@@ -173,9 +173,9 @@ function containFighters(
   if (positions.length === 0) return eased;
   const halfW = cfg.viewWidth / 2;
   const halfH = cfg.viewHeight / 2;
-  // The fighters themselves plus one padding unit, which is roughly a
-  // fighter's own half-size -- enough that a body and its name label stay
-  // inside the frame, and deliberately far less than the raw camera's full
+  // The fighters themselves plus room for the parts of them that are not
+  // the position point: a body is about two padding units tall and its
+  // name label sits above it and reads wider than the body, and deliberately far less than the raw camera's full
   // framing rect. Containing that whole rect instead would be the same as
   // having no damping at all: raw is the minimal frame at this aspect
   // ratio, so demanding it be covered pins the eased view onto it exactly.
@@ -184,10 +184,10 @@ function containFighters(
   let needMinY = Infinity;
   let needMaxY = -Infinity;
   for (const p of positions) {
-    needMinX = Math.min(needMinX, p.x - cfg.paddingWorld);
-    needMaxX = Math.max(needMaxX, p.x + cfg.paddingWorld);
-    needMinY = Math.min(needMinY, p.y - cfg.paddingWorld);
-    needMaxY = Math.max(needMaxY, p.y + cfg.paddingWorld);
+    needMinX = Math.min(needMinX, p.x - cfg.paddingWorld * 1.5);
+    needMaxX = Math.max(needMaxX, p.x + cfg.paddingWorld * 1.5);
+    needMinY = Math.min(needMinY, p.y - cfg.paddingWorld * 2);
+    needMaxY = Math.max(needMaxY, p.y + cfg.paddingWorld * 2);
   }
 
   // Keep the eased centre -- that smooth pan is the whole point -- and buy
