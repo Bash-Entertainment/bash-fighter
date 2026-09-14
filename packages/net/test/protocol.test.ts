@@ -92,6 +92,36 @@ describe('parseClientControl', () => {
     assert.deepEqual(parseClientControl(JSON.stringify({ t: 'spectate' })), { t: 'spectate' });
     assert.deepEqual(parseClientControl(JSON.stringify({ t: 'pong', id: 7 })), { t: 'pong', id: 7 });
   });
+
+  test('parses a hello with the dev-only arena pin (issue #19)', () => {
+    const msg = parseClientControl(
+      JSON.stringify({ t: 'hello', protocolVersion: PROTOCOL_VERSION, name: 'Alice', arena: 'the-atoll' }),
+    );
+    assert.deepEqual(msg, {
+      t: 'hello',
+      protocolVersion: PROTOCOL_VERSION,
+      name: 'Alice',
+      arena: 'the-atoll',
+    });
+  });
+
+  test('hello arena is absent when the client does not send one (back-compat shape unchanged)', () => {
+    const msg = parseClientControl(JSON.stringify({ t: 'hello', protocolVersion: PROTOCOL_VERSION, name: 'Alice' }));
+    assert.equal('arena' in (msg as unknown as Record<string, unknown>), false);
+  });
+
+  test('hello arena is clamped like every other client string (control chars stripped, length capped)', () => {
+    const msg = parseClientControl(
+      JSON.stringify({ t: 'hello', protocolVersion: PROTOCOL_VERSION, name: 'Alice', arena: '  the-atoll\u0000 ' }),
+    );
+    assert.equal((msg as { arena?: string }).arena, 'the-atoll');
+    const long = parseClientControl(
+      JSON.stringify({ t: 'hello', protocolVersion: PROTOCOL_VERSION, name: 'Alice', arena: 'x'.repeat(200) }),
+    );
+    // Clamped to 64 chars, so it can never smuggle an unregistered id
+    // through length -- registry validation happens server-side anyway.
+    assert.equal((long as { arena?: string }).arena, 'x'.repeat(64));
+  });
 });
 
 // Server -> client control messages (issue #21): protocol.test.ts previously
