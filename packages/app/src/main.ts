@@ -26,6 +26,7 @@ import {
   savePersistedBindings,
   DEFAULT_P1_BINDING,
   DEFAULT_P2_BINDING,
+  shouldIgnoreKeydown,
 } from '@bash-fighter/input';
 import { PLACEHOLDER_CHARACTER, resolveCharacterId, ALL_CHARACTERS, isKnownArenaId } from '@bash-fighter/content';
 import { setReducedMotion, type ArenaBounds } from '@bash-fighter/render';
@@ -430,7 +431,22 @@ inMatchSettingsButton.className = 'in-match-moves-btn hidden';
 inMatchSettingsButton.textContent = 'Controls (C)';
 inMatchSettingsButton.addEventListener('click', () => settingsPanel.show());
 topRightControls.appendChild(inMatchSettingsButton);
+
+/** True when a keystroke belongs to whatever the player is typing into, so
+ * no global shortcut may act on it.
+ *
+ * From real player feedback, 2026-09-14: "Writing on the feedback form
+ * still toggles the (C)ontrol window". Typing "camera" into the feedback
+ * box opened the Controls panel on the c, and an m opened the move
+ * reference -- while the player was in the middle of telling us what was
+ * wrong with the game. The fighter's own inputs already knew to stand
+ * aside for text entry (`shouldIgnoreKeydown`); these window-level
+ * shortcuts did not. */
+function isTypingKeystroke(e: KeyboardEvent): boolean {
+  return shouldIgnoreKeydown(e.target, e.code);
+}
 window.addEventListener('keydown', (e) => {
+  if (isTypingKeystroke(e)) return;
   if (e.key === 'c' || e.key === 'C') {
     if (settingsPanel.isOpen) settingsPanel.hide();
     else settingsPanel.show();
@@ -451,6 +467,7 @@ inMatchMovesButton.textContent = 'Moves (M)';
 inMatchMovesButton.addEventListener('click', () => movesPanel.show());
 topRightControls.appendChild(inMatchMovesButton);
 window.addEventListener('keydown', (e) => {
+  if (isTypingKeystroke(e)) return;
   if (e.key === 'm' || e.key === 'M') {
     if (movesPanel.isOpen) movesPanel.hide();
     else movesPanel.show();
@@ -1010,6 +1027,7 @@ async function beginMatch(): Promise<void> {
 }
 
 window.addEventListener('keydown', (e) => {
+  if (isTypingKeystroke(e)) return;
   if (e.code === 'F3') {
     e.preventDefault();
     match?.toggleDebug();

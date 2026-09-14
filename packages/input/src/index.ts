@@ -22,6 +22,7 @@ export {
   type BindingField,
   type PersistedBindings,
 } from './bindings.ts';
+export { shouldIgnoreKeydown } from './keyboard.ts';
 export { listConnectedGamepads } from './gamepad.ts';
 export { isTouchCapable, TouchSource, type TouchButton } from './touch.ts';
 
