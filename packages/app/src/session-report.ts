@@ -100,6 +100,9 @@ export function buildSessionReportMessage(input: {
    *  sent as 0) when the caller has no count to report, matching every
    *  other optional field's "absent means not tracked" convention. */
   contextLostCount?: number;
+  /** See SessionReportMessage.renderStalled. Same "absent means not
+   *  tracked" convention as contextLostCount above. */
+  renderStalled?: boolean;
 }): SessionReportMessage {
   const msg: SessionReportMessage = {
     t: 'sessionReport',
@@ -109,5 +112,6 @@ export function buildSessionReportMessage(input: {
     frameP95Ms: input.frameP95Ms,
   };
   if (input.contextLostCount !== undefined) msg.contextLostCount = input.contextLostCount;
+  if (input.renderStalled !== undefined) msg.renderStalled = input.renderStalled;
   return msg;
 }

@@ -149,6 +149,15 @@ export interface SessionReportMessage {
    *  an older client that predates this field still parses as a valid
    *  report. */
   contextLostCount?: number;
+  /** True if the render watchdog fired for this seat's client this match
+   *  (2026-09-14) -- the renderer never presented a single frame within
+   *  the grace period after the match started, a failure mode a lost-
+   *  context event alone cannot catch (dead/blocklisted GPU context,
+   *  WebGL exhausted after a prior context died). A boolean, not a
+   *  count: by construction it can only happen once per match. Same
+   *  privacy contract as contextLostCount -- no new personal data.
+   *  Optional for the same reason every other field here is. */
+  renderStalled?: boolean;
 }
 
 export type ClientControlMessage =
@@ -627,12 +636,14 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   // Same clamp ceiling as inputTicks -- this is a per-match count, never
   // expected to be large, but never trusted to actually be small either.
   const contextLostCount = clampFiniteNumber(obj.contextLostCount, 0, 10_000_000);
+  const renderStalled = typeof obj.renderStalled === 'boolean' ? obj.renderStalled : undefined;
   if (
     firstInputMs === undefined &&
     inputTicks === undefined &&
     frameMedianMs === undefined &&
     frameP95Ms === undefined &&
-    contextLostCount === undefined
+    contextLostCount === undefined &&
+    renderStalled === undefined
   ) {
     return null;
   }
@@ -644,6 +655,7 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
     frameP95Ms: frameP95Ms ?? 0,
   };
   if (contextLostCount !== undefined) out.contextLostCount = Math.round(contextLostCount);
+  if (renderStalled !== undefined) out.renderStalled = renderStalled;
   return out;
 }
 

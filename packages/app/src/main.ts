@@ -156,6 +156,21 @@ function onRendererContextRestored(): void {
     contextLostOverlayShowing = false;
   }
 }
+
+// Covers the other half of the same symptom (2026-09-14, see wiki): a
+// renderer that never becomes able to draw at all -- no webglcontextlost
+// event ever fires for onContextLost to catch, because from the
+// renderer's own point of view nothing is wrong. There is no restore
+// counterpart to this one: a renderer that has not drawn a single frame
+// in several seconds is not "lost", it never worked, so Reload is the
+// only honest action either way. Guarded against ever stacking a second
+// overlay on top of an already-shown context-lost one for the same
+// underlying failure.
+function onRendererRenderStalled(): void {
+  if (contextLostOverlayShowing) return;
+  contextLostOverlayShowing = true;
+  showContextLostOverlay();
+}
 const spectateChip = new SpectateChip(appRoot, () => void beginOnlineMatch());
 const controlsHint = new ControlsHint(appRoot);
 
@@ -688,6 +703,7 @@ async function beginOnlineMatch(): Promise<void> {
     },
     onContextLost: onRendererContextLost,
     onContextRestored: onRendererContextRestored,
+    onRenderStalled: onRendererRenderStalled,
   }, audio, isQaSession());
   netMatch = net;
   net.input.setBinding(0, currentBindings.p1);
@@ -910,6 +926,7 @@ async function beginMatch(): Promise<void> {
     },
     onContextLost: onRendererContextLost,
     onContextRestored: onRendererContextRestored,
+    onRenderStalled: onRendererRenderStalled,
   }, undefined, audio, localHumanSlotCount, localArenaOverride, localSettingsOverride);
   match = localMatch;
   localMatch.input.setBinding(0, currentBindings.p1);

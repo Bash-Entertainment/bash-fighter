@@ -318,6 +318,20 @@ export class Renderer {
    * the render loop it's trying to protect. */
   onContextLost: (() => void) | null = null;
   onContextRestored: (() => void) | null = null;
+  // 2026-09-14 follow-up: a lost context we never got the event for (see
+  // the race documented on `init` below) leaves `contextLost` false
+  // forever while nothing is ever actually drawn -- production hit this
+  // exact state after a couple of match restarts in one browser session:
+  // black canvas, isContextLost() false, canvas stuck at Pixi's 800x600
+  // default. `framesPresented` is the ground truth callers should watch
+  // instead of trusting our own flag: it only increments once per frame
+  // that (a) our own render() actually ran a full draw pass, not a bail,
+  // and (b) the browser's own WebGL context -- not our event listener's
+  // opinion of it -- confirms it was alive at that moment. A watchdog
+  // that sees this stay at 0 for several seconds after a match starts
+  // knows the renderer is dead regardless of which internal flag missed
+  // the actual cause.
+  private framesPresented = 0;
 
   private readonly world = new Container();
   private readonly stageLayer = new Graphics();
@@ -395,6 +409,26 @@ export class Renderer {
       this.lastFrameTimeMs = null;
       this.onContextRestored?.();
     });
+
+    // Defensive fix for a plausible timing bug in the same family: Pixi's
+    // `resizeTo` reads `parent.clientWidth/clientHeight` exactly once,
+    // synchronously, inside `app.init()` above, and only ever resizes
+    // again on a *window* resize event -- there is no ResizeObserver on
+    // `parent` itself. If `parent` measured 0x0 at that exact instant
+    // (mid-layout, e.g. right after the previous canvas was torn down in
+    // the same tick), the canvas is left at Pixi's 800x600 default and
+    // nothing ever corrects it, which matches the "canvas stuck at
+    // 800x600" symptom reported live. This re-reads the real size now,
+    // one microtask later, and corrects it if it's still wrong and the
+    // container is actually laid out. It cannot fix a genuinely dead
+    // renderer (see framesPresented/the watchdog for that), only a
+    // missed initial measurement.
+    if (parent.clientWidth > 0 && parent.clientHeight > 0) {
+      const { width, height } = this.viewSize;
+      if (width !== parent.clientWidth || height !== parent.clientHeight) {
+        this.app.renderer.resize(parent.clientWidth, parent.clientHeight);
+      }
+    }
 
     this.world.addChild(this.stageLayer);
     this.world.addChild(this.hazardContainer);
@@ -578,8 +612,32 @@ export class Renderer {
       .fill({ color: PALETTE.hud });
   }
 
+  /** Ground-truth check of the browser's own WebGL context, independent
+   * of whether our `webglcontextlost` listener ever fired for it (see the
+   * race documented in `init`). `renderer.context` is PixiJS's internal
+   * GlContextSystem; `.isLost` is a thin wrapper over the browser's own
+   * `gl.isContextLost()`. Not part of Pixi's stable public API, so kept
+   * isolated here like the debugForceContextLoss/Restore helpers above. */
+  private hasLiveGlContext(): boolean {
+    const renderer = this.app.renderer as unknown as { context?: { isLost?: boolean } };
+    if (!renderer) return false;
+    return renderer.context?.isLost !== true;
+  }
+
+  /** Frames genuinely drawn so far -- see the field doc above. */
+  getFramesPresented(): number {
+    return this.framesPresented;
+  }
+
   render(frame: RenderFrame): void {
     if (!this.ready || this.contextLost) return;
+
+    // Counts this frame as presented only if the browser's own WebGL
+    // context confirms it was alive going into this draw pass -- see
+    // hasLiveGlContext's doc comment for why that's the ground truth a
+    // watchdog should trust, not our own contextLost flag (which is what
+    // this whole check exists to be independent of).
+    if (this.hasLiveGlContext()) this.framesPresented++;
 
     const now = performance.now();
     const dtMs = this.lastFrameTimeMs === null ? 16.6667 : Math.min(50, now - this.lastFrameTimeMs);

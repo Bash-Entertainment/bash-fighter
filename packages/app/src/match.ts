@@ -73,6 +73,15 @@ export interface MatchEvents {
   onContextLost?(): void;
   /** Fired once if/when the browser restores the context. */
   onContextRestored?(): void;
+  /** Fired once if, a few seconds after the match started, the renderer
+   * has not genuinely presented a single frame -- see Renderer.
+   * getFramesPresented and the watchdog in start() below. Covers the
+   * case webglcontextlost/restored cannot: a renderer that never
+   * becomes able to draw in the first place (dead/blocklisted GPU
+   * context, WebGL exhausted after a prior context died), which our own
+   * contextLost flag has no event to catch. Never fires if onContextLost
+   * already did, for the same underlying failure -- see start(). */
+  onRenderStalled?(): void;
 }
 
 function lerp(a: number, b: number, t: number): number {
@@ -205,13 +214,34 @@ export class Match {
     this.input.attach(window);
   }
 
+  // A slow-but-working device must never see this: the grace period is
+  // generous (several seconds) and the trigger condition is "literally
+  // zero frames drawn", not "few" -- a device managing even a single
+  // frame in that window cancels it. Tuned against the watchdog test in
+  // packages/app/test/webgl-context-loss.test.ts.
+  private static readonly RENDER_WATCHDOG_MS = 6000;
+  private renderWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
+
   start(): void {
     this.loop.start();
+    this.renderWatchdogTimer = setTimeout(() => {
+      this.renderWatchdogTimer = null;
+      // If onContextLost already fired for this renderer, that is the
+      // same underlying failure by a different route -- do not also fire
+      // onRenderStalled and do not show a second overlay for it (see
+      // main.ts's showContextLostOverlay callers).
+      if (this.renderer.isContextLost()) return;
+      if (this.renderer.getFramesPresented() === 0) this.events.onRenderStalled?.();
+    }, Match.RENDER_WATCHDOG_MS);
   }
 
   stop(): void {
     this.loop.stop();
     this.input.detach(window);
+    if (this.renderWatchdogTimer !== null) {
+      clearTimeout(this.renderWatchdogTimer);
+      this.renderWatchdogTimer = null;
+    }
   }
 
   setDebug(on: boolean): void {

@@ -109,6 +109,11 @@ export interface NetMatchEvents {
   onContextLost?(): void;
   /** Fired once if/when the browser restores the context. */
   onContextRestored?(): void;
+  /** Fired once if, a few seconds after this match starts running, the
+   * renderer has not genuinely presented a single frame -- same
+   * contract as Match's identical event in match.ts. Never fires if
+   * onContextLost already did for the same underlying failure. */
+  onRenderStalled?(): void;
 }
 
 const SNAPSHOT_INTERVAL_MS = 1000 / SNAPSHOT_HZ;
@@ -260,6 +265,12 @@ export class NetMatch {
   // trackers below, same rationale: a reconnect/resume starts counting
   // fresh rather than carrying over a previous match's reading.
   private contextLostCount = 0;
+  // True once the render watchdog has fired for this match (see
+  // armRenderWatchdog) -- a boolean, not a count, since by definition it
+  // can only legitimately happen once per match: either frames start
+  // presenting (this stays false forever) or the match is unplayable and
+  // the player is shown the reload overlay immediately.
+  private renderStalled = false;
   private matchStartAtMs = 0;
   private lastRenderAtMs: number | null = null;
   private reportTimer: ReturnType<typeof setInterval> | null = null;
@@ -319,6 +330,7 @@ export class NetMatch {
       frameMedianMs: this.frameTimeTracker.getMedianMs(),
       frameP95Ms: this.frameTimeTracker.getP95Ms(),
       contextLostCount: this.contextLostCount,
+      renderStalled: this.renderStalled,
     });
     ws.send(JSON.stringify(report));
   }
@@ -470,6 +482,10 @@ export class NetMatch {
     this.loop?.stop();
     this.input.detach(window);
     this.ws?.close();
+    if (this.renderWatchdogTimer !== null) {
+      clearTimeout(this.renderWatchdogTimer);
+      this.renderWatchdogTimer = null;
+    }
   }
 
   toggleDebug(): void {
@@ -612,6 +628,7 @@ export class NetMatch {
     this.inputActivity = new InputActivityTracker();
     this.frameTimeTracker = new FrameTimeTracker();
     this.contextLostCount = 0;
+    this.renderStalled = false;
     this.matchStartAtMs = performance.now();
     this.lastRenderAtMs = null;
     if (this.reportTimer) clearInterval(this.reportTimer);
@@ -622,6 +639,30 @@ export class NetMatch {
       () => this.render(),
     );
     this.loop.start();
+    this.armRenderWatchdog();
+  }
+
+  // See Match.start()'s identical watchdog in match.ts for the full
+  // rationale: a renderer that never becomes able to draw at all (dead or
+  // blocklisted GPU context, WebGL exhausted after a prior match's
+  // context died -- observed live: black canvas, isContextLost() false,
+  // canvas stuck at Pixi's 800x600 default) fires no webglcontextlost
+  // event for onContextLost to catch. Zero frames genuinely presented a
+  // few seconds after this match starts running is treated the same way.
+  private static readonly RENDER_WATCHDOG_MS = 6000;
+  private renderWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private armRenderWatchdog(): void {
+    if (this.renderWatchdogTimer !== null) clearTimeout(this.renderWatchdogTimer);
+    this.renderWatchdogTimer = setTimeout(() => {
+      this.renderWatchdogTimer = null;
+      if (this.stopped) return;
+      if (this.renderer.isContextLost()) return;
+      if (this.renderer.getFramesPresented() === 0) {
+        this.renderStalled = true;
+        this.events.onRenderStalled?.();
+      }
+    }, NetMatch.RENDER_WATCHDOG_MS);
   }
 
   private tick(): void {

@@ -87,3 +87,50 @@ test('no new personal data is introduced alongside the context-loss field', () =
   // IP, no user agent, no cookie, no persistent id.
   assert.doesNotMatch(protocol, /contextLostCount.*(ip|userAgent|cookie)/i);
 });
+
+// 2026-09-14 follow-up: production hit the other half of the same
+// symptom -- a renderer that never becomes able to draw at all (dead or
+// blocklisted GPU context, WebGL exhausted after a prior context died).
+// No webglcontextlost event ever fires for that, so isContextLost()
+// stayed false while the canvas stayed black and stuck at Pixi's 800x600
+// default. The fix is a watchdog on frames genuinely presented, not on
+// the renderer's own opinion of its health.
+
+test('Renderer.getFramesPresented only counts frames that both actually ran the draw path and had a live native WebGL context', () => {
+  const idx = renderer.indexOf('render(frame: RenderFrame): void {');
+  const body = renderer.slice(idx, idx + 500);
+  assert.match(body, /if \(!this\.ready \|\| this\.contextLost\) return;/);
+  assert.match(body, /if \(this\.hasLiveGlContext\(\)\) this\.framesPresented\+\+;/);
+});
+
+test('hasLiveGlContext reads the browser\'s own gl.isContextLost(), not our own event-driven flag', () => {
+  const idx = renderer.indexOf('hasLiveGlContext()');
+  const body = renderer.slice(idx, idx + 300);
+  assert.match(body, /context\?\.isLost/);
+});
+
+test('Match and NetMatch both arm a render watchdog when a match starts, and disarm it on stop', () => {
+  for (const src of [match, netMatch]) {
+    assert.match(src, /RENDER_WATCHDOG_MS = 6000/);
+    assert.match(src, /getFramesPresented\(\) === 0/);
+    // Never fires for the same failure onContextLost already caught.
+    assert.match(src, /if \(this\.renderer\.isContextLost\(\)\) return;/);
+    assert.match(src, /clearTimeout\(this\.renderWatchdogTimer\)/);
+  }
+});
+
+test('onRenderStalled uses the same overlay as onContextLost and never stacks a second one', () => {
+  const idx = main.indexOf('function onRendererRenderStalled()');
+  const body = main.slice(idx, idx + 300);
+  assert.match(body, /if \(contextLostOverlayShowing\) return;/);
+  assert.match(body, /showContextLostOverlay\(\);/);
+  assert.equal(main.match(/onRenderStalled: onRendererRenderStalled/g)?.length, 2);
+});
+
+test('SessionReportMessage.renderStalled is optional, a plain boolean, validated server-side, and carries no new personal data', () => {
+  assert.match(protocol, /renderStalled\?: boolean;/);
+  const idx = protocol.indexOf('function sanitiseSessionReport');
+  const body = protocol.slice(idx, idx + 1600);
+  assert.match(body, /typeof obj\.renderStalled === 'boolean'/);
+  assert.doesNotMatch(protocol, /renderStalled.*(ip|userAgent|cookie)/i);
+});
