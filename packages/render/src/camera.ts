@@ -231,7 +231,21 @@ export function computeRawCamera(
   // own midpoint) and it automatically yields to full centering as
   // fSpanY grows toward filling the viewport, because the safe range
   // itself shrinks toward that single fCenterY point.
-  const GROUND_BIAS = 0.5;
+  // DEAD-SPACE-BELOW-FLOOR PASS (2026-09-14): raised from 0.5. At 0.5 the
+  // ground line lands at a fixed ~75% down the viewport for any
+  // ground-hugging pack regardless of stage (measured:
+  // scripts/camera-framing-metrics.mjs put 26-32% of every real stage's
+  // viewport below the floor at 1280x720 and 390x844, matching the first
+  // real player's "took a minute to even find my dude"). 0.85 moves that
+  // fixed floor line to ~92.5% down the viewport instead (belowFloorFrac
+  // = 0.5 - GROUND_BIAS/2), leaving a modest, deliberately non-zero
+  // margin below the ground -- enough that a fighter falling out still
+  // visibly falls before leaving frame, not enough to reserve a
+  // quarter of the screen for a pit almost nothing happens in. Still
+  // picks a point *inside* the same never-crop-a-fighter safe range
+  // documented below -- raising this constant cannot by itself introduce
+  // cropping, jitter, or a second competing clamp.
+  const GROUND_BIAS = 0.85;
   // With no fighters at all (e.g. a spectator view before anyone has
   // spawned) fMinY/fMaxY fall back to the whole arena above, and the
   // "whole arena" framing should stay plainly centered rather than

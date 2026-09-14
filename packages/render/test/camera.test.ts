@@ -227,13 +227,16 @@ test('clampBounds lets the camera center follow ground-level fighters instead of
 
   // Before the fix, the ground line sits in the bottom ~15-20% of the
   // screen (pinned near the edge). After, the deliberate ground-anchor
-  // bias (GROUND_BIAS in camera.ts) should put it at roughly 65-75%
-  // down the viewport -- most of the frame above the ground where the
-  // actual platform-fighter action (jumps, aerials, recoveries) happens,
-  // a modest sliver below it, not a 50/50 centered split and nowhere
-  // near the old bottom-pinned ~85%+.
+  // bias (GROUND_BIAS in camera.ts, raised to 0.85 in the
+  // dead-space-below-floor pass 2026-09-14 -- see wiki "Camera Framing:
+  // Ground Anchor and Jump-Space Bias 2026-09-14") should put it at
+  // roughly 85-93% down the viewport -- most of the frame above the
+  // ground where the actual platform-fighter action (jumps, aerials,
+  // recoveries) happens, only a modest margin below it (enough that a
+  // fighter falling out still visibly falls before leaving frame), not
+  // a quarter of the screen reserved for an empty pit.
   assert.ok(beforeFrac > 0.75, `expected pre-fix ground line pinned near bottom, got ${beforeFrac}`);
-  assert.ok(afterFrac > 0.65 && afterFrac < 0.75, `expected post-fix ground line at ~65-75% down, got ${afterFrac}`);
+  assert.ok(afterFrac > 0.85 && afterFrac < 0.93, `expected post-fix ground line at ~85-93% down, got ${afterFrac}`);
 });
 
 test('clampBounds still prevents the camera from showing dead space beyond the true world edges', () => {
@@ -263,7 +266,7 @@ test('clampBounds defaults to arena bounds when omitted (unchanged behaviour for
 // the viewport when the fighters are a ground-hugging pack, while never
 // cropping a fighter who is genuinely spread out vertically (jumping,
 // falling below the floor).
-test('GROUND_BIAS puts a ground-hugging pack at ~65-75% down the viewport, on multiple stage shapes', () => {
+test('GROUND_BIAS puts a ground-hugging pack at ~85-93% down the viewport, on multiple stage shapes', () => {
   const stages: Array<{ name: string; arena: ArenaBounds; clampBounds: ArenaBounds }> = [
     {
       name: 'battle-royale-20-shaped (wide, short)',
@@ -281,7 +284,7 @@ test('GROUND_BIAS puts a ground-hugging pack at ~65-75% down the viewport, on mu
     const cam = computeRawCamera(positions, cfg({ arena, clampBounds, minScale: 1.2, maxScale: 5.5 }));
     const groundScreenY = 720 / 2 + cam.centerY * cam.scale;
     const frac = groundScreenY / 720;
-    assert.ok(frac > 0.6 && frac < 0.8, `${name}: expected ground line at ~65-75% down, got ${frac}`);
+    assert.ok(frac > 0.85 && frac < 0.93, `${name}: expected ground line at ~85-93% down, got ${frac}`);
   }
 });
 

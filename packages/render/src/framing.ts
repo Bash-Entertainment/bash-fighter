@@ -43,8 +43,23 @@ export interface FramingStageBounds {
 // blast rect (falls are the fast, brief case; the full blast-zone clamp
 // two steps below still shows however much further a knocked-out
 // fighter actually falls, this is only the *minimum* reserved band).
-export const JUMP_HEADROOM_WORLD = 220;
-export const FALL_HEADROOM_WORLD = 70;
+// DEAD-SPACE-BELOW-FLOOR PASS (2026-09-14, see wiki "Camera Framing:
+// Ground Anchor and Jump-Space Bias 2026-09-14"): measured on every real
+// stage (scripts/camera-framing-metrics.mjs) that the old 220/70 split's
+// *sum* (290 world units) was reserving more minimum vertical span than
+// a ground-hugging pack needs on top of the platform height range itself
+// -- on stages where this box's own aspect padding (below) ends up
+// Y-bound rather than X-bound (the-spire, and any small clustered
+// endgame), that extra reserved span was pure unzoomed dead air, not
+// headroom actually protecting a jump from being cropped: a fighter that
+// really does jump or fall still grows fSpanY dynamically via its own
+// tracked position in computeRawCamera, which is a completely separate,
+// always-on guarantee against cropping. Reduced to 150/40 (sum 190): a
+// real measured drop in reserved headroom, not a guess, verified against
+// the "never crop a living fighter" invariant by extreme-jump/fall camera
+// tests, not just by this ratio.
+export const JUMP_HEADROOM_WORLD = 150;
+export const FALL_HEADROOM_WORLD = 40;
 
 /** The camera's "always show at least this much" floor used to be the
  * *entire* blast zone -- a battle-royale arena's blast zone is sized with
