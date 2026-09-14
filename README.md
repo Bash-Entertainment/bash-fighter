@@ -115,6 +115,13 @@ To reproduce a full 20-fighter crowd locally without a server or a live
 lobby (`?crowd20=1`, reproducible via `&seed=`/`&arena=`), see
 [`docs/LOCAL_CROWD_TESTING.md`](./docs/LOCAL_CROWD_TESTING.md).
 
+The game is also published as an HTML5 playable on
+[itch.io](https://bashfighter.itch.io/bash-fighter), built from the same
+source with a separate static bundle so it works from itch's CDN
+subdirectory and off-origin; see
+[`docs/ITCH_BUILD.md`](./docs/ITCH_BUILD.md) for how that build is
+produced and uploaded.
+
 ## Determinism
 
 `packages/sim` is a pure function of previous state plus input: Q16.16

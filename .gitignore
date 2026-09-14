@@ -4,3 +4,5 @@ dist/
 .DS_Store
 tsconfig.tsbuildinfo
 *.tsbuildinfo
+dist-itch/
+dist-itch.zip
