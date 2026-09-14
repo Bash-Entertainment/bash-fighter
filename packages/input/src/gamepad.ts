@@ -35,6 +35,15 @@ export function pollGamepad(padIndex: number): InputFrame | null {
   return makeInputFrame(buttons, stickX, stickY);
 }
 
+/** True when an InputFrame carries no actual input: no buttons held and
+ * both stick axes at rest (post-deadzone fixed-point zero). Shared by the
+ * pollSlot() priority chain (a gamepad frame only outranks keyboard when it
+ * is non-neutral) and by packages/app/src/net-match.ts's hadInput check --
+ * kept here rather than duplicated so both agree on what "no input" means. */
+export function isNeutralFrame(frame: InputFrame): boolean {
+  return frame.buttons === 0 && frame.stickX === 0 && frame.stickY === 0;
+}
+
 export function listConnectedGamepads(): number[] {
   if (typeof navigator === 'undefined') return [];
   const pads = navigator.getGamepads();

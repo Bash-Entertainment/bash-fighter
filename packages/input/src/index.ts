@@ -1,12 +1,15 @@
 // packages/input: translates raw browser input (keyboard + Gamepad API)
 // into the sim's InputFrame struct for two local players. Each player's
-// slot is either a keyboard binding or a connected gamepad; gamepads take
-// priority over keyboard for a slot once connected, matching the "either
-// replaceable by a gamepad" requirement.
+// slot is either a keyboard binding or a connected gamepad; a gamepad only
+// takes priority over keyboard for a slot once it is actually producing
+// non-neutral input (see isNeutralFrame in gamepad.ts) -- mere presence of
+// an attached pad, or idle stick drift, is not enough (fixed 2026-09-14,
+// see wiki "Gamepad Priority Fix"). Below that, touch still always wins
+// while a control is actively held.
 import { fixed as fx, makeInputFrame, type InputFrame } from '@bash-fighter/sim';
 import { BUTTON_BY_FIELD, BUTTON_FIELDS, DEFAULT_P1_BINDING, DEFAULT_P2_BINDING, type KeyBinding } from './bindings.ts';
 import { KeyboardSource } from './keyboard.ts';
-import { pollGamepad, listConnectedGamepads } from './gamepad.ts';
+import { pollGamepad, listConnectedGamepads, isNeutralFrame } from './gamepad.ts';
 import { TouchSource } from './touch.ts';
 
 export type { KeyBinding } from './bindings.ts';
@@ -23,7 +26,7 @@ export {
   type PersistedBindings,
 } from './bindings.ts';
 export { shouldIgnoreKeydown } from './keyboard.ts';
-export { listConnectedGamepads } from './gamepad.ts';
+export { listConnectedGamepads, isNeutralFrame } from './gamepad.ts';
 export { isTouchCapable, TouchSource, type TouchButton } from './touch.ts';
 
 export interface PlayerSlotConfig {
@@ -123,20 +126,47 @@ export class InputManager {
     // touch takes over" (see touch.ts). The instant no finger is on a
     // control, isActive() goes false and the very next frame falls
     // straight back to gamepad/keyboard with no mode switch to manage.
+    //
+    // Below touch: gamepad beats keyboard only when the gamepad frame is
+    // non-neutral (isNeutralFrame, gamepad.ts) -- an attached-but-idle pad
+    // (or one sitting inside the deadzone) must not mask keyboard input.
+    // If neither the (non-neutral) gamepad nor the keyboard produced real
+    // input this frame, we still return the (neutral) keyboard frame, but
+    // deliberately do NOT overwrite lastSource: it keeps reporting the
+    // last source that actually produced input this session, rather than
+    // flapping to 'keyboard' on every idle frame.
     const touchSource = this.touch.get(slot);
     if (touchSource && touchSource.isActive()) {
       this.lastSource[slot] = 'touch';
       return touchSource.poll();
     }
+    // A gamepad frame only outranks keyboard when it actually carries
+    // input (see isNeutralFrame): a pad that is merely attached, or one
+    // idling with a hair of stick drift the deadzone doesn't fully
+    // absorb, must not silently swallow the keyboard for this slot --
+    // that was the root cause of production's gamepad mis-attribution.
     if (cfg.gamepadIndex !== null) {
       const pad = pollGamepad(cfg.gamepadIndex);
-      if (pad) {
+      if (pad && !isNeutralFrame(pad)) {
         this.lastSource[slot] = 'gamepad';
         return pad;
       }
     }
-    this.lastSource[slot] = 'keyboard';
-    return keyboardFrame(this.keyboard, cfg.binding);
+    const kb = keyboardFrame(this.keyboard, cfg.binding);
+    // Semantics for a frame with no real input from anything this slot
+    // has: rather than flapping lastSource to 'keyboard' every neutral
+    // frame (which would make the usage counters look like everyone is
+    // a keyboard player even when they're mid-swing on a pad or just not
+    // touching anything yet), only update lastSource when the keyboard
+    // frame is itself non-neutral. If nothing has ever produced real
+    // input for this slot, lastSource[slot] stays unset and
+    // lastSourceForSlot() falls through to its documented 'keyboard'
+    // default -- so the *reported* value never changes here, only
+    // whether we bother to overwrite an already-real source.
+    if (!isNeutralFrame(kb)) {
+      this.lastSource[slot] = 'keyboard';
+    }
+    return kb;
   }
 
   /** Which source produced the given slot's InputFrame on the most

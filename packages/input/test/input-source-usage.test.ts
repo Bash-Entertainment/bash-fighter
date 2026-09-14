@@ -61,12 +61,14 @@ test('InputManager.lastSourceForSlot: reports touch only while a touch source is
     mgr.poll();
     assert.equal(mgr.lastSourceForSlot(0), 'touch');
 
-    // Finger lifts: falls straight back to keyboard the very next poll,
-    // matching the "no mode switch to manage" behaviour documented on
-    // pollSlot().
+    // Finger lifts and the frame the slot now produces (keyboard, since
+    // no gamepad and no keys held) is neutral: reported lastSource stays
+    // 'touch', the last source that actually produced real input, rather
+    // than flapping to 'keyboard' on an idle frame (see pollSlot() and the
+    // gamepad-priority fix's tests for the full "no flapping" semantics).
     touch.setActivePointerCount(0);
     mgr.poll();
-    assert.equal(mgr.lastSourceForSlot(0), 'keyboard');
+    assert.equal(mgr.lastSourceForSlot(0), 'touch');
   });
 });
 
