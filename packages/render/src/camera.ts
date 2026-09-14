@@ -38,8 +38,8 @@ export interface CameraConfig {
    * framing.ts's computeFramingFloor() make that floor's own box taller
    * (or wider) than the fighters actually need, using `arena` for the
    * *centering* clamp too forces the frame's center onto the padded
-   * floor box's own midpoint (see wiki "Camera Framing Ground Anchor
-   * Fix") instead of following the fighters -- on a wide, short arena
+   * floor box's own midpoint instead of following the fighters -- on a
+   * wide, short arena
    * (e.g. battle-royale-20) this pins a ground-hugging 20-fighter pack
    * to the bottom few percent of the screen, because the floor's
    * vertical midpoint sits well above the ground where nothing is
@@ -171,7 +171,43 @@ export function computeRawCamera(
   const halfViewWorldX = cfg.viewWidth / 2 / scale;
   const halfViewWorldY = cfg.viewHeight / 2 / scale;
   let centerX = fCenterX;
-  let centerY = fCenterY;
+  // Vertical framing is deliberately NOT centered on the fighters' own
+  // midpoint. A platform fighter's action lives mostly above the floor
+  // (jump arcs, aerials, knockback, recoveries) -- only the pit below
+  // the floor matters, and only as somewhere fighters fall into, not
+  // somewhere play happens. Centering equally split the viewport and
+  // read as a big void below the fighters and (after the ground-anchor
+  // fix above) a merely-adequate amount of jump room above -- see
+  // GROUND_BIAS below.
+  //
+  // GROUND_BIAS pulls the center toward the *top* of the range that
+  // still keeps every fighter on screen, anchored on the lowest fighter
+  // (fMinY, i.e. the floor these fighters are standing/falling near)
+  // rather than the fighters' vertical midpoint. At GROUND_BIAS=0.4 the
+  // floor lands at roughly 70% down the viewport when the fighters are
+  // a ground-hugging pack with plenty of vertical slack to spare
+  // (derivation: groundFraction = 0.5 + GROUND_BIAS). The clamp two
+  // lines down into [fMaxY - halfViewWorldY, fMinY + halfViewWorldY] is
+  // exactly the same "never crop a living fighter" range the old
+  // fCenterY-based code used (that range's own midpoint IS fCenterY) --
+  // biasing only changes *where inside that always-safe range* the
+  // center sits, so it can never re-introduce the bottom-pinning bug
+  // (which came from a completely different clamp, against cfg.arena's
+  // own midpoint) and it automatically yields to full centering as
+  // fSpanY grows toward filling the viewport, because the safe range
+  // itself shrinks toward that single fCenterY point.
+  const GROUND_BIAS = 0.5;
+  // With no fighters at all (e.g. a spectator view before anyone has
+  // spawned) fMinY/fMaxY fall back to the whole arena above, and the
+  // "whole arena" framing should stay plainly centered rather than
+  // biased -- there is no ground-hugging pack to bias toward.
+  let centerY: number;
+  if (positions.length === 0) {
+    centerY = fCenterY;
+  } else {
+    const groundAnchoredCenterY = fMinY + GROUND_BIAS * halfViewWorldY;
+    centerY = Math.min(Math.max(groundAnchoredCenterY, fMaxY - halfViewWorldY), fMinY + halfViewWorldY);
+  }
   // Only pull the center away from the fighters when the arena is
   // actually too small to let it sit freely (the view would otherwise
   // show dead space beyond the arena edge). When the arena fits inside

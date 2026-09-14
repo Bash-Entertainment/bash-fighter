@@ -217,10 +217,14 @@ test('clampBounds lets the camera center follow ground-level fighters instead of
   const afterFrac = groundScreenY(withClamp) / 720;
 
   // Before the fix, the ground line sits in the bottom ~15-20% of the
-  // screen (pinned near the edge). After, it should be much closer to
-  // the middle of the viewport, where the fighters actually are.
+  // screen (pinned near the edge). After, the deliberate ground-anchor
+  // bias (GROUND_BIAS in camera.ts) should put it at roughly 65-75%
+  // down the viewport -- most of the frame above the ground where the
+  // actual platform-fighter action (jumps, aerials, recoveries) happens,
+  // a modest sliver below it, not a 50/50 centered split and nowhere
+  // near the old bottom-pinned ~85%+.
   assert.ok(beforeFrac > 0.75, `expected pre-fix ground line pinned near bottom, got ${beforeFrac}`);
-  assert.ok(afterFrac > 0.35 && afterFrac < 0.65, `expected post-fix ground line near mid-screen, got ${afterFrac}`);
+  assert.ok(afterFrac > 0.65 && afterFrac < 0.75, `expected post-fix ground line at ~65-75% down, got ${afterFrac}`);
 });
 
 test('clampBounds still prevents the camera from showing dead space beyond the true world edges', () => {
@@ -240,4 +244,55 @@ test('clampBounds defaults to arena bounds when omitted (unchanged behaviour for
   const withField = computeRawCamera(positions, cfg({ arena }));
   const explicitSame = computeRawCamera(positions, cfg({ arena, clampBounds: arena }));
   assert.deepEqual(withField, explicitSame);
+});
+
+// Regression test for the second production report on this framing work:
+// the ground-anchor fix above (clampBounds) was correct but overcorrected
+// to dead-center the fighters (~50% down), leaving a big band of empty
+// pit below them. A platform fighter's action is mostly *above* the
+// floor, so the frame should be biased to put the ground at ~65-75% down
+// the viewport when the fighters are a ground-hugging pack, while never
+// cropping a fighter who is genuinely spread out vertically (jumping,
+// falling below the floor).
+test('GROUND_BIAS puts a ground-hugging pack at ~65-75% down the viewport, on multiple stage shapes', () => {
+  const stages: Array<{ name: string; arena: ArenaBounds; clampBounds: ArenaBounds }> = [
+    {
+      name: 'battle-royale-20-shaped (wide, short)',
+      arena: { minX: -480, maxX: 480, minY: -91.72413793103448, maxY: 448.27586206896547 },
+      clampBounds: { minX: -620, maxX: 620, minY: -260, maxY: 520 },
+    },
+    {
+      name: 'the-foundry-shaped (the stage the original arena-midpoint clamp was added for)',
+      arena: { minX: -440, maxX: 440, minY: -70, maxY: 430 },
+      clampBounds: { minX: -520, maxX: 520, minY: -260, maxY: 560 },
+    },
+  ];
+  const positions = Array.from({ length: 20 }, (_, i) => ({ x: -400 + i * 42, y: 0 }));
+  for (const { name, arena, clampBounds } of stages) {
+    const cam = computeRawCamera(positions, cfg({ arena, clampBounds, minScale: 1.2, maxScale: 5.5 }));
+    const groundScreenY = 720 / 2 + cam.centerY * cam.scale;
+    const frac = groundScreenY / 720;
+    assert.ok(frac > 0.6 && frac < 0.8, `${name}: expected ground line at ~65-75% down, got ${frac}`);
+  }
+});
+
+test('GROUND_BIAS yields to full coverage when fighters are genuinely spread vertically', () => {
+  const arena: ArenaBounds = { minX: -480, maxX: 480, minY: -91.72413793103448, maxY: 448.27586206896547 };
+  const clampBounds: ArenaBounds = { minX: -620, maxX: 620, minY: -260, maxY: 520 };
+  // One fighter high on a platform, one on the ground, one fallen below the floor.
+  const positions = [{ x: -20, y: 0 }, { x: 0, y: 200 }, { x: 20, y: -150 }];
+  const cam = computeCamera(positions, cfg({ arena, clampBounds, minScale: 1.2, maxScale: 5.5 }));
+  const halfViewWorldY = cfg().viewHeight / 2 / cam.scale;
+  const viewTop = cam.centerY + halfViewWorldY;
+  const viewBottom = cam.centerY - halfViewWorldY;
+  const fMaxY = 200 + 20 * 1.5;
+  const fMinY = -150 - 20;
+  assert.ok(viewTop >= fMaxY - 1e-6, `top fighter cropped: viewTop=${viewTop} fMaxY=${fMaxY}`);
+  assert.ok(viewBottom <= fMinY + 1e-6, `bottom fighter cropped: viewBottom=${viewBottom} fMinY=${fMinY}`);
+});
+
+test('GROUND_BIAS falls back to plain arena centering when there are no fighters at all', () => {
+  const arena: ArenaBounds = { minX: -200, maxX: 200, minY: -50, maxY: 250 };
+  const cam = computeRawCamera([], cfg({ arena, minScale: 1, maxScale: 5.5 }));
+  assert.equal(cam.centerY, (arena.minY + arena.maxY) / 2);
 });
