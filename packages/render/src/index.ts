@@ -174,6 +174,16 @@ function cameraConfig(
     maxScale: 5.5,
     paddingWorld: 20,
     arena: computePopulationAwareFramingFloor(stage, viewWidth, viewHeight, livingCount),
+    // Clamp centering to the true (live, possibly-shrunk) blast rect, not
+    // the padded/aspect-corrected floor box above -- see camera.ts's
+    // CameraConfig.clampBounds doc comment for why using the floor here
+    // pins a ground-hugging crowd to the bottom of the screen.
+    clampBounds: {
+      minX: stage.blastMinX,
+      maxX: stage.blastMaxX,
+      minY: stage.blastMinY,
+      maxY: stage.blastMaxY,
+    },
   };
 }
 

@@ -29,6 +29,24 @@ export interface CameraConfig {
   /** Full arena footprint (typically the blast zone) — the camera never
    * frames tighter than this by default. */
   arena: ArenaBounds;
+  /** True world edges the camera must never show dead space beyond
+   * (normally the live blast rect). Defaults to `arena` when omitted, so
+   * existing callers/tests keep their exact old behaviour.
+   *
+   * `arena` above is a *minimum zoom* floor -- on stages where the
+   * jump/fall headroom padding and the aspect-ratio correction in
+   * framing.ts's computeFramingFloor() make that floor's own box taller
+   * (or wider) than the fighters actually need, using `arena` for the
+   * *centering* clamp too forces the frame's center onto the padded
+   * floor box's own midpoint (see wiki "Camera Framing Ground Anchor
+   * Fix") instead of following the fighters -- on a wide, short arena
+   * (e.g. battle-royale-20) this pins a ground-hugging 20-fighter pack
+   * to the bottom few percent of the screen, because the floor's
+   * vertical midpoint sits well above the ground where nothing is
+   * happening. Clamping against the true blast rect instead only ever
+   * prevents the frame from wandering past where a fighter could
+   * actually be, never forces it toward empty headroom. */
+  clampBounds?: ArenaBounds;
 }
 
 // Reduced-motion camera damping (issue #24). The existing "Reduce screen
@@ -180,11 +198,12 @@ export function computeRawCamera(
   // produced the "empty bottom third" dead-space defect on stages like
   // the-foundry: the ground-hugging fighter cluster's centroid sits well
   // below the arena box's own vertical middle.
-  if (cfg.arena.maxX - cfg.arena.minX >= halfViewWorldX * 2) {
-    centerX = Math.min(Math.max(centerX, cfg.arena.minX + halfViewWorldX), cfg.arena.maxX - halfViewWorldX);
+  const clamp = cfg.clampBounds ?? cfg.arena;
+  if (clamp.maxX - clamp.minX >= halfViewWorldX * 2) {
+    centerX = Math.min(Math.max(centerX, clamp.minX + halfViewWorldX), clamp.maxX - halfViewWorldX);
   }
-  if (cfg.arena.maxY - cfg.arena.minY >= halfViewWorldY * 2) {
-    centerY = Math.min(Math.max(centerY, cfg.arena.minY + halfViewWorldY), cfg.arena.maxY - halfViewWorldY);
+  if (clamp.maxY - clamp.minY >= halfViewWorldY * 2) {
+    centerY = Math.min(Math.max(centerY, clamp.minY + halfViewWorldY), clamp.maxY - halfViewWorldY);
   }
 
   return { centerX, centerY, scale };
