@@ -218,6 +218,27 @@ export interface SessionReportMessage {
    *  can come from either, and only one of them is about the device.
    *  Optional/absent means "not tracked". */
   networkHitchCount?: number;
+  /** Cumulative count of local simulation ticks this seat's client
+   *  attributed to *observed keyboard usage* -- an InputManager slot
+   *  poll that fell through to the keyboard source for that tick (see
+   *  `InputSourceKind` in `packages/input/src/index.ts`). This is usage,
+   *  not capability: unlike the `touchActive` field on the client
+   *  profile (built from `isTouchCapable()`, a static device check),
+   *  these three counters (keyboard/touch/gamepad) tell apart what a
+   *  player actually drove the match with, which can differ wildly from
+   *  what their hardware supports -- see docs/MEASUREMENT.md
+   *  "Capability vs usage" for the touch-laptop case that motivated this.
+   *  Optional/absent means "not tracked", never a fabricated zero. */
+  keyboardInputTicks?: number;
+  /** Same as `keyboardInputTicks` but for ticks attributed to the
+   *  on-screen touch controls actually being held (`TouchSource.isActive()`
+   *  true for that tick), not merely `navigator.maxTouchPoints > 0`.
+   *  Optional/absent means "not tracked". */
+  touchInputTicks?: number;
+  /** Same as `keyboardInputTicks` but for ticks attributed to a
+   *  connected gamepad actually producing the frame. Optional/absent
+   *  means "not tracked". */
+  gamepadInputTicks?: number;
 }
 
 export type ClientControlMessage =
@@ -736,7 +757,10 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   const frameHistogram = sanitiseFrameHistogram(obj.frameHistogram);
   const hiddenFrames = clampFiniteNumber(obj.hiddenFrames, 0, 10_000_000);
   const networkHitchCount = clampFiniteNumber(obj.networkHitchCount, 0, 10_000_000);
-  if ([firstInputMs, inputTicks, frameMedianMs, frameP95Ms, contextLostCount, renderStalled, frameHistogram, hiddenFrames, networkHitchCount].every((v) => v === undefined)) return null;
+  const keyboardInputTicks = clampFiniteNumber(obj.keyboardInputTicks, 0, 10_000_000);
+  const touchInputTicks = clampFiniteNumber(obj.touchInputTicks, 0, 10_000_000);
+  const gamepadInputTicks = clampFiniteNumber(obj.gamepadInputTicks, 0, 10_000_000);
+  if ([firstInputMs, inputTicks, frameMedianMs, frameP95Ms, contextLostCount, renderStalled, frameHistogram, hiddenFrames, networkHitchCount, keyboardInputTicks, touchInputTicks, gamepadInputTicks].every((v) => v === undefined)) return null;
   const out: SessionReportMessage = {
     t: 'sessionReport',
     firstInputMs: firstInputMs === undefined ? null : firstInputMs,
@@ -749,6 +773,9 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   if (frameHistogram !== undefined) out.frameHistogram = frameHistogram;
   if (hiddenFrames !== undefined) out.hiddenFrames = Math.round(hiddenFrames);
   if (networkHitchCount !== undefined) out.networkHitchCount = Math.round(networkHitchCount);
+  if (keyboardInputTicks !== undefined) out.keyboardInputTicks = Math.round(keyboardInputTicks);
+  if (touchInputTicks !== undefined) out.touchInputTicks = Math.round(touchInputTicks);
+  if (gamepadInputTicks !== undefined) out.gamepadInputTicks = Math.round(gamepadInputTicks);
   return out;
 }
 

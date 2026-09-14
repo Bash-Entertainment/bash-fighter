@@ -72,6 +72,13 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
       frameHistogram: report?.frameHistogram ?? null,
       hiddenFrames: report?.hiddenFrames ?? null,
       networkHitchCount: report?.networkHitchCount ?? null,
+      // Observed input-device usage (2026-09-14, see docs/MEASUREMENT.md
+      // "Capability vs usage") -- ticks actually driven by each source,
+      // as opposed to touchActive above which is a static capability
+      // check. `?? null` means "this client build didn't report it".
+      keyboardInputTicks: report?.keyboardInputTicks ?? null,
+      touchInputTicks: report?.touchInputTicks ?? null,
+      gamepadInputTicks: report?.gamepadInputTicks ?? null,
     };
     console.log(`[sessionEnd] ${JSON.stringify(line)}`);
   } catch (err) {

@@ -9,6 +9,7 @@ import {
   buildClientProfile,
   buildSessionReportMessage,
   InputActivityTracker,
+  InputUsageTracker,
   FrameTimeTracker,
   NetworkHitchTracker,
   bucketHardwareConcurrency,
@@ -70,6 +71,26 @@ test('InputActivityTracker: a session with no input at all reports firstInputMs 
   for (let i = 0; i < 50; i++) tracker.recordTick(false, i * 16.7);
   assert.equal(tracker.getFirstInputMs(), null);
   assert.equal(tracker.getInputTicks(), 0);
+});
+
+test('InputUsageTracker: attributes ticks to the source that actually produced them', () => {
+  const tracker = new InputUsageTracker();
+  tracker.recordTick(true, 'keyboard');
+  tracker.recordTick(true, 'keyboard');
+  tracker.recordTick(true, 'touch');
+  tracker.recordTick(true, 'gamepad');
+  tracker.recordTick(false, 'touch'); // no input this tick -- must not count under any source
+  assert.equal(tracker.getKeyboardTicks(), 2);
+  assert.equal(tracker.getTouchTicks(), 1);
+  assert.equal(tracker.getGamepadTicks(), 1);
+});
+
+test('InputUsageTracker: a session with no input at all reports zero for every source, not undefined', () => {
+  const tracker = new InputUsageTracker();
+  for (let i = 0; i < 20; i++) tracker.recordTick(false, 'keyboard');
+  assert.equal(tracker.getKeyboardTicks(), 0);
+  assert.equal(tracker.getTouchTicks(), 0);
+  assert.equal(tracker.getGamepadTicks(), 0);
 });
 
 test('FrameTimeTracker: median/p95 of a known distribution', () => {
@@ -237,4 +258,24 @@ test('buildSessionReportMessage: carries the histogram/hiddenFrames/networkHitch
   assert.deepEqual(msg.frameHistogram, [1, 2, 3, 4, 5, 6]);
   assert.equal(msg.hiddenFrames, 7);
   assert.equal(msg.networkHitchCount, 3);
+});
+
+test('buildSessionReportMessage: input-usage fields omitted when absent, carried when provided', () => {
+  const omitted = buildSessionReportMessage({ firstInputMs: null, inputTicks: 0, frameMedianMs: 16, frameP95Ms: 20 });
+  assert.equal('keyboardInputTicks' in omitted, false);
+  assert.equal('touchInputTicks' in omitted, false);
+  assert.equal('gamepadInputTicks' in omitted, false);
+
+  const carried = buildSessionReportMessage({
+    firstInputMs: 100,
+    inputTicks: 10,
+    frameMedianMs: 16,
+    frameP95Ms: 20,
+    keyboardInputTicks: 8,
+    touchInputTicks: 0,
+    gamepadInputTicks: 2,
+  });
+  assert.equal(carried.keyboardInputTicks, 8);
+  assert.equal(carried.touchInputTicks, 0);
+  assert.equal(carried.gamepadInputTicks, 2);
 });

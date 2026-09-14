@@ -77,6 +77,14 @@ export interface StoredSessionEndRecord {
   /** See SessionReportMessage.hiddenFrames / networkHitchCount. */
   hiddenFrames: number | null;
   networkHitchCount: number | null;
+  /** Observed input-device usage (2026-09-14, see docs/MEASUREMENT.md
+   *  "Capability vs usage"): ticks actually driven by each real source,
+   *  as counted client-side by InputUsageTracker. Null when the client
+   *  build didn't report it -- never a fabricated zero, and never to be
+   *  confused with `touchActive` above, which is a capability check. */
+  keyboardInputTicks: number | null;
+  touchInputTicks: number | null;
+  gamepadInputTicks: number | null;
 }
 
 export type StatsRecord = StoredMatchEndRecord | StoredSessionEndRecord;
@@ -179,6 +187,9 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       frameHistogram: report?.frameHistogram ?? null,
       hiddenFrames: report?.hiddenFrames ?? null,
       networkHitchCount: report?.networkHitchCount ?? null,
+      keyboardInputTicks: report?.keyboardInputTicks ?? null,
+      touchInputTicks: report?.touchInputTicks ?? null,
+      gamepadInputTicks: report?.gamepadInputTicks ?? null,
     };
     appendStatsLine(logPath, record);
   }

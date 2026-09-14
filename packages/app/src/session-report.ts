@@ -116,6 +116,41 @@ export class InputActivityTracker {
   }
 }
 
+/** Counts local input ticks by which real source produced them --
+ *  keyboard, touch, or gamepad -- observed *usage*, not device
+ *  capability (see packages/input/src/index.ts InputSourceKind and
+ *  docs/MEASUREMENT.md). One counter per source, allocation-free per
+ *  tick, same spirit as InputActivityTracker above. Ticks with no
+ *  input at all (hadInput === false in the caller) are not counted
+ *  under any source -- this measures which control scheme was driving,
+ *  not raw poll count. */
+export class InputUsageTracker {
+  private keyboardTicks = 0;
+  private touchTicks = 0;
+  private gamepadTicks = 0;
+
+  /** Call once per local simulation tick with whether this tick's local
+   *  input frame was non-neutral and which source produced it. */
+  recordTick(hadInput: boolean, source: 'keyboard' | 'touch' | 'gamepad'): void {
+    if (!hadInput) return;
+    if (source === 'touch') this.touchTicks += 1;
+    else if (source === 'gamepad') this.gamepadTicks += 1;
+    else this.keyboardTicks += 1;
+  }
+
+  getKeyboardTicks(): number {
+    return this.keyboardTicks;
+  }
+
+  getTouchTicks(): number {
+    return this.touchTicks;
+  }
+
+  getGamepadTicks(): number {
+    return this.gamepadTicks;
+  }
+}
+
 const MAX_FRAME_SAMPLES = 300; // ~5s at 60fps -- plenty for a median/p95, capped so this never grows unbounded across a long match.
 
 /** Number of buckets in the frame-time histogram: one per boundary in
@@ -252,6 +287,13 @@ export function buildSessionReportMessage(input: {
   hiddenFrames?: number;
   /** See SessionReportMessage.networkHitchCount. Same convention. */
   networkHitchCount?: number;
+  /** See SessionReportMessage.keyboardInputTicks. Same "absent means not
+   *  tracked" convention. */
+  keyboardInputTicks?: number;
+  /** See SessionReportMessage.touchInputTicks. Same convention. */
+  touchInputTicks?: number;
+  /** See SessionReportMessage.gamepadInputTicks. Same convention. */
+  gamepadInputTicks?: number;
 }): SessionReportMessage {
   const msg: SessionReportMessage = {
     t: 'sessionReport',
@@ -265,5 +307,8 @@ export function buildSessionReportMessage(input: {
   if (input.frameHistogram !== undefined) msg.frameHistogram = input.frameHistogram;
   if (input.hiddenFrames !== undefined) msg.hiddenFrames = input.hiddenFrames;
   if (input.networkHitchCount !== undefined) msg.networkHitchCount = input.networkHitchCount;
+  if (input.keyboardInputTicks !== undefined) msg.keyboardInputTicks = input.keyboardInputTicks;
+  if (input.touchInputTicks !== undefined) msg.touchInputTicks = input.touchInputTicks;
+  if (input.gamepadInputTicks !== undefined) msg.gamepadInputTicks = input.gamepadInputTicks;
   return msg;
 }

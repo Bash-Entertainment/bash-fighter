@@ -18,7 +18,7 @@ import {
 import { PLACEHOLDER_CHARACTER, createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID } from '@bash-fighter/content';
 import type { CharacterData } from '@bash-fighter/sim';
 import { InputManager, isTouchCapable } from '@bash-fighter/input';
-import { buildClientProfile, buildSessionReportMessage, InputActivityTracker, FrameTimeTracker, NetworkHitchTracker } from './session-report.ts';
+import { buildClientProfile, buildSessionReportMessage, InputActivityTracker, InputUsageTracker, FrameTimeTracker, NetworkHitchTracker } from './session-report.ts';
 import { readBuildSha } from './ui/feedback-panel.ts';
 import {
   Renderer,
@@ -258,6 +258,9 @@ export class NetMatch {
   // resumed/second match starts a fresh reading rather than carrying over
   // the previous one.
   private inputActivity = new InputActivityTracker();
+  // Observed input-device usage for this match, keyed by real source --
+  // see InputUsageTracker and docs/MEASUREMENT.md "Capability vs usage".
+  private inputUsage = new InputUsageTracker();
   private frameTimeTracker = new FrameTimeTracker();
   // See NetworkHitchTracker's doc comment (session-report.ts) -- counts
   // gaps between received server snapshots big enough to be a network
@@ -339,6 +342,9 @@ export class NetMatch {
       frameHistogram: this.frameTimeTracker.getHistogram(),
       hiddenFrames: this.frameTimeTracker.getHiddenFrames(),
       networkHitchCount: this.networkHitchTracker.getCount(),
+      keyboardInputTicks: this.inputUsage.getKeyboardTicks(),
+      touchInputTicks: this.inputUsage.getTouchTicks(),
+      gamepadInputTicks: this.inputUsage.getGamepadTicks(),
     });
     ws.send(JSON.stringify(report));
   }
@@ -644,6 +650,7 @@ export class NetMatch {
     // still learns something useful even if the tab is closed abruptly
     // and no final report gets out.
     this.inputActivity = new InputActivityTracker();
+    this.inputUsage = new InputUsageTracker();
     this.frameTimeTracker = new FrameTimeTracker();
     this.networkHitchTracker = new NetworkHitchTracker();
     this.contextLostCount = 0;
@@ -697,6 +704,10 @@ export class NetMatch {
       // adds a poll or touches the sim's inputs array.
       const hadInput = local.buttons !== 0 || local.stickX !== 0 || local.stickY !== 0;
       this.inputActivity.recordTick(hadInput, performance.now() - this.matchStartAtMs);
+      // Same tick's real source (see InputManager.lastSourceForSlot) --
+      // observed usage, not capability. this.mySlot indexes the same
+      // InputManager slot local was just polled from above.
+      this.inputUsage.recordTick(hadInput, this.input.lastSourceForSlot(0));
       const ws = this.ws;
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(

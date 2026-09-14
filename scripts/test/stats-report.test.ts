@@ -126,6 +126,43 @@ test('buildReport: hiddenFrames and networkHitches are aggregated and counted se
   assert.equal(nh.total, 3);
 });
 
+test('buildReport: input device is attributed by observed USAGE (keyboardInputTicks/touchInputTicks/gamepadInputTicks), not by touchActive capability', () => {
+  const storeLines = [
+    // A touch-capable laptop played with a keyboard: touchActive true,
+    // but all its ticks are keyboard ticks. This is exactly the
+    // "(played on PC)" mismatch that motivated the usage counters --
+    // see docs/MEASUREMENT.md and the wiki page on 2026-09-14 real
+    // player measurements.
+    sessionLine({ matchId: 'm8', touchActive: true, keyboardInputTicks: 500, touchInputTicks: 0, gamepadInputTicks: 0 }),
+    sessionLine({ matchId: 'm8', touchActive: true, keyboardInputTicks: 0, touchInputTicks: 300, gamepadInputTicks: 0 }),
+    sessionLine({ matchId: 'm8', touchActive: false, keyboardInputTicks: 0, touchInputTicks: 0, gamepadInputTicks: 120 }),
+    sessionLine({ matchId: 'm8' }), // legacy record, no usage counters known
+  ];
+  const report = buildReport({ storeLines, extraLines: [], feedbackCount: 0, since: null });
+  const iu = report.humanSessions.all.inputUsage;
+  assert.equal(iu.keyboard, 1);
+  assert.equal(iu.touch, 1);
+  assert.equal(iu.gamepad, 1);
+  assert.equal(iu.knownDenominator, 3);
+
+  // The capability signal must still be there, computed independently
+  // from touchActive, and must disagree with usage on the first session
+  // above -- that disagreement is the whole point.
+  const touch = report.humanSessions.all.touch;
+  assert.equal(touch.touch, 2);
+  assert.equal(touch.keyboard, 2); // includes the legacy record, whose touchActive defaults to false in sessionLine()
+});
+
+test('buildReport: a session that used more than one input source in a match is counted in usageMixed as well as its majority source', () => {
+  const storeLines = [
+    sessionLine({ matchId: 'm9', keyboardInputTicks: 400, touchInputTicks: 100, gamepadInputTicks: 0 }),
+  ];
+  const report = buildReport({ storeLines, extraLines: [], feedbackCount: 0, since: null });
+  const iu = report.humanSessions.all.inputUsage;
+  assert.equal(iu.keyboard, 1); // keyboard had more ticks, so it's the majority source
+  assert.equal(iu.mixed, 1);
+});
+
 test('buildReport: device-capability bucket distributions count known values per bucket, ignore unknown', () => {
   const storeLines = [
     sessionLine({ matchId: 'm8', hwConcurrencyBucket: 8, deviceMemoryBucket: 4, dprBucket: 2 }),

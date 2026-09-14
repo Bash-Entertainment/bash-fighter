@@ -446,6 +446,60 @@ short `sessionDurationSec` and `endReason: "disconnected"` is case 2 --
 they played and left anyway, which is the only one of the four that is a
 fun/pacing problem rather than an onboarding/technical one.
 
+### Capability vs usage: `touchActive` is not "played on touch" (2026-09-14)
+
+**Read this before quoting any touch/keyboard percentage from this
+system.** `touchActive` (in `hello.profile`) is built from
+`isTouchCapable()` in `packages/input/src/touch.ts`, which is
+`navigator.maxTouchPoints > 0` -- a static fact about the *hardware*,
+checked once at page load. It says nothing about which controls a
+player actually put their hands on. Any touchscreen Windows laptop, any
+touch-capable all-in-one desktop, and Chrome DevTools' device-emulation
+mode all report `touchActive: true` even when driven entirely by a
+keyboard. This is exactly what happened with our one piece of genuine
+outside feedback (see [[First Real Player Feedback 2026-09-14]]): the
+player wrote "(played on PC)" and a 1600x900 viewport, and their session
+was recorded as `touchActive: true` -- and an earlier internal report
+used that kind of record to conclude "phones are our primary platform"
+(see the correction on [[Real Player Measurements 2026-09-14: Phones Are
+the Primary Platform]]).
+
+To fix that we added **observed usage**, counted client-side per local
+simulation tick by which real `InputManager` source
+(`packages/input/src/index.ts`, `InputSourceKind`) actually produced
+that tick's non-neutral `InputFrame` -- touch only counts while
+`TouchSource.isActive()` is true that tick, gamepad only while a
+connected pad actually produced the frame, keyboard is the fallback.
+Counted by `InputUsageTracker` in `packages/app/src/session-report.ts`
+(same allocation-free-per-tick style as the existing
+`InputActivityTracker`), reported as three new optional `sessionReport`
+fields -- `keyboardInputTicks`, `touchInputTicks`, `gamepadInputTicks` --
+following the exact "absent means not tracked, never a fabricated zero"
+convention as `contextLostCount`/`renderStalled`/`frameHistogram`.
+Validated and clamped server-side to `[0, 10_000_000]` in
+`packages/net/src/protocol.ts`'s `sanitiseSessionReport`, carried
+through `server/src/session-telemetry.ts` and `server/src/stats-store.ts`
+exactly like every other optional session field.
+
+**`touchActive` is not being removed.** Device capability is still a
+useful, honest signal on its own (e.g. "how many of our sessions were on
+touch-capable hardware at all") -- it just must never again be reported
+as "what device they played on". `scripts/stats-report.mjs` now prints
+the two as two clearly separate, clearly labelled lines: input device
+*by observed usage* is the headline, and input device *by capability
+only* is kept immediately below it with an explicit "NOT usage" warning
+in the label itself, specifically so nobody can quote one number while
+meaning the other again.
+
+A session with zero ticks on all three sources (spectator, or a report
+sent before the seat's local player ever polled) is not counted toward
+any of the three usage buckets, but still isn't a fabricated zero at the
+protocol level -- it is absent unless the client build sent it. A
+session that used more than one source in a match (rebound to keyboard
+mid-match, say) is attributed to whichever source produced the most
+ticks, and separately counted in a `mixed` total so that ambiguity is
+visible rather than hidden inside a single winner-take-all number.
+
 ### How to read it
 
 `scripts/session-metrics.mjs` parses `[sessionEnd]` lines from a log file
@@ -657,7 +711,7 @@ deploy. Two record shapes, one per line, distinguished by `type`:
 
 ```json
 {"type":"matchEnd","ts":"2026-09-14T07:00:00.000Z","matchId":"m1","arenaId":"battle-royale-20","winCondition":"battleRoyale","endReason":"resolved","durationSec":92.3,"totalSeats":3,"humanSeats":1,"totalKOs":2,"maxKoCount":1}
-{"type":"sessionEnd","ts":"2026-09-14T07:00:05.000Z","matchId":"m1","winCondition":"battleRoyale","eliminated":false,"endReason":"disconnected","sessionDurationSec":21.4,"touchActive":false,"firstInputMs":620,"inputTicks":340,"frameMedianMs":15.9,"frameP95Ms":19.4,"hwConcurrencyBucket":4,"deviceMemoryBucket":2,"dprBucket":2,"frameHistogram":[300,40,5,2,0,0],"hiddenFrames":0,"networkHitchCount":0}
+{"type":"sessionEnd","ts":"2026-09-14T07:00:05.000Z","matchId":"m1","winCondition":"battleRoyale","eliminated":false,"endReason":"disconnected","sessionDurationSec":21.4,"touchActive":false,"firstInputMs":620,"inputTicks":340,"frameMedianMs":15.9,"frameP95Ms":19.4,"hwConcurrencyBucket":4,"deviceMemoryBucket":2,"dprBucket":2,"frameHistogram":[300,40,5,2,0,0],"hiddenFrames":0,"networkHitchCount":0,"keyboardInputTicks":340,"touchInputTicks":0,"gamepadInputTicks":0}
 ```
 
 (the last six fields are the 2026-09-14 device-capability/frame-histogram/
@@ -701,7 +755,10 @@ Timed Brawl / Stocks) with average duration each; total human seat
 sessions; how many survived past a 15-second "opening seconds" threshold
 (chosen, not measured -- documented in the script); how many pressed a
 control at all; eliminated vs. left-while-alive; session duration
-distribution (min/median/p95/max); touch vs. keyboard share; client
+distribution (min/median/p95/max); input device *by observed usage*
+(headline, since 2026-09-14 -- see "Capability vs usage" above) with
+input device *by capability only* printed right below it, clearly
+labelled as not the same thing; client
 frame-time distribution; feedback submission count (count only); and,
 broken out three ways (all / not marked QA / marked QA, plus an
 "unknown" count for pre-existing records), the self-declared `?qa=1`

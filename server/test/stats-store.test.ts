@@ -298,6 +298,9 @@ test('recordSessionEnd: carries device-capability buckets and frame/network tele
         frameHistogram: [0, 2, 5, 30, 3, 0],
         hiddenFrames: 6,
         networkHitchCount: 1,
+        keyboardInputTicks: 0,
+        touchInputTicks: 40,
+        gamepadInputTicks: 0,
       },
     });
     recorder.recordSessionEnd(conn, match);
@@ -310,6 +313,9 @@ test('recordSessionEnd: carries device-capability buckets and frame/network tele
     assert.deepEqual(record.frameHistogram, [0, 2, 5, 30, 3, 0]);
     assert.equal(record.hiddenFrames, 6);
     assert.equal(record.networkHitchCount, 1);
+    assert.equal(record.keyboardInputTicks, 0);
+    assert.equal(record.touchInputTicks, 40);
+    assert.equal(record.gamepadInputTicks, 0);
   } finally {
     cleanup();
   }
@@ -334,6 +340,9 @@ test('recordSessionEnd: absent device-capability/frame-histogram telemetry logs 
     assert.equal(record.frameHistogram, null);
     assert.equal(record.hiddenFrames, null);
     assert.equal(record.networkHitchCount, null);
+    assert.equal(record.keyboardInputTicks, null);
+    assert.equal(record.touchInputTicks, null);
+    assert.equal(record.gamepadInputTicks, null);
   } finally {
     cleanup();
   }

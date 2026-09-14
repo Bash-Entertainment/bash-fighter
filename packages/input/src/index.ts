@@ -32,6 +32,13 @@ export interface PlayerSlotConfig {
   gamepadIndex: number | null;
 }
 
+/** Which real input source produced a given slot's most recent
+ *  InputFrame -- observed *usage*, not device capability. Used only for
+ *  the input-device usage counters in packages/app/src/session-report.ts;
+ *  has no effect on the sim. */
+export type InputSourceKind = 'touch' | 'gamepad' | 'keyboard';
+
+
 function keyboardFrame(kb: KeyboardSource, binding: KeyBinding): InputFrame {
   let buttons = 0;
   for (const field of BUTTON_FIELDS) {
@@ -54,6 +61,11 @@ export class InputManager {
   // in principle any local slot could get a touch source, though in
   // practice only slot 0 (the local human on a touch device) ever will.
   private readonly touch = new Map<number, TouchSource>();
+  // Last real source that produced each slot's InputFrame, keyed by
+  // slot index -- see InputSourceKind. Updated every pollSlot() call,
+  // read (not consumed) by the caller after poll(); a plain array, no
+  // allocation per tick.
+  private readonly lastSource: InputSourceKind[] = [];
   // Local slots are an array, not a fixed pair: this milestone plays 2
   // local humans, but nothing here assumes exactly 2 — a future local
   // multi-controller session (or a networked FFA where only your own
@@ -113,12 +125,25 @@ export class InputManager {
     // straight back to gamepad/keyboard with no mode switch to manage.
     const touchSource = this.touch.get(slot);
     if (touchSource && touchSource.isActive()) {
+      this.lastSource[slot] = 'touch';
       return touchSource.poll();
     }
     if (cfg.gamepadIndex !== null) {
       const pad = pollGamepad(cfg.gamepadIndex);
-      if (pad) return pad;
+      if (pad) {
+        this.lastSource[slot] = 'gamepad';
+        return pad;
+      }
     }
+    this.lastSource[slot] = 'keyboard';
     return keyboardFrame(this.keyboard, cfg.binding);
+  }
+
+  /** Which source produced the given slot's InputFrame on the most
+   *  recent poll()/pollSlot() call -- 'keyboard' before any poll has
+   *  happened (the fallback source keyboardFrame() always resolves to
+   *  when nothing else claims the slot). See InputSourceKind. */
+  lastSourceForSlot(slot: number): InputSourceKind {
+    return this.lastSource[slot] ?? 'keyboard';
   }
 }

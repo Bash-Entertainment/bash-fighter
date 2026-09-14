@@ -217,6 +217,37 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
     const touchCount = group.filter((s) => s.touchActive === true).length;
     const keyboardCount = group.filter((s) => s.touchActive === false).length;
     const touchKnown = touchCount + keyboardCount;
+
+    // Observed input-device *usage* (2026-09-14, see docs/MEASUREMENT.md
+    // "Capability vs usage") -- attribute each session to whichever
+    // source actually produced the most ticks this match, from the
+    // client-counted keyboardInputTicks/touchInputTicks/gamepadInputTicks.
+    // Deliberately NOT the same thing as `touch` above (built from
+    // touchActive, a static capability check): a touch-capable laptop
+    // played with a keyboard shows up as "keyboard" here and "touch"
+    // there, on purpose -- that mismatch is exactly the bug this exists
+    // to catch. A session only counts toward a denominator once it has
+    // at least one of the three fields present.
+    let usageKeyboard = 0;
+    let usageTouch = 0;
+    let usageGamepad = 0;
+    let usageKnown = 0;
+    let usageMixed = 0; // more than one source used non-trivially this match
+    for (const s of group) {
+      const kb = typeof s.keyboardInputTicks === 'number' ? s.keyboardInputTicks : null;
+      const tc = typeof s.touchInputTicks === 'number' ? s.touchInputTicks : null;
+      const gp = typeof s.gamepadInputTicks === 'number' ? s.gamepadInputTicks : null;
+      if (kb === null && tc === null && gp === null) continue;
+      usageKnown += 1;
+      const counts = { keyboard: kb ?? 0, touch: tc ?? 0, gamepad: gp ?? 0 };
+      const usedSources = Object.values(counts).filter((v) => v > 0).length;
+      if (usedSources > 1) usageMixed += 1;
+      const winner = Object.entries(counts).sort((a, b2) => b2[1] - a[1])[0][0];
+      if (counts[winner] === 0) continue; // tracked but zero ticks either way (e.g. spectator edge case)
+      if (winner === 'keyboard') usageKeyboard += 1;
+      else if (winner === 'touch') usageTouch += 1;
+      else usageGamepad += 1;
+    }
     const frameMedians = group.map((s) => s.frameMedianMs).filter((v) => typeof v === 'number' && v > 0).sort((a, b) => a - b);
     const frameP95s = group.map((s) => s.frameP95Ms).filter((v) => typeof v === 'number' && v > 0).sort((a, b) => a - b);
     // Device-capability tag distributions (2026-09-14, see
@@ -284,6 +315,13 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
         n: durations.length,
       },
       touch: { touch: touchCount, keyboard: keyboardCount, knownDenominator: touchKnown },
+      inputUsage: {
+        keyboard: usageKeyboard,
+        touch: usageTouch,
+        gamepad: usageGamepad,
+        mixed: usageMixed,
+        knownDenominator: usageKnown,
+      },
       frameTimeMs: {
         medianOfMedians: percentile(frameMedians, 50),
         p95OfP95s: percentile(frameP95s, 95),
@@ -405,7 +443,13 @@ function printReport(report) {
     w(`  pressed a control at all: ${hs.pressedControl}/${hs.pressedControlKnownDenominator || hs.total} known (${pct(hs.pressedControl, hs.pressedControlKnownDenominator || hs.total)})`);
     w(`  eliminated: ${hs.eliminated} (${pct(hs.eliminated, hs.total)})  left while still alive: ${hs.leftWhileAlive} (${pct(hs.leftWhileAlive, hs.total)})`);
     w(`  session duration (s): min ${fmt(hs.durationSec.min)}  median ${fmt(hs.durationSec.median)}  p95 ${fmt(hs.durationSec.p95)}  max ${fmt(hs.durationSec.max)}  (n=${hs.durationSec.n})`);
-    w(`  input device: touch ${hs.touch.touch}, keyboard ${hs.touch.keyboard} (of ${hs.touch.knownDenominator} known; ${pct(hs.touch.touch, hs.touch.knownDenominator)} touch)`);
+    const iu = hs.inputUsage;
+    if (iu.knownDenominator > 0) {
+      w(`  input device BY OBSERVED USAGE (headline; of ${iu.knownDenominator} known): keyboard ${iu.keyboard} (${pct(iu.keyboard, iu.knownDenominator)}), touch ${iu.touch} (${pct(iu.touch, iu.knownDenominator)}), gamepad ${iu.gamepad} (${pct(iu.gamepad, iu.knownDenominator)})  [${iu.mixed} session(s) used more than one source]`);
+    } else {
+      w('  input device by observed usage: no sessions with usage counters yet (older client build)');
+    }
+    w(`  input device by CAPABILITY ONLY (navigator.maxTouchPoints, NOT usage -- do not read as "played on"): touch-capable ${hs.touch.touch}, not touch-capable ${hs.touch.keyboard} (of ${hs.touch.knownDenominator} known; ${pct(hs.touch.touch, hs.touch.knownDenominator)} touch-capable)`);
     w(`  client frame time (ms): median-of-medians ${fmt(hs.frameTimeMs.medianOfMedians)}  p95-of-p95s ${fmt(hs.frameTimeMs.p95OfP95s)}  (n=${hs.frameTimeMs.n})`);
     const fh = hs.frameHistogram;
     if (fh.sessions > 0) {

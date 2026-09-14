@@ -271,6 +271,9 @@ test('[sessionEnd]: device-capability buckets and frame/network telemetry (2026-
       frameHistogram: [0, 1, 2, 10, 3, 1],
       hiddenFrames: 4,
       networkHitchCount: 2,
+      keyboardInputTicks: 5,
+      touchInputTicks: 0,
+      gamepadInputTicks: 0,
     }),
   ) as SessionReportMessage;
   const conn = fakeConn({ slot: 0, profile: hello.profile ?? null, lastReport: report });
@@ -282,6 +285,9 @@ test('[sessionEnd]: device-capability buckets and frame/network telemetry (2026-
   assert.deepEqual(record.frameHistogram, [0, 1, 2, 10, 3, 1]);
   assert.equal(record.hiddenFrames, 4);
   assert.equal(record.networkHitchCount, 2);
+  assert.equal(record.keyboardInputTicks, 5);
+  assert.equal(record.touchInputTicks, 0);
+  assert.equal(record.gamepadInputTicks, 0);
 });
 
 test('[sessionEnd]: a missing profile/report logs the new fields as null too, not throw', () => {
@@ -295,4 +301,7 @@ test('[sessionEnd]: a missing profile/report logs the new fields as null too, no
   assert.equal(record.frameHistogram, null);
   assert.equal(record.hiddenFrames, null);
   assert.equal(record.networkHitchCount, null);
+  assert.equal(record.keyboardInputTicks, null);
+  assert.equal(record.touchInputTicks, null);
+  assert.equal(record.gamepadInputTicks, null);
 });

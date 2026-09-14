@@ -389,6 +389,30 @@ describe('client telemetry: device-capability buckets and frame/network histogra
     assert.equal(msg.networkHitchCount, 0); // clamped to the min, same convention as inputTicks
   });
 
+  test('sessionReport: accepts well-formed keyboardInputTicks/touchInputTicks/gamepadInputTicks', () => {
+    const msg = parseClientControl(
+      sessionReportWith({ keyboardInputTicks: 100, touchInputTicks: 0, gamepadInputTicks: 5 }),
+    ) as SessionReportMessage;
+    assert.equal(msg.keyboardInputTicks, 100);
+    assert.equal(msg.touchInputTicks, 0);
+    assert.equal(msg.gamepadInputTicks, 5);
+  });
+
+  test('sessionReport: clamps an absurd/negative input-usage tick count into range rather than trusting the client', () => {
+    const msg = parseClientControl(
+      sessionReportWith({ keyboardInputTicks: -5, touchInputTicks: 1e12 }),
+    ) as SessionReportMessage;
+    assert.equal(msg.keyboardInputTicks, 0);
+    assert.equal(msg.touchInputTicks, 10_000_000);
+  });
+
+  test('sessionReport: an old client sending none of the input-usage fields leaves them absent, not zero', () => {
+    const msg = parseClientControl(sessionReportWith({})) as SessionReportMessage;
+    assert.equal('keyboardInputTicks' in msg, false);
+    assert.equal('touchInputTicks' in msg, false);
+    assert.equal('gamepadInputTicks' in msg, false);
+  });
+
   test('sessionReport: an old client sending none of the new fields still parses exactly as before', () => {
     const msg = parseClientControl(
       JSON.stringify({ t: 'sessionReport', firstInputMs: null, inputTicks: 0, frameMedianMs: 16, frameP95Ms: 20 }),
