@@ -244,7 +244,9 @@ function printReport(report) {
   w('matches played');
   w(`  total: ${report.matches.total} (store: ${report.matches.fromStore}, extra-log/historical: ${report.matches.fromExtraLog})`);
   for (const mode of Object.values(report.matches.byMode)) {
-    w(`  ${mode.label.padEnd(24)} count ${String(mode.count).padEnd(6)} avg duration ${fmt(mode.avgDurationSec)}s`);
+    // A mode with no matches has no average, and "n/as" is not a unit.
+    const avg = mode.count > 0 ? `${fmt(mode.avgDurationSec)}s` : 'no matches yet';
+    w(`  ${mode.label.padEnd(24)} count ${String(mode.count).padEnd(6)} avg duration ${avg}`);
   }
   if (report.matches.unknownModeCount > 0) w(`  (${report.matches.unknownModeCount} match(es) with an unrecognised mode label)`);
   w();
