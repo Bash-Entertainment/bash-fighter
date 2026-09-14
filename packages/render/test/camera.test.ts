@@ -413,3 +413,37 @@ test('a mid-ease camera still contains every fighter the raw frame contains', ()
     }
   }
 });
+
+// Regression (2026-09-14): containFighters's scale floor must match
+// computeRawCamera's own floor -- min(cfg.minScale, arenaFitScale) -- not
+// bare cfg.minScale. On a wide arena where the whole-arena fit needs a
+// scale below cfg.minScale, computeRawCamera correctly zooms out past
+// minScale for exactly one reason: showing the whole arena. Before this
+// fix, every damped frame after the first re-clamped scale back up to
+// cfg.minScale, discarding that wider fit and pinning the composition
+// into a tight band near the bottom edge in production. See wiki "Camera
+// Framing: Ground Anchor and Jump-Space Bias 2026-09-14".
+test('damped steady-state scale matches raw scale on a wide arena that needs to zoom out past minScale', () => {
+  const arena: ArenaBounds = { minX: -480, maxX: 480, minY: -100, maxY: 540 };
+  const c = cfg({
+    viewWidth: 1080,
+    viewHeight: 720,
+    minScale: 1.6,
+    maxScale: 5.5,
+    arena,
+    clampBounds: { minX: -620, maxX: 620, minY: -260, maxY: 520 },
+  });
+  const positions = Array.from({ length: 20 }, (_, i) => ({
+    x: -373 + (i / 19) * 761,
+    y: 0,
+  }));
+  const raw = computeRawCamera(positions, c);
+  let damped = raw;
+  for (let i = 0; i < 120; i++) {
+    damped = computeCamera(positions, c, 1000 / 60);
+  }
+  assert.ok(
+    Math.abs(damped.scale - raw.scale) < 0.01,
+    `damped scale ${damped.scale} should settle to raw scale ${raw.scale}, not re-clamp to cfg.minScale ${c.minScale}`,
+  );
+});

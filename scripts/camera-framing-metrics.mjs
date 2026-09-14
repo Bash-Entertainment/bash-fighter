@@ -8,7 +8,7 @@
 // Run: node --experimental-strip-types scripts/camera-framing-metrics.mjs
 import { ALL_ARENAS } from '../packages/content/src/arenas.ts';
 import { arenaDataToStageBounds } from '../packages/render/src/arena-adapter.ts';
-import { computeRawCamera, worldToScreen } from '../packages/render/src/camera.ts';
+import { computeRawCamera, computeCamera, resetCameraSmoothing, worldToScreen } from '../packages/render/src/camera.ts';
 import { computePopulationAwareFramingFloor } from '../packages/render/src/framing.ts';
 
 // Approximate fighter half-height in world units, matching
@@ -72,7 +72,40 @@ function measure(stage, positions, viewWidth, viewHeight) {
   const groundScreenY = worldToScreen(0, ground.y, cam, viewWidth, viewHeight).y;
   const belowFloorFrac = Math.max(0, Math.min(1, (viewHeight - groundScreenY) / viewHeight));
   const fighterPx = FIGHTER_WORLD_HEIGHT * cam.scale;
-  return { groundScreenY, belowFloorFrac, fighterPx, scale: cam.scale };
+
+  // DAMPED-PATH CHECK (2026-09-14): the raw measurement above is exactly
+  // what shipped in production for months while a real bug lived only in
+  // the damped path (computeCamera's containFighters), invisible to
+  // computeRawCamera and therefore invisible to this script -- see wiki
+  // "Camera Framing: Ground Anchor and Jump-Space Bias 2026-09-14",
+  // 2026-09-14 follow-up. containFighters re-clamped scale up to
+  // cfg.minScale every damped frame after the first, discarding
+  // computeRawCamera's own wider arenaFitScale-based floor on arenas
+  // where that floor legitimately sits below minScale. Running a few
+  // seconds of computeCamera (the real per-frame entry point, damping
+  // included) and comparing its steady-state scale/ground-line to the
+  // raw numbers above is what would have caught it. Positions are held
+  // fixed here (no bots moving) specifically to isolate the damping
+  // formula itself from sim noise.
+  resetCameraSmoothing();
+  let damped = null;
+  for (let i = 0; i < 180; i++) {
+    damped = computeCamera(positions, cfg, 1000 / 60);
+  }
+  const dampedGroundScreenY = worldToScreen(0, ground.y, damped, viewWidth, viewHeight).y;
+  const dampedBelowFloorFrac = Math.max(0, Math.min(1, (viewHeight - dampedGroundScreenY) / viewHeight));
+  const dampedScale = damped.scale;
+  const dampedMismatch = Math.abs(dampedScale - cam.scale) > 0.01;
+
+  return {
+    groundScreenY,
+    belowFloorFrac,
+    fighterPx,
+    scale: cam.scale,
+    dampedScale,
+    dampedBelowFloorFrac,
+    dampedMismatch,
+  };
 }
 
 const viewports = [
@@ -94,9 +127,19 @@ for (const entry of ALL_ARENAS) {
 }
 
 for (const r of rows) {
+  const flag = r.dampedMismatch ? '  <-- DAMPED PATH DIVERGES FROM RAW' : '';
   console.log(
-    `${r.stage.padEnd(18)} ${r.viewport.padEnd(10)} ${r.pack.padEnd(14)} belowFloor=${(r.belowFloorFrac * 100).toFixed(1)}%  fighterPx=${r.fighterPx.toFixed(1)}  scale=${r.scale.toFixed(3)}`,
+    `${r.stage.padEnd(18)} ${r.viewport.padEnd(10)} ${r.pack.padEnd(14)} belowFloor=${(r.belowFloorFrac * 100).toFixed(1)}%  fighterPx=${r.fighterPx.toFixed(1)}  scale=${r.scale.toFixed(3)}  dampedScale=${r.dampedScale.toFixed(3)}  dampedBelowFloor=${(r.dampedBelowFloorFrac * 100).toFixed(1)}%${flag}`,
   );
+}
+
+const anyMismatch = rows.some((r) => r.dampedMismatch);
+if (anyMismatch) {
+  console.log('\nFAIL: damped steady-state scale diverges from raw on at least one row above -- the deployed client (which always goes through the damped path) will not match this script'
+    + " raw numbers. Do not trust the raw belowFloor/fighterPx columns as production truth until this is fixed.");
+  process.exitCode = 1;
+} else {
+  console.log('\nOK: damped steady-state scale matches raw on every row -- raw numbers above are also what a settled live client shows.');
 }
 
 // --- debug: which axis binds the scale, and floor vs fighter span ---

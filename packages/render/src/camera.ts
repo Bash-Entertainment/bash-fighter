@@ -200,8 +200,26 @@ function containFighters(
   const centerY = eased.centerY;
   const needHalfW = Math.max(centerX - needMinX, needMaxX - centerX);
   const needHalfH = Math.max(centerY - needMinY, needMaxY - centerY);
+  // The floor here must match computeRawCamera's own floor, not a bare
+  // cfg.minScale. computeRawCamera legitimately zooms out past minScale
+  // (down to arenaFitScale) on any arena wider/taller than minScale would
+  // show, so the whole arena reads as "a fight in an arena" rather than a
+  // tight crop -- see computeRawCamera's `floor` line. Using cfg.minScale
+  // here instead re-clamped every damped frame after the first back up to
+  // minScale, discarding that wider fit: on battle-royale-20 (arenaFitScale
+  // ~0.87 at 1080x720, below minScale 1.6) the raw camera correctly framed
+  // the whole floor at scale 1.125, but containFighters forced every eased
+  // frame back to scale 1.6 -- a tighter zoom that no longer matched the
+  // vertical span the ground-anchor bias was computed against, pinning the
+  // fight into a band near the bottom edge. (Found by playing production
+  // and comparing against scripts/camera-framing-metrics.mjs -- see wiki
+  // "Camera Framing: Ground Anchor and Jump-Space Bias 2026-09-14".)
+  const arenaSpanX = Math.max(1, cfg.arena.maxX - cfg.arena.minX);
+  const arenaSpanY = Math.max(1, cfg.arena.maxY - cfg.arena.minY);
+  const arenaFitScale = Math.min(cfg.viewWidth / arenaSpanX, cfg.viewHeight / arenaSpanY);
+  const scaleFloor = Math.min(cfg.minScale, arenaFitScale);
   const scale = Math.max(
-    cfg.minScale,
+    scaleFloor,
     Math.min(
       eased.scale,
       needHalfW > 0 ? halfW / needHalfW : eased.scale,
