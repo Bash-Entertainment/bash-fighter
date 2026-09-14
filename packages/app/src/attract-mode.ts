@@ -44,6 +44,16 @@ export type ReducedMotionSource = () => boolean;
 export class AttractMode {
   private match: Match | null = null;
   private running = false;
+  /** Bumped by every stop() and every spawn. `spawnMatch` awaits an async
+   * renderer init, and the player can press Play during that await: the
+   * old code set `running = false` and found `this.match` still null, so
+   * the demo it was cancelling went on to appendChild its canvas and run
+   * its render loop forever. That leaked a live WebGL context and a rAF
+   * loop into every real match -- and a browser only grants a handful of
+   * contexts, so the *match's* renderer could then fail to get one and
+   * the player got a black screen. Observed on production. Any await in
+   * here must re-check this token before touching the DOM. */
+  private generation = 0;
   private nextArenaAvoid: string | null = null;
   private readonly audio = new AudioManager();
 
@@ -99,6 +109,7 @@ export class AttractMode {
   private async spawnMatch(): Promise<void> {
     if (!this.running) return;
     this.destroyMatch();
+    const generation = ++this.generation;
     const seed = randomSeed();
     const arenaId = this.pickArenaId(seed);
     const characters = this.buildCharacters();
@@ -128,6 +139,17 @@ export class AttractMode {
     );
     this.match = match;
     await match.init(this.parent);
+    // The player may have pressed Play while that init was in flight.
+    // Tear this demo down completely rather than letting it draw: its
+    // canvas is already in the DOM by now, and its context is exactly
+    // what the real match needs.
+    if (!this.running || generation !== this.generation) {
+      match.stop();
+      match.renderer.destroy();
+      if (this.match === match) this.match = null;
+      this.parent.innerHTML = '';
+      return;
+    }
     match.renderer.setShowBadges(false);
     match.renderer.setDebug(false);
     match.renderer.setAttractFraming(true);
@@ -149,6 +171,12 @@ export class AttractMode {
   }
 
   private destroyMatch(): void {
+    // Always invalidate any in-flight spawn, whether or not a match has
+    // been constructed yet: `this.match` is assigned before `init()` is
+    // awaited, so tearing it down here is not enough on its own -- the
+    // pending init would still resolve and go on to draw with a
+    // destroyed renderer.
+    this.generation++;
     if (!this.match) return;
     this.match.stop();
     this.match.renderer.destroy();

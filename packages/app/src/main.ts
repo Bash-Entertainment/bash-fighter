@@ -171,6 +171,19 @@ function onRendererRenderStalled(): void {
   contextLostOverlayShowing = true;
   showContextLostOverlay();
 }
+
+// A renderer that never gets off the ground at all: `Renderer.init()`
+// rejects, usually because the browser refused or immediately lost the
+// WebGL context. Before this, the rejection propagated out of the match
+// start and the player was left looking at an empty #canvas-root -- a
+// black screen with no canvas in it, no event to catch and nothing said.
+// Observed on production 2026-09-14. Same overlay, same honest Reload.
+function onRendererInitFailed(where: string, error: unknown): void {
+  console.error(`renderer init failed (${where})`, error);
+  if (contextLostOverlayShowing) return;
+  contextLostOverlayShowing = true;
+  showContextLostOverlay();
+}
 const spectateChip = new SpectateChip(appRoot, () => void beginOnlineMatch());
 const controlsHint = new ControlsHint(appRoot);
 
@@ -708,7 +721,12 @@ async function beginOnlineMatch(): Promise<void> {
   netMatch = net;
   net.input.setBinding(0, currentBindings.p1);
   net.input.setBinding(1, currentBindings.p2);
-  await net.init(canvasRoot);
+  try {
+    await net.init(canvasRoot);
+  } catch (error) {
+    onRendererInitFailed('online match', error);
+    return;
+  }
   net.connect(name, characterId);
   if (touchCapable) net.input.setTouchSource(LOCAL_SLOT, touchControls.source);
 
@@ -938,7 +956,12 @@ async function beginMatch(): Promise<void> {
     scale: 3,
   });
 
-  await localMatch.init(canvasRoot);
+  try {
+    await localMatch.init(canvasRoot);
+  } catch (error) {
+    onRendererInitFailed('local match', error);
+    return;
+  }
   localMatch.start();
   // Local two-player harness: touch, if available, always drives slot 0
   // (the local human) same as online mode -- P2 stays keyboard/gamepad
