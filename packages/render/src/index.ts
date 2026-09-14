@@ -14,6 +14,7 @@ import {
   type CameraView,
 } from './camera.ts';
 import { drawStage, type StageBounds } from './stage.ts';
+import { isCameraReducedMotion } from './camera.ts';
 import { FighterSprite } from './fighter-sprite.ts';
 import { BODY_WIDTH, BODY_HEIGHT, HEAD_RADIUS } from './fighter-shape-placeholder.ts';
 import { ItemSprite } from './item-sprite.ts';
@@ -35,6 +36,7 @@ export { EffectsLayer, type HitEffectInput, setReducedMotion, isReducedMotion } 
 
 export type { StageBounds, StagePlatform } from './stage.ts';
 export { arenaDataToStageBounds } from './arena-adapter.ts';
+export { type BackdropId } from './backdrop.ts';
 export type { ArenaBounds, CameraView, CameraConfig } from './camera.ts';
 export { computeCamera, resetCameraSmoothing, worldToScreen } from './camera.ts';
 export { computeFollowCamera, computeOverviewCamera, SmoothedCamera, type FollowConfig } from './spectator-camera.ts';
@@ -756,7 +758,13 @@ export class Renderer {
     const shake = this.effects.update(dtMs);
     this.world.position.set(shake.x, shake.y);
 
-    drawStage(this.stageLayer, stageForDraw, cam, vw, vh, frame.previewArenaBounds, this.attractFraming);
+    // Backdrop is drawn inside drawStage itself, onto this same
+    // stageLayer, first -- see stage.ts's drawBackdrop call and its
+    // comment for why a separate layer didn't work in this renderer.
+    // `now` (wall-clock, from the top of this method) and reduced-motion
+    // are the only backdrop inputs -- never sim ticks, never fed back
+    // into anything.
+    drawStage(this.stageLayer, stageForDraw, cam, vw, vh, frame.previewArenaBounds, this.attractFraming, now, isCameraReducedMotion());
 
     const badgeCandidates: BadgeCandidate[] = [];
     const bodyBoxes: BodyBox[] = [];

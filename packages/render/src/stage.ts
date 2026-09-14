@@ -8,6 +8,7 @@ import { Graphics } from 'pixi.js';
 import { PALETTE } from './palette.ts';
 import type { CameraView } from './camera.ts';
 import { worldToScreen } from './camera.ts';
+import { drawBackdrop } from './backdrop.ts';
 
 /** One flat platform in world units — mirrors @bash-fighter/sim's
  * Platform (minX/maxX/y as floats instead of Fixed) so the renderer
@@ -45,6 +46,12 @@ export interface StageBounds {
    * colour change, no gradients, nothing that touches the danger/warning
    * palette. */
   accentColor?: number;
+  /** Which backdrop (see backdrop.ts) to draw behind this stage's
+   * platforms. Presentation-only, derived from the arena's display name
+   * in arena-adapter.ts -- see backdrop.ts's seam note. Optional so
+   * tests/callers that predate the depth pass still validate; drawBackdrop
+   * falls back to the neutral colosseum backdrop when absent. */
+  backdropId?: import('./backdrop.ts').BackdropId;
 }
 
 /** Where the blast-zone boundary will be at a fixed lookahead from now
@@ -72,8 +79,23 @@ export function drawStage(
   viewHeight: number,
   preview?: BlastPreview | null,
   suppressOuterWash = false,
+  backdropTimeMs = 0,
+  backdropReducedMotion = false,
 ): void {
   g.clear();
+
+  // DEPTH PASS (2026-09-14): drawn onto this same Graphics object, first,
+  // so every platform/wash/boundary drawn below it lands on top in the
+  // same draw call. An earlier version used a separate Graphics layer
+  // added behind stageLayer in index.ts's container tree; that layer's
+  // draws never composited to the screen in this renderer/browser combo
+  // (confirmed by isolation testing: identical rect+fill calls painted
+  // fine on this object but not on a sibling layer at the same
+  // container depth) even though geometry/instructions were present and
+  // correct. Drawing backdrop content directly into stageLayer's own
+  // Graphics sidesteps that entirely and is the seam that's actually
+  // verified working by looking at the game.
+  drawBackdrop(g, bounds.backdropId ?? 'colosseum', cam, viewWidth, viewHeight, backdropTimeMs, backdropReducedMotion);
 
   // Darker wash outside the blast zone so "offstage" reads as a distinct
   // zone even before the dashed line registers.
@@ -89,17 +111,37 @@ export function drawStage(
   // red error wash, not "danger zone". This is presentation-only: the
   // real per-player edge-danger warning and the boundary dashed line
   // below are untouched, and no real match ever sets this flag.
-  if (!suppressOuterWash) {
-    const outerTL = worldToScreen(bounds.blastMinX - 2000, bounds.blastMaxY + 2000, cam, viewWidth, viewHeight);
-    const outerBR = worldToScreen(bounds.blastMaxX + 2000, bounds.blastMinY - 2000, cam, viewWidth, viewHeight);
-    g.rect(outerTL.x, outerTL.y, outerBR.x - outerTL.x, outerBR.y - outerTL.y);
-    g.fill({ color: PALETTE.blastZone, alpha: 0.28 });
-  }
-
   const insideTL = worldToScreen(bounds.blastMinX, bounds.blastMaxY, cam, viewWidth, viewHeight);
   const insideBR = worldToScreen(bounds.blastMaxX, bounds.blastMinY, cam, viewWidth, viewHeight);
-  g.rect(insideTL.x, insideTL.y, insideBR.x - insideTL.x, insideBR.y - insideTL.y);
-  g.fill({ color: PALETTE.background });
+
+  // DEPTH PASS (2026-09-14): this used to be a full-screen "outer wash"
+  // rect followed by an opaque background-colour rect painted over the
+  // entire inside-blast-zone area to erase it back out. That inside
+  // erase is exactly what made the arena read as flat black no matter
+  // what sat behind it -- see backdrop.ts/backdropLayer in index.ts,
+  // drawn immediately before this function runs, which the erase used to
+  // paint straight over. Four border strips covering only the area
+  // strictly outside the blast rect give the identical on-screen "danger
+  // wash outside, clean playable area inside" result without ever
+  // touching (and hiding) the inside-blast-zone pixels the backdrop now
+  // occupies.
+  if (!suppressOuterWash) {
+    const pad = 2000 * cam.scale;
+    const stripColor = PALETTE.blastZone;
+    const stripAlpha = 0.28;
+    // Left
+    g.rect(insideTL.x - pad, 0, pad, viewHeight);
+    g.fill({ color: stripColor, alpha: stripAlpha });
+    // Right
+    g.rect(insideBR.x, 0, pad, viewHeight);
+    g.fill({ color: stripColor, alpha: stripAlpha });
+    // Top (between the left/right strips only, so corners aren't double-drawn)
+    g.rect(insideTL.x, 0, insideBR.x - insideTL.x, insideTL.y);
+    g.fill({ color: stripColor, alpha: stripAlpha });
+    // Bottom
+    g.rect(insideTL.x, insideBR.y, insideBR.x - insideTL.x, viewHeight - insideBR.y);
+    g.fill({ color: stripColor, alpha: stripAlpha });
+  }
 
   // Anticipation band: the strip of ground that is currently safe but
   // will be outside the boundary by the time `preview` is reached (see
@@ -119,13 +161,32 @@ export function drawStage(
       Math.abs(preview.maxY - bounds.blastMaxY) > 0.5);
 
   if (hasPreview && preview) {
-    g.rect(insideTL.x, insideTL.y, insideBR.x - insideTL.x, insideBR.y - insideTL.y);
-    g.fill({ color: PALETTE.hazardWarning, alpha: 0.16 });
-
+    // DEPTH PASS (2026-09-14): this used to fill the whole current-blast
+    // rect with the amber tint, then punch an opaque PALETTE.background
+    // rect over the future-safe sub-area to remove the tint there. That
+    // opaque punch painted straight over the backdrop for almost the
+    // entire playable area (the future boundary is close to the current
+    // one early in a match), which is exactly the "why is it all black"
+    // bug this pass is fixing elsewhere. Same border-strip technique as
+    // the outer wash: draw the amber tint only in the four strips that
+    // are inside the current boundary but outside the future one, and
+    // never paint over the inside-future area at all.
     const futureTL = worldToScreen(preview.minX, preview.maxY, cam, viewWidth, viewHeight);
     const futureBR = worldToScreen(preview.maxX, preview.minY, cam, viewWidth, viewHeight);
-    g.rect(futureTL.x, futureTL.y, futureBR.x - futureTL.x, futureBR.y - futureTL.y);
-    g.fill({ color: PALETTE.background });
+    const tintColor = PALETTE.hazardWarning;
+    const tintAlpha = 0.16;
+    // Left
+    g.rect(insideTL.x, insideTL.y, futureTL.x - insideTL.x, insideBR.y - insideTL.y);
+    g.fill({ color: tintColor, alpha: tintAlpha });
+    // Right
+    g.rect(futureBR.x, insideTL.y, insideBR.x - futureBR.x, insideBR.y - insideTL.y);
+    g.fill({ color: tintColor, alpha: tintAlpha });
+    // Top (between the left/right strips only)
+    g.rect(futureTL.x, insideTL.y, futureBR.x - futureTL.x, futureTL.y - insideTL.y);
+    g.fill({ color: tintColor, alpha: tintAlpha });
+    // Bottom
+    g.rect(futureTL.x, futureBR.y, futureBR.x - futureTL.x, insideBR.y - futureBR.y);
+    g.fill({ color: tintColor, alpha: tintAlpha });
   }
 
   // Solid platform slabs, each drawn with a visible top edge and a

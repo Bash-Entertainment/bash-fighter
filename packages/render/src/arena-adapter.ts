@@ -10,6 +10,7 @@
 // with.
 import { fixed as fx, type ArenaData } from '@bash-fighter/sim';
 import type { StageBounds } from './stage.ts';
+import { backdropIdForArenaName } from './backdrop.ts';
 
 export function arenaDataToStageBounds(arena: ArenaData): StageBounds {
   return {
@@ -31,5 +32,9 @@ export function arenaDataToStageBounds(arena: ArenaData): StageBounds {
     // Cosmetic only -- see ArenaData.accentColor's comment. Sim state
     // never depends on this.
     accentColor: arena.accentColor,
+    // Presentation-only backdrop pick, keyed on the display name (see
+    // backdrop.ts's seam note) -- never touches ArenaData, never crosses
+    // into packages/sim.
+    backdropId: backdropIdForArenaName(arena.name),
   };
 }
