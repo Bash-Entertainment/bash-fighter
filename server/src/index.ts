@@ -301,7 +301,19 @@ const server = http.createServer((req, res) => {
     feedbackHandler(req, res);
     return;
   }
+  // Activity numbers (how many matches, how many players) are deliberately
+  // NOT public: the owner reads them privately via scripts/stats-report.mjs
+  // over SSH. nginx always adds X-Forwarded-For to proxied requests, so its
+  // presence means the request came from the internet and gets the reduced
+  // body; a direct loopback request (from the box itself, or from the test
+  // suite) gets the operational detail.
+  const fromInternet = req.headers['x-forwarded-for'] !== undefined;
   if (req.url === '/api/metrics') {
+    if (fromInternet) {
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      res.end('not found');
+      return;
+    }
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify(tickMetricsSnapshot()));
     return;
@@ -309,12 +321,16 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(
-      JSON.stringify({
-        status: 'ok',
-        uptimeSeconds: process.uptime(),
-        matchCount: manager.matchCount,
-        playerCount: manager.playerCount,
-      }),
+      JSON.stringify(
+        fromInternet
+          ? { status: 'ok' }
+          : {
+              status: 'ok',
+              uptimeSeconds: process.uptime(),
+              matchCount: manager.matchCount,
+              playerCount: manager.playerCount,
+            },
+      ),
     );
     return;
   }
