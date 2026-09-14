@@ -113,7 +113,15 @@ const downAir: MoveDef = {
 };
 
 export const PLACEHOLDER_CHARACTER: CharacterData = {
-  name: 'Placeholder',
+  // Player-facing name. The roster id stays 'placeholder' (it is the wire
+  // identity and the protocol's backward-compatibility fallback), but the
+  // name a player reads must not be a developer's scaffolding word: this
+  // is the roster's FIRST card and the default selection, so "Placeholder"
+  // was the first thing a new player read about our game, and it said
+  // "unfinished". Renamed 2026-09-14 after seeing it on the live start
+  // screen. Keep in step with ANIMATION_BY_CHARACTER_NAME, which is keyed
+  // by this string -- animation-registry.test.ts enforces that.
+  name: 'Slate',
   weight: fromFloat(100),
   hurtboxWidth: fromFloat(16),
   hurtboxHeight: fromFloat(32),

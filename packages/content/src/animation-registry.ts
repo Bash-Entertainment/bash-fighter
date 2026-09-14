@@ -17,7 +17,7 @@ import { SCRAPPER_ANIMATION } from './characters/scrapper/animation.ts';
 // per-fighter state), never the roster id, so this is the lookup render
 // actually needs. characters.ts's roster ids remain the wire/UI identity.
 export const ANIMATION_BY_CHARACTER_NAME: Readonly<Record<string, AnimationParams>> = {
-  Placeholder: PLACEHOLDER_ANIMATION,
+  Slate: PLACEHOLDER_ANIMATION,
   Ballast: BALLAST_ANIMATION,
   Voltling: VOLTLING_ANIMATION,
   Reed: REED_ANIMATION,
