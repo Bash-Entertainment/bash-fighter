@@ -479,7 +479,12 @@ async function beginOnlineMatch(): Promise<void> {
       // owns this same moment: show it exactly while 'waiting', hide it for
       // every other state (connecting, in-match, disconnected, etc.) so it
       // never sits on top of the actual match once it starts.
+      // 'connecting' shows the same composition in an honest
+      // connecting state (see WaitingScreen.showConnecting) rather than
+      // leaving a black screen; every other state hides it so it never
+      // sits on top of the actual match once it starts.
       if (state === 'waiting') waitingScreen.show();
+      else if (state === 'connecting') waitingScreen.showConnecting();
       else waitingScreen.hide();
       if (state === 'disconnected' || state === 'error') {
         matchOverlay.show({
@@ -609,6 +614,20 @@ async function beginOnlineMatch(): Promise<void> {
               matchOverlay.hide();
               spectateChip.show();
             },
+            kind: 'plain',
+          },
+          // In a 20-player free-for-all, 19 of every 20 players end their
+          // match on THIS overlay, not the win screen -- so the win
+          // screen's feedback route (see winScreen below) was reaching
+          // almost nobody. Elimination is also the moment a player has
+          // the sharpest opinion about how the fight felt.
+          {
+            label: 'Say what felt wrong',
+            onClick: () =>
+              feedbackPanel.show({
+                mode: netModeLine.textContent || 'online',
+                result: `eliminated ${placement} of ${totalFighters}`,
+              }),
             kind: 'plain',
           },
         ],

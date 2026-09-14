@@ -34,6 +34,9 @@ export class WaitingScreen {
   private lastServerTicks = -1;
   private lastServerAt = 0;
   private tickHandle: number | null = null;
+  // True between "Play online" being clicked and the server's first
+  // lobby message. See showConnecting().
+  private connecting = false;
 
   constructor(parent: HTMLElement, touchCapable: boolean, onStartNow: () => void) {
     this.root = document.createElement('div');
@@ -84,7 +87,25 @@ export class WaitingScreen {
     }
   }
 
+  /** 2026-09-14, found by playing production: clicking "Play online"
+   * left a COMPLETELY black screen -- no wordmark, no words, nothing but
+   * a 12px "Connecting..." chip in the far bottom-left corner -- until
+   * the server's first lobby message arrived. The composed waiting screen
+   * only appeared on state 'waiting', so the one second a first-time
+   * player is most likely to read as "this is broken" was the one second
+   * we showed them nothing. Now the same composition appears immediately,
+   * honestly labelled: no player count and no "Start now" (there is no
+   * lobby to start yet), and no invented countdown. */
+  showConnecting(): void {
+    this.connecting = true;
+    this.countLine.textContent = '';
+    this.startBtn.classList.add('hidden');
+    this.setMode(undefined);
+    this.show();
+  }
+
   hide(): void {
+    this.connecting = false;
     this.root.classList.add('hidden');
     if (this.tickHandle !== null) {
       window.clearInterval(this.tickHandle);
@@ -107,6 +128,10 @@ export class WaitingScreen {
    *  timer -- a deadline the server will not actually honour must never
    *  be invented client-side. */
   setCount(players: number, capacity: number, countdownTicks: number): void {
+    // The first lobby message ends the connecting state: there is a real
+    // lobby now, so the count and "Start now" become meaningful again.
+    this.connecting = false;
+    this.startBtn.classList.remove('hidden');
     this.countLine.textContent = `${players} / ${capacity} players`;
     this.lastServerTicks = countdownTicks;
     this.lastServerAt = Date.now();
@@ -114,6 +139,11 @@ export class WaitingScreen {
   }
 
   private renderCountdown(): void {
+    if (this.connecting) {
+      this.countdownLine.textContent = 'Connecting to the match server\u2026';
+      this.countdownLine.classList.remove('waiting-countdown-active');
+      return;
+    }
     if (this.lastServerTicks < 0) {
       this.countdownLine.textContent = 'Waiting for players\u2026';
       this.countdownLine.classList.remove('waiting-countdown-active');

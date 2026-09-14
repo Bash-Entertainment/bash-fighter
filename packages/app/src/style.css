@@ -1394,6 +1394,12 @@ html, body {
   cursor: pointer;
 }
 
+/* Hidden while merely connecting: there is no lobby to start yet, so
+   offering "Start now" would be a control that cannot do anything. */
+.waiting-start-btn.hidden {
+  display: none;
+}
+
 .waiting-start-btn:hover {
   color: var(--bg);
   background: var(--accent);
