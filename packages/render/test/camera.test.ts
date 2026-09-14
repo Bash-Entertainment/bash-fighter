@@ -383,3 +383,33 @@ test('resetting smoothing lands exactly on the target again', () => {
   const raw = computeRawCamera(SPREAD_B, c);
   assert.ok(Math.abs(after.centerX - raw.centerX) < EPS);
 });
+
+// 2026-09-14, found by playing production: with follow damping in flight the
+// eased frame is not the frame the fight needs, and a fighter -- in the case I
+// saw, the local player, name label clipped -- can sit outside the screen
+// edge. Smoothing is allowed to lag; it is not allowed to hide anybody.
+test('a mid-ease camera still contains every fighter the raw frame contains', () => {
+  const wide = cfg({
+    minScale: 0.1,
+    arena: { minX: -600, maxX: 600, minY: -400, maxY: 400 },
+  });
+  // Settle far to the left, then teleport the spread far right by less than
+  // the snap threshold, so the camera eases rather than cuts.
+  computeCamera([{ x: -900, y: 0 }, { x: -700, y: 0 }], wide);
+  for (let i = 0; i < 3; i++) {
+    const fighters = [{ x: 300, y: 0 }, { x: 900, y: 0 }];
+    const view = computeCamera(fighters, wide, 1000 / 60);
+    const halfW = wide.viewWidth / 2 / view.scale;
+    const halfH = wide.viewHeight / 2 / view.scale;
+    for (const f of fighters) {
+      assert.ok(
+        f.x >= view.centerX - halfW && f.x <= view.centerX + halfW,
+        `fighter at x=${f.x} outside frame on frame ${i}`,
+      );
+      assert.ok(
+        f.y >= view.centerY - halfH && f.y <= view.centerY + halfH,
+        `fighter at y=${f.y} outside frame on frame ${i}`,
+      );
+    }
+  }
+});

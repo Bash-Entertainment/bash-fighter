@@ -137,12 +137,78 @@ export function computeCamera(
     smoothedView = raw;
     return raw;
   }
-  smoothedView = {
-    centerX: lerp(smoothedView.centerX, raw.centerX, t),
-    centerY: lerp(smoothedView.centerY, raw.centerY, t),
-    scale: lerp(smoothedView.scale, raw.scale, t),
-  };
+  smoothedView = containFighters(
+    {
+      centerX: lerp(smoothedView.centerX, raw.centerX, t),
+      centerY: lerp(smoothedView.centerY, raw.centerY, t),
+      scale: lerp(smoothedView.scale, raw.scale, t),
+    },
+    positions,
+    cfg,
+  );
   return smoothedView;
+}
+
+/**
+ * Smoothing must never hide a fighter.
+ *
+ * `computeRawCamera` returns the minimal frame that holds every living
+ * fighter, so easing toward it means that while the ease is in flight the
+ * frame can be *tighter* or *offset* from what the fight needs -- and a
+ * fighter, including your own, gets cut off at the screen edge. That was
+ * visible in production on 2026-09-14: the local fighter sat half outside
+ * the right edge with its name label clipped while the camera was still
+ * catching up.
+ *
+ * So the eased view is only a suggestion: the smooth centre is kept, and the
+ * zoom is pulled back by exactly as much as it takes for every fighter to
+ * still be inside the frame from where the camera currently sits. Lag costs
+ * a little zoom, never a fighter.
+ */
+function containFighters(
+  eased: CameraView,
+  positions: readonly { x: number; y: number }[],
+  cfg: CameraConfig,
+): CameraView {
+  if (positions.length === 0) return eased;
+  const halfW = cfg.viewWidth / 2;
+  const halfH = cfg.viewHeight / 2;
+  // The fighters themselves plus one padding unit, which is roughly a
+  // fighter's own half-size -- enough that a body and its name label stay
+  // inside the frame, and deliberately far less than the raw camera's full
+  // framing rect. Containing that whole rect instead would be the same as
+  // having no damping at all: raw is the minimal frame at this aspect
+  // ratio, so demanding it be covered pins the eased view onto it exactly.
+  let needMinX = Infinity;
+  let needMaxX = -Infinity;
+  let needMinY = Infinity;
+  let needMaxY = -Infinity;
+  for (const p of positions) {
+    needMinX = Math.min(needMinX, p.x - cfg.paddingWorld);
+    needMaxX = Math.max(needMaxX, p.x + cfg.paddingWorld);
+    needMinY = Math.min(needMinY, p.y - cfg.paddingWorld);
+    needMaxY = Math.max(needMaxY, p.y + cfg.paddingWorld);
+  }
+
+  // Keep the eased centre -- that smooth pan is the whole point -- and buy
+  // the room it needs by zooming out just enough that everybody is still
+  // inside the frame from where the camera currently is. When the ease
+  // catches up, the required extent shrinks again and the zoom eases back
+  // in with it, so this shows up as the camera pulling back slightly during
+  // a fast reframe rather than as a cut or a clipped fighter.
+  const centerX = eased.centerX;
+  const centerY = eased.centerY;
+  const needHalfW = Math.max(centerX - needMinX, needMaxX - centerX);
+  const needHalfH = Math.max(centerY - needMinY, needMaxY - centerY);
+  const scale = Math.max(
+    cfg.minScale,
+    Math.min(
+      eased.scale,
+      needHalfW > 0 ? halfW / needHalfW : eased.scale,
+      needHalfH > 0 ? halfH / needHalfH : eased.scale,
+    ),
+  );
+  return { centerX, centerY, scale };
 }
 
 /** The un-damped camera computation (previous `computeCamera` body,
