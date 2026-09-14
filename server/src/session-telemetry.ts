@@ -57,6 +57,7 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
       inputTicks: report?.inputTicks ?? null,
       frameMedianMs: report?.frameMedianMs ?? null,
       frameP95Ms: report?.frameP95Ms ?? null,
+      contextLostCount: report?.contextLostCount ?? null,
     };
     console.log(`[sessionEnd] ${JSON.stringify(line)}`);
   } catch (err) {

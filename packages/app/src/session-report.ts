@@ -96,12 +96,18 @@ export function buildSessionReportMessage(input: {
   inputTicks: number;
   frameMedianMs: number;
   frameP95Ms: number;
+  /** See SessionReportMessage.contextLostCount. Optional/omitted (not
+   *  sent as 0) when the caller has no count to report, matching every
+   *  other optional field's "absent means not tracked" convention. */
+  contextLostCount?: number;
 }): SessionReportMessage {
-  return {
+  const msg: SessionReportMessage = {
     t: 'sessionReport',
     firstInputMs: input.firstInputMs,
     inputTicks: input.inputTicks,
     frameMedianMs: input.frameMedianMs,
     frameP95Ms: input.frameP95Ms,
   };
+  if (input.contextLostCount !== undefined) msg.contextLostCount = input.contextLostCount;
+  return msg;
 }

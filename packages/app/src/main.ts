@@ -114,6 +114,43 @@ topRightControls.appendChild(muteButton);
 const hud = new Hud(appRoot);
 const spectatorBanner = new SpectatorBanner(appRoot);
 const matchOverlay = new MatchOverlay(appRoot);
+
+// WebGL context loss (2026-09-14): a lost context is a normal browser
+// event (GPU switch, phone backgrounding the tab, driver reset, a
+// second live context competing for GPU memory), not a crash -- but
+// left unhandled it used to turn the whole canvas into a permanently
+// black rectangle with no explanation and no way out. Shared between
+// the online (NetMatch) and local (Match) wiring below: both fire the
+// exact same onContextLost/onContextRestored events for the exact same
+// reason. Reload is the honest primary action -- see
+// Renderer.onContextRestored's doc comment for what recovery is and
+// is not attempted automatically.
+function showContextLostOverlay(): void {
+  matchOverlay.show({
+    kicker: 'GRAPHICS LOST',
+    title: 'Lost the graphics context',
+    message: 'Your browser dropped the graphics connection for this tab. Reload the page to keep playing.',
+    tone: 'danger',
+    actions: [{ label: 'Reload', onClick: () => location.reload() }],
+  });
+}
+
+// True only while the context-lost overlay (not some other overlay --
+// elimination, disconnect, etc.) is the thing on screen, so restoration
+// never blindly hides a message it didn't put up itself.
+let contextLostOverlayShowing = false;
+
+function onRendererContextLost(): void {
+  contextLostOverlayShowing = true;
+  showContextLostOverlay();
+}
+
+function onRendererContextRestored(): void {
+  if (contextLostOverlayShowing) {
+    matchOverlay.hide();
+    contextLostOverlayShowing = false;
+  }
+}
 const spectateChip = new SpectateChip(appRoot, () => void beginOnlineMatch());
 const controlsHint = new ControlsHint(appRoot);
 
@@ -644,6 +681,8 @@ async function beginOnlineMatch(): Promise<void> {
         }
       }, SPECTATE_STALL_MS);
     },
+    onContextLost: onRendererContextLost,
+    onContextRestored: onRendererContextRestored,
   }, audio, isQaSession());
   netMatch = net;
   net.input.setBinding(0, currentBindings.p1);
@@ -864,6 +903,8 @@ async function beginMatch(): Promise<void> {
 
       return { ...frame, fighters, liveArenaBounds: arena, cameraOverride, localPlayerIndex: LOCAL_SLOT };
     },
+    onContextLost: onRendererContextLost,
+    onContextRestored: onRendererContextRestored,
   }, undefined, audio, localHumanSlotCount, localArenaOverride, localSettingsOverride);
   match = localMatch;
   localMatch.input.setBinding(0, currentBindings.p1);

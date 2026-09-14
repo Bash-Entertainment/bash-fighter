@@ -301,6 +301,23 @@ export class Renderer {
   readonly app = new Application();
   private ready = false;
   private debugOn = false;
+  // WebGL context loss (2026-09-14): a lost context is a normal thing a
+  // real browser does -- GPU switch, phone backgrounding the tab, driver
+  // reset, too many live WebGL contexts -- not an error worth throwing
+  // over. PixiJS's own GlContextSystem already calls preventDefault() and
+  // rebinds GPU resources on `webglcontextrestored`, but nothing upstream
+  // of it stops US from calling into a renderer with no live GL context
+  // in between: that produced the "this.app.renderer is null" flood seen
+  // live (see wiki). These two flags make render()/viewSize fail safe
+  // instead, and let callers (match.ts/net-match.ts) show/hide an honest
+  // message instead of leaving a silent black canvas.
+  private contextLost = false;
+  /** Set by the owner (Match/NetMatch) right after construction. Fired
+   * once per loss/restore; never thrown from inside a browser event
+   * handler into caller code, so a handler that throws cannot re-break
+   * the render loop it's trying to protect. */
+  onContextLost: (() => void) | null = null;
+  onContextRestored: (() => void) | null = null;
 
   private readonly world = new Container();
   private readonly stageLayer = new Graphics();
@@ -355,6 +372,30 @@ export class Renderer {
     });
     parent.appendChild(this.app.canvas);
 
+    // Must be attached to the real canvas element, not `this.app` --
+    // that's what the browser actually fires these two events on.
+    // preventDefault() on 'webglcontextlost' is not optional decoration:
+    // per spec, the context is only EVER eligible for restoration
+    // (a later 'webglcontextrestored') if some listener calls it during
+    // this event. Skipping it would make every loss permanent, silently
+    // turning a recoverable GPU hiccup into the exact same forever-black
+    // screen this exists to fix.
+    this.app.canvas.addEventListener('webglcontextlost', (event) => {
+      event.preventDefault();
+      this.contextLost = true;
+      this.onContextLost?.();
+    });
+    this.app.canvas.addEventListener('webglcontextrestored', () => {
+      this.contextLost = false;
+      // Forces the next render() to treat elapsed time as "first frame"
+      // rather than measuring a multi-second gap (however long the loss
+      // lasted) as one dtMs, which would otherwise hand effects.update()
+      // a huge delta and make every timed effect (hitstop, shake decay)
+      // jump.
+      this.lastFrameTimeMs = null;
+      this.onContextRestored?.();
+    });
+
     this.world.addChild(this.stageLayer);
     this.world.addChild(this.hazardContainer);
     this.world.addChild(this.spriteContainer);
@@ -401,6 +442,13 @@ export class Renderer {
   }
 
   get viewSize(): { width: number; height: number } {
+    // A lost (or not-yet-restored) context can leave the renderer with
+    // no usable size for a frame or two around the event; a fixed 0x0
+    // is an honest "nothing to draw", not a guess, and callers already
+    // treat width/height 0 safely (computeCamera etc. run on live
+    // fighter data, not on this size, and render() below bails before
+    // reaching any of that while contextLost is true anyway).
+    if (!this.app.renderer) return { width: 0, height: 0 };
     return { width: this.app.renderer.width, height: this.app.renderer.height };
   }
 
@@ -531,7 +579,7 @@ export class Renderer {
   }
 
   render(frame: RenderFrame): void {
-    if (!this.ready) return;
+    if (!this.ready || this.contextLost) return;
 
     const now = performance.now();
     const dtMs = this.lastFrameTimeMs === null ? 16.6667 : Math.min(50, now - this.lastFrameTimeMs);
@@ -767,7 +815,38 @@ export class Renderer {
     }
   }
 
+  isContextLost(): boolean {
+    return this.contextLost;
+  }
+
+  /** DEV/QA-ONLY: forces a real `webglcontextlost` (and, if called later,
+   * a real `webglcontextrestored`) through the same `WEBGL_lose_context`
+   * extension a real browser exposes -- see MDN. Reaches into Pixi's
+   * renderer.gl, which is not part of Pixi's public API, so this is
+   * deliberately isolated to one place rather than spread across test
+   * code. Exists so an automated QA pass can prove the real event path
+   * end-to-end (not just call the internal handlers directly) without
+   * needing actual flaky hardware/driver conditions. Inert for a normal
+   * player: nothing in this codebase calls it except a deliberate test. */
+  debugForceContextLoss(): void {
+    const gl = (this.app.renderer as unknown as { gl?: WebGLRenderingContext | WebGL2RenderingContext })?.gl;
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+  }
+
+  /** See debugForceContextLoss. Only takes effect if the context is
+   * currently actually lost -- WEBGL_lose_context.restoreContext() is a
+   * no-op otherwise. */
+  debugForceContextRestore(): void {
+    const gl = (this.app.renderer as unknown as { gl?: WebGLRenderingContext | WebGL2RenderingContext })?.gl;
+    gl?.getExtension('WEBGL_lose_context')?.restoreContext();
+  }
+
   destroy(): void {
+    // A destroyed-while-context-lost renderer has no live `this.app.
+    // renderer` (see the viewSize guard above) -- Pixi's own destroy()
+    // already tolerates that internally, so no extra guard is needed
+    // here, but this comment exists so the next person doesn't have to
+    // re-derive that from scratch.
     this.app.destroy(true, { children: true });
   }
 }

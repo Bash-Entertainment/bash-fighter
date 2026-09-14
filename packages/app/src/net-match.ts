@@ -102,6 +102,13 @@ export interface NetMatchEvents {
    * a specific "you placed Nth" + play-again offer instead of leaving the
    * player in an unexplained spectate view. */
   onEliminated?(placement: number, totalFighters: number): void;
+  /** Fired once when the canvas's WebGL context is lost (see
+   * packages/render/src/index.ts's Renderer.onContextLost). The match
+   * keeps running server-side regardless -- this is presentation-only,
+   * same contract as Match's identical event in match.ts. */
+  onContextLost?(): void;
+  /** Fired once if/when the browser restores the context. */
+  onContextRestored?(): void;
 }
 
 const SNAPSHOT_INTERVAL_MS = 1000 / SNAPSHOT_HZ;
@@ -247,6 +254,12 @@ export class NetMatch {
   // the previous one.
   private inputActivity = new InputActivityTracker();
   private frameTimeTracker = new FrameTimeTracker();
+  // Count of webglcontextlost events, sent in sessionReport (see
+  // docs/MEASUREMENT.md and protocol.ts's SessionReportMessage.
+  // contextLostCount). Reset per-match alongside the other telemetry
+  // trackers below, same rationale: a reconnect/resume starts counting
+  // fresh rather than carrying over a previous match's reading.
+  private contextLostCount = 0;
   private matchStartAtMs = 0;
   private lastRenderAtMs: number | null = null;
   private reportTimer: ReturnType<typeof setInterval> | null = null;
@@ -276,7 +289,18 @@ export class NetMatch {
   }
 
   async init(parent: HTMLElement): Promise<void> {
+    this.renderer.onContextLost = () => {
+      this.contextLostCount += 1;
+      this.events.onContextLost?.();
+    };
+    this.renderer.onContextRestored = () => this.events.onContextRestored?.();
     await this.renderer.init(parent);
+    // QA/automation hook only, mirrors the existing window.__debug*
+    // convention in packages/render -- lets a browser-automation pass
+    // force/verify a real webglcontextlost/restored round trip via
+    // Renderer.debugForceContextLoss/Restore. Inert for a real player:
+    // nothing in this codebase reads this global on its own.
+    if (typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__debugRenderer = this.renderer;
     this.input.attach(window);
     document.addEventListener('visibilitychange', this.visibilityHandler);
   }
@@ -294,6 +318,7 @@ export class NetMatch {
       inputTicks: this.inputActivity.getInputTicks(),
       frameMedianMs: this.frameTimeTracker.getMedianMs(),
       frameP95Ms: this.frameTimeTracker.getP95Ms(),
+      contextLostCount: this.contextLostCount,
     });
     ws.send(JSON.stringify(report));
   }
@@ -586,6 +611,7 @@ export class NetMatch {
     // and no final report gets out.
     this.inputActivity = new InputActivityTracker();
     this.frameTimeTracker = new FrameTimeTracker();
+    this.contextLostCount = 0;
     this.matchStartAtMs = performance.now();
     this.lastRenderAtMs = null;
     if (this.reportTimer) clearInterval(this.reportTimer);

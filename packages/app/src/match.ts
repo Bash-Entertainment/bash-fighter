@@ -67,6 +67,12 @@ export interface MatchEvents {
    * layer (spectator camera, elimination flags) rewrite the frame
    * without the Match/Renderer needing to know about spectate policy. */
   transformFrame?(frame: RenderFrame): RenderFrame;
+  /** Fired once when the canvas's WebGL context is lost (see
+   * packages/render/src/index.ts's Renderer.onContextLost) -- the sim
+   * keeps ticking underneath regardless, this is presentation-only. */
+  onContextLost?(): void;
+  /** Fired once if/when the browser restores the context. */
+  onContextRestored?(): void;
 }
 
 function lerp(a: number, b: number, t: number): number {
@@ -187,7 +193,15 @@ export class Match {
   }
 
   async init(parent: HTMLElement): Promise<void> {
+    this.renderer.onContextLost = () => this.events.onContextLost?.();
+    this.renderer.onContextRestored = () => this.events.onContextRestored?.();
     await this.renderer.init(parent);
+    // QA/automation hook only, mirrors the existing window.__debug*
+    // convention in packages/render -- lets a browser-automation pass
+    // force/verify a real webglcontextlost/restored round trip via
+    // Renderer.debugForceContextLoss/Restore. Inert for a real player:
+    // nothing in this codebase reads this global on its own.
+    if (typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__debugRenderer = this.renderer;
     this.input.attach(window);
   }
 

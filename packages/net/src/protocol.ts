@@ -140,6 +140,15 @@ export interface SessionReportMessage {
   frameMedianMs: number;
   /** 95th-percentile client frame time in ms over the same window. */
   frameP95Ms: number;
+  /** Count of WebGL `webglcontextlost` events this seat's client has
+   *  observed so far this match (2026-09-14; see wiki "Camera Framing"
+   *  sibling page on renderer robustness). Almost always 0 -- a lost
+   *  context is a normal but uncommon browser event (GPU switch, phone
+   *  backgrounding the tab, driver reset). No new personal data: this is
+   *  a plain count, same as inputTicks, carrying no IP/UA/id. Optional so
+   *  an older client that predates this field still parses as a valid
+   *  report. */
+  contextLostCount?: number;
 }
 
 export type ClientControlMessage =
@@ -615,16 +624,27 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   const inputTicks = clampFiniteNumber(obj.inputTicks, 0, 10_000_000);
   const frameMedianMs = clampFiniteNumber(obj.frameMedianMs, 0, 5_000);
   const frameP95Ms = clampFiniteNumber(obj.frameP95Ms, 0, 5_000);
-  if (firstInputMs === undefined && inputTicks === undefined && frameMedianMs === undefined && frameP95Ms === undefined) {
+  // Same clamp ceiling as inputTicks -- this is a per-match count, never
+  // expected to be large, but never trusted to actually be small either.
+  const contextLostCount = clampFiniteNumber(obj.contextLostCount, 0, 10_000_000);
+  if (
+    firstInputMs === undefined &&
+    inputTicks === undefined &&
+    frameMedianMs === undefined &&
+    frameP95Ms === undefined &&
+    contextLostCount === undefined
+  ) {
     return null;
   }
-  return {
+  const out: SessionReportMessage = {
     t: 'sessionReport',
     firstInputMs: firstInputMs === undefined ? null : firstInputMs,
     inputTicks: inputTicks !== undefined ? Math.round(inputTicks) : 0,
     frameMedianMs: frameMedianMs ?? 0,
     frameP95Ms: frameP95Ms ?? 0,
   };
+  if (contextLostCount !== undefined) out.contextLostCount = Math.round(contextLostCount);
+  return out;
 }
 
 /** Max characters kept from a client-supplied name. Applied after
