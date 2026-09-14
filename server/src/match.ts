@@ -115,6 +115,25 @@ export interface Seat {
 
 export type MatchPhase = 'lobby' | 'playing' | 'ended';
 
+/** The shape of the `[matchSummary]` console line / onMatchSummary event,
+ *  shared so server/src/stats-store.ts and its tests can type against it
+ *  instead of `Record<string, unknown>`. See logMatchSummary. */
+export interface MatchSummary {
+  evt: 'matchSummary';
+  matchId: string;
+  endReason: 'resolved' | 'abandoned_by_humans' | 'max_duration';
+  durationSec: string;
+  finalTick: number;
+  arenaId: string;
+  winCondition: WinCondition;
+  totalSeats: number;
+  humanSeats: number;
+  humanSlotsEliminated: number;
+  remainingAlive: number;
+  totalKOs: number;
+  maxKoCount: number;
+}
+
 export interface MatchEvents {
   /** Fired when the match leaves the lobby and the sim starts. The transport
    *  layer must tell every watcher, otherwise a match started by the lobby
@@ -132,6 +151,12 @@ export interface MatchEvents {
   onSnapshot: (tick: number, ackedInputTick: Map<number, number>) => void;
   onEliminated: (slot: number, placement: number, tick: number) => void;
   onMatchEnd: (winner: number | null, leaderboard: number[], tick: number, resolved: boolean) => void;
+  /** Fired with the same data as the `[matchSummary]` console line (see
+   *  logMatchSummary below), for the durable stats counters in
+   *  server/src/stats-store.ts (no HTTP surface reads them -- see
+   *  docs/MEASUREMENT.md). Optional so unit tests that build a bare
+   *  MatchEvents object don't all need to supply it. */
+  onMatchSummary?: (summary: MatchSummary) => void;
   //          ^ resolved=true means sim.isMatchOver() decided this naturally
   //          (a real winner, or a genuine simultaneous-KO draw); false
   //          means the match was torn down early because it was abandoned
@@ -758,7 +783,7 @@ export class Match {
     const koCounts = this.sim
       ? this.seats.map((seat) => this.sim!.getFighter(seat.slot).koCount)
       : [];
-    console.log(JSON.stringify({
+    const summary: MatchSummary = {
       evt: 'matchSummary',
       matchId: this.id,
       endReason,
@@ -772,7 +797,18 @@ export class Match {
       remainingAlive: this.seats.filter((s) => !s.eliminated).length,
       totalKOs: koCounts.reduce((sum, n) => sum + n, 0),
       maxKoCount: koCounts.length ? Math.max(...koCounts) : 0,
-    }));
+    };
+    console.log(JSON.stringify(summary));
+    // Durable stats aggregation (server/src/stats-store.ts) is a separate
+    // concern from this console line: the console line is for
+    // journalctl/manual reading, the event lets index.ts persist the
+    // same figures to /srv/bash-fighter/shared so they survive a
+    // restart. Never let a stats-recording bug break the match loop.
+    try {
+      this.events.onMatchSummary?.(summary);
+    } catch (err) {
+      console.log(`[matchSummary] onMatchSummary handler failed: ${(err as Error).message}`);
+    }
   }
 
   /** True once every human seat is unreachable: eliminated, or

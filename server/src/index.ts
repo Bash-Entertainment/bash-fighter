@@ -21,6 +21,7 @@ import {
   type SessionReportMessage,
 } from '@bash-fighter/net/src/protocol.ts';
 import { logSessionEnd } from './session-telemetry.ts';
+import { createStatsRecorder } from './stats-store.ts';
 import { RoomManager, DEFAULT_CAPACITY, DEFAULT_MINIMUM } from './rooms.ts';
 import { tickMetricsSnapshot } from './tick-metrics.ts';
 import { modeDisplayName } from './mode-rotation.ts';
@@ -263,6 +264,9 @@ function makeEventsFor(matchId: string) {
         if (c) send(c, msg);
       }
     },
+    onMatchSummary(summary) {
+      statsRecorder.recordMatchSummary(summary);
+    },
     onMatchEnd(winner: number | null, leaderboard: number[], tick: number, resolved: boolean) {
       const msg: ServerControlMessage = { t: 'matchEnd', winner, leaderboard, tick, resolved };
       // Send-time log (2026-09-09): lets a live cross-reference against
@@ -283,6 +287,12 @@ function makeEventsFor(matchId: string) {
 const CAPACITY = Number(process.env.MATCH_CAPACITY ?? DEFAULT_CAPACITY);
 const MINIMUM = Number(process.env.MATCH_MINIMUM ?? DEFAULT_MINIMUM);
 const manager = new RoomManager(makeEventsFor, CAPACITY, MINIMUM);
+
+// Durable private stats aggregation (server/src/stats-store.ts) -- no
+// HTTP route reads this; it exists purely so scripts/stats-report.mjs
+// (run over SSH on the production box) can report real, restart-
+// surviving numbers. See docs/MEASUREMENT.md.
+const statsRecorder = createStatsRecorder();
 
 const feedbackHandler = createFeedbackHandler();
 
@@ -364,6 +374,7 @@ const wss = new WebSocketServer({ server, path: '/socket' });
     const hadLiveSeat = conn.match && !conn.spectating && conn.slot >= 0 && !conn.superseded;
     if (hadLiveSeat && conn.match) {
       logSessionEnd(conn, conn.match);
+      statsRecorder.recordSessionEnd(conn, conn.match);
       conn.match.markDisconnected(conn.slot);
       logConn(conn, 'seat_disconnected', { gracePeriod: true, ...closeInfo });
     } else if (conn.superseded) {

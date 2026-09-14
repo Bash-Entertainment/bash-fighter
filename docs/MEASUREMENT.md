@@ -487,3 +487,94 @@ node scripts/session-metrics.mjs /path/to/bash-fighter.log
 See also: [[20-Player Production-Hardware Measurements 2026-09-08]],
 [[Bot Combat Engagement Fix 2026-09-09]], [[Match Duration Contradiction: The Spire Firing Squad 2026-09-09]],
 [[Player Feedback Channel 2026-09-13]], [[Bandwidth Reduction Pass 2026-09-11]].
+
+## Durable private stats store and report script, 2026-09-14
+
+Added so the owner can ask "have we had any real activity?" without
+grepping raw logs by hand, and so a service restart or a deploy does not
+lose the answer. **There is no web page and no HTTP endpoint for this --
+by explicit owner decision, bashfighter.com exposes nothing new at all.**
+The only way to read these numbers is to run a script over SSH on the
+production box and paste its stdout.
+
+### The store: `server/src/stats-store.ts`
+
+One append-only JSONL file, same convention as `feedback.ts`
+(`FEEDBACK_LOG_PATH`) and `session-telemetry.ts`: path from
+`STATS_LOG_PATH`, defaulting to `/srv/bash-fighter/shared/stats.jsonl`.
+It lives in `/srv/bash-fighter/shared`, not inside a release directory,
+specifically because releases are swapped via a `current` symlink --
+anything written inside a release directory would vanish on the next
+deploy. Two record shapes, one per line, distinguished by `type`:
+
+```json
+{"type":"matchEnd","ts":"2026-09-14T07:00:00.000Z","matchId":"m1","arenaId":"battle-royale-20","winCondition":"battleRoyale","endReason":"resolved","durationSec":92.3,"totalSeats":3,"humanSeats":1,"totalKOs":2,"maxKoCount":1}
+{"type":"sessionEnd","ts":"2026-09-14T07:00:05.000Z","matchId":"m1","winCondition":"battleRoyale","eliminated":false,"endReason":"disconnected","sessionDurationSec":21.4,"touchActive":false,"firstInputMs":620,"inputTicks":340,"frameMedianMs":15.9,"frameP95Ms":19.4}
+```
+
+`matchEnd` is written from `Match`'s `onMatchSummary` event -- the same
+data as the existing `[matchSummary]` console line, just also persisted.
+`sessionEnd` is written from the same `close`-handler call site as the
+existing `[sessionEnd]` console line, for human seats only. Both writes
+are wrapped so a filesystem problem can never crash the match server or
+drop a live connection: on any error, `appendStatsLine` logs a fallback
+line to stdout instead of throwing (see `server/test/stats-store.test.ts`
+for the forced-failure test against an unwritable path). The store never
+truncates or rewrites -- restarting the service and creating a fresh
+`createStatsRecorder()` only appends, so history survives every restart
+and every deploy.
+
+### The report: `scripts/stats-report.mjs`
+
+Run manually, over SSH, whenever the owner wants numbers:
+
+```
+ssh root@135.181.45.254 "node /srv/bash-fighter/current/scripts/stats-report.mjs"
+```
+
+Flags: `--store <path>` (defaults to `STATS_LOG_PATH` env or the shared
+default above), `--feedback-log <path>` (defaults to `FEEDBACK_LOG_PATH`
+env or the shared default, counts lines only -- feedback *text* is never
+read or printed by this script), `--since <ISO date>` to filter to
+records at or after a timestamp, `--json` for machine-readable output,
+and `--extra-log <path>` to additionally fold in an older journalctl
+export (raw `[sessionEnd]`/`matchSummary` lines, same format
+`scripts/session-metrics.mjs` reads) so history from before this store
+existed isn't lost -- anything it contributes is reported separately
+under "extra-log/historical", never silently merged into the durable
+counters.
+
+It reports: total matches and matches per mode (Last Fighter Standing /
+Timed Brawl / Stocks) with average duration each; total human seat
+sessions; how many survived past a 15-second "opening seconds" threshold
+(chosen, not measured -- documented in the script); how many pressed a
+control at all; eliminated vs. left-while-alive; session duration
+distribution (min/median/p95/max); touch vs. keyboard share; client
+frame-time distribution; and feedback submission count (count only).
+
+### Privacy stance, restated plainly for this store
+
+- **No HTTP surface reads any of this.** `/stats` and `/api/stats` were
+  considered and explicitly rejected by the owner on 2026-09-14 -- see
+  the task history -- specifically so nobody outside the project can see
+  activity numbers while the game is in early growth. `server/src/`
+  gained no new route, no new listener, and no new externally reachable
+  code path for this feature; only `stats-store.ts` (new), `match.ts`
+  (one new optional event) and `index.ts` (wiring) changed.
+- **No unique-visitor number, ever.** We do not collect IPs, user agents,
+  cookies, or device fingerprints, and this store does not start now --
+  every count here is a *session* count. A returning player and a new
+  player are indistinguishable by design, so `stats-report.mjs` never
+  prints anything claiming otherwise.
+- **Zero prints as zero.** No filler, no rounding up, no placeholder
+  numbers -- if nothing happened, the report says `0`.
+- **Not retrospective.** The report states the timestamp of the first
+  record in the store; anything before that only shows up if you pass
+  `--extra-log` with an older export, and even then it's labelled
+  separately.
+- **Our own QA traffic is not separated from real players' traffic** --
+  there is no flag distinguishing them, and the report says so plainly
+  rather than guessing.
+
+See also: [[Player Feedback Channel 2026-09-13]], [[Production Traffic Reality Check 2026-09-13]].
+
