@@ -250,3 +250,49 @@ test('[sessionEnd]: a bogus slot with no matching seat is a no-op, never throws'
   assert.doesNotThrow(() => logSessionEnd(conn, match));
 });
 
+
+test('[sessionEnd]: device-capability buckets and frame/network telemetry (2026-09-14) log through when present', () => {
+  const match = realMatch();
+  const hello = parseClientControl(
+    JSON.stringify({
+      t: 'hello',
+      protocolVersion: PROTOCOL_VERSION,
+      name: 'Ann',
+      profile: { touchActive: true, hwConcurrencyBucket: 8, deviceMemoryBucket: 4, dprBucket: 3 },
+    }),
+  ) as HelloMessage;
+  const report = parseClientControl(
+    JSON.stringify({
+      t: 'sessionReport',
+      firstInputMs: 100,
+      inputTicks: 5,
+      frameMedianMs: 71,
+      frameP95Ms: 90,
+      frameHistogram: [0, 1, 2, 10, 3, 1],
+      hiddenFrames: 4,
+      networkHitchCount: 2,
+    }),
+  ) as SessionReportMessage;
+  const conn = fakeConn({ slot: 0, profile: hello.profile ?? null, lastReport: report });
+  const lines = captureLogs(() => logSessionEnd(conn, match));
+  const record = JSON.parse(lines.find((l) => l.startsWith('[sessionEnd]'))!.slice('[sessionEnd] '.length));
+  assert.equal(record.hwConcurrencyBucket, 8);
+  assert.equal(record.deviceMemoryBucket, 4);
+  assert.equal(record.dprBucket, 3);
+  assert.deepEqual(record.frameHistogram, [0, 1, 2, 10, 3, 1]);
+  assert.equal(record.hiddenFrames, 4);
+  assert.equal(record.networkHitchCount, 2);
+});
+
+test('[sessionEnd]: a missing profile/report logs the new fields as null too, not throw', () => {
+  const match = realMatch();
+  const conn = fakeConn({ slot: 0, profile: null, lastReport: null });
+  const lines = captureLogs(() => logSessionEnd(conn, match));
+  const record = JSON.parse(lines.find((l) => l.startsWith('[sessionEnd]'))!.slice('[sessionEnd] '.length));
+  assert.equal(record.hwConcurrencyBucket, null);
+  assert.equal(record.deviceMemoryBucket, null);
+  assert.equal(record.dprBucket, null);
+  assert.equal(record.frameHistogram, null);
+  assert.equal(record.hiddenFrames, null);
+  assert.equal(record.networkHitchCount, null);
+});

@@ -59,6 +59,19 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
       frameP95Ms: report?.frameP95Ms ?? null,
       contextLostCount: report?.contextLostCount ?? null,
       renderStalled: report?.renderStalled ?? null,
+      // Device-capability tags and frame/network telemetry added
+      // 2026-09-14 (see docs/MEASUREMENT.md) to help tell a weak/
+      // throttled device apart from a browser/network hitch as the
+      // explanation for the phone-vs-QA frame-time gap. All optional on
+      // the wire already (see protocol.ts); `?? null` here just means
+      // "this client's build/browser didn't report it", same as every
+      // other field in this line.
+      hwConcurrencyBucket: profile?.hwConcurrencyBucket ?? null,
+      deviceMemoryBucket: profile?.deviceMemoryBucket ?? null,
+      dprBucket: profile?.dprBucket ?? null,
+      frameHistogram: report?.frameHistogram ?? null,
+      hiddenFrames: report?.hiddenFrames ?? null,
+      networkHitchCount: report?.networkHitchCount ?? null,
     };
     console.log(`[sessionEnd] ${JSON.stringify(line)}`);
   } catch (err) {

@@ -96,6 +96,29 @@ export interface ClientSessionProfile {
    *  three-way grouping (all / not-marked-QA / marked-QA) and its note
    *  that unmarked QA traffic is still possible. */
   qa?: boolean;
+  /** Coarse, bucketed `navigator.hardwareConcurrency` (logical CPU
+   *  count), added 2026-09-14 to help tell "weak/thermal-throttled
+   *  device" apart from "browser/network hitch" as an explanation for
+   *  the phone-vs-QA frame-time gap (see docs/MEASUREMENT.md). Bucketed
+   *  client-side to the nearest power-of-two ceiling in
+   *  `packages/app/src/session-report.ts`'s `bucketHardwareConcurrency`
+   *  (2, 4, 8, 16, 32, 64) -- this is already public API
+   *  (`navigator.hardwareConcurrency`) and, alone or combined with the
+   *  other bucket fields here, does not narrow down to an individual
+   *  device. */
+  hwConcurrencyBucket?: number;
+  /** Coarse, bucketed `navigator.deviceMemory` in GB, same rationale as
+   *  `hwConcurrencyBucket`. Absent on browsers that don't implement the
+   *  Device Memory API (notably Safari) -- absence means "not
+   *  available", never "zero memory". Bucketed to the spec's own
+   *  reporting granularity (0.25, 0.5, 1, 2, 4, 6, 8, ...GB ceilings). */
+  deviceMemoryBucket?: number;
+  /** Coarse, bucketed `window.devicePixelRatio`, same rationale. A high
+   *  DPR (3+) on a small viewport is itself a signal the device is
+   *  asking the GPU to composite a lot more physical pixels than the
+   *  logical viewport suggests -- useful context for a frame-time
+   *  reading that otherwise looks the same as a low-DPR phone. */
+  dprBucket?: number;
 }
 
 /** Sent by a client that wants to keep watching after being eliminated. */
@@ -158,6 +181,43 @@ export interface SessionReportMessage {
    *  privacy contract as contextLostCount -- no new personal data.
    *  Optional for the same reason every other field here is. */
   renderStalled?: boolean;
+  /** Cumulative count of rendered frames whose measured delta fell into
+   *  each of six coarse buckets (ms): `[<20, 20-33, 33-50, 50-100,
+   *  100-250, >250]`, in that fixed order -- see
+   *  `FRAME_HISTOGRAM_BOUNDARIES_MS` below, which both the client
+   *  (`packages/app/src/session-report.ts`) and this validator share so
+   *  the boundaries can never drift out of sync between them. Added
+   *  2026-09-14 alongside `frameMedianMs`/`frameP95Ms` specifically so a
+   *  steady 71ms/14fps session can be told apart from an otherwise-smooth
+   *  session with a few huge stalls -- the two look identical in a
+   *  median/p95 pair but need different fixes. Frames rendered while the
+   *  tab was hidden are excluded from this histogram (and from
+   *  frameMedianMs/frameP95Ms) -- see `hiddenFrames`. Optional for the
+   *  same backward-compatibility reason as every other field here;
+   *  absent means "not tracked", never "all zero". */
+  frameHistogram?: number[];
+  /** Cumulative count of rendered frames observed while
+   *  `document.visibilityState !== 'visible'` this match (tab
+   *  backgrounded, phone screen off, app-switched away). These frames
+   *  are deliberately excluded from `frameHistogram`/`frameMedianMs`/
+   *  `frameP95Ms`: a backgrounded tab is throttled by the browser on
+   *  purpose and its frame timing says nothing about the device's real
+   *  rendering capability, so counting it there would misreport a
+   *  player who alt-tabbed as a slow device. A session with a high
+   *  `hiddenFrames` relative to its duration is itself a useful signal
+   *  (this player was not actually watching), just a different one.
+   *  Optional/absent means "not tracked". */
+  hiddenFrames?: number;
+  /** Cumulative count of gaps between consecutive received server
+   *  snapshots that exceeded a fixed threshold well above the expected
+   *  ~50ms interval at `SNAPSHOT_HZ` (see `NETWORK_HITCH_THRESHOLD_MS` in
+   *  `packages/app/src/session-report.ts`) -- a network hitch, not a
+   *  render hitch. Measured independently of `frameHistogram`
+   *  specifically so a slow *network* can be told apart from a slow
+   *  *renderer*: the same underlying "the game felt like 14fps" report
+   *  can come from either, and only one of them is about the device.
+   *  Optional/absent means "not tracked". */
+  networkHitchCount?: number;
 }
 
 export type ClientControlMessage =
@@ -597,6 +657,32 @@ function clampCappedString(value: unknown, maxLength: number): string | undefine
   return cleaned.slice(0, maxLength);
 }
 
+/** Shared histogram bucket ceilings (ms) for `SessionReportMessage.
+ *  frameHistogram` -- exported so the client
+ *  (`packages/app/src/session-report.ts`) and `scripts/stats-report.mjs`
+ *  bucket/read using the exact same six buckets this validator enforces
+ *  the shape of: `[<20, 20-33, 33-50, 50-100, 100-250, >250]`. */
+export const FRAME_HISTOGRAM_BOUNDARIES_MS = [20, 33, 50, 100, 250] as const;
+export const FRAME_HISTOGRAM_BUCKET_COUNT = FRAME_HISTOGRAM_BOUNDARIES_MS.length + 1;
+
+/** Validates a `frameHistogram` array: must be exactly
+ *  FRAME_HISTOGRAM_BUCKET_COUNT finite, non-negative numbers. Any other
+ *  shape (wrong length, wrong element type, negative) is dropped
+ *  entirely -- a partially-wrong histogram is not a usable histogram, so
+ *  there's no safe partial-clamp here unlike the scalar fields below. */
+function sanitiseFrameHistogram(value: unknown): number[] | undefined {
+  if (!Array.isArray(value) || value.length !== FRAME_HISTOGRAM_BUCKET_COUNT) return undefined;
+  const out: number[] = [];
+  for (const v of value) {
+    // Reject a negative element outright rather than clamping it to 0:
+    // a negative count is a malformed histogram, not a valid-but-small
+    // one, and clamping it would silently hide the malformed input.
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return undefined;
+    out.push(Math.round(Math.min(v, 10_000_000)));
+  }
+  return out;
+}
+
 /** Validates and clamps HelloMessage.profile -- never trusts a client to
  *  have sent sane values, exactly like the rest of this boundary. Every
  *  field is optional and independently dropped if malformed rather than
@@ -617,6 +703,18 @@ function sanitiseClientProfile(value: unknown): ClientSessionProfile | undefined
   // ClientSessionProfile.qa's doc comment for why this is never treated
   // as proof.
   if (typeof input.qa === 'boolean') out.qa = input.qa;
+  // Coarse device-capability tags (2026-09-14, see docs/MEASUREMENT.md).
+  // Each is an already-bucketed number from the client -- clamped again
+  // here rather than trusted, same as every other numeric field in this
+  // function. Wide ceilings: these buckets are coarse by construction,
+  // so a generous clamp still cannot narrow down to an individual
+  // device.
+  const hwConcurrency = clampFiniteNumber(input.hwConcurrencyBucket, 1, 128);
+  if (hwConcurrency !== undefined) out.hwConcurrencyBucket = Math.round(hwConcurrency);
+  const deviceMemory = clampFiniteNumber(input.deviceMemoryBucket, 0.25, 128);
+  if (deviceMemory !== undefined) out.deviceMemoryBucket = deviceMemory;
+  const dpr = clampFiniteNumber(input.dprBucket, 0.5, 8);
+  if (dpr !== undefined) out.dprBucket = dpr;
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -633,20 +731,12 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   const inputTicks = clampFiniteNumber(obj.inputTicks, 0, 10_000_000);
   const frameMedianMs = clampFiniteNumber(obj.frameMedianMs, 0, 5_000);
   const frameP95Ms = clampFiniteNumber(obj.frameP95Ms, 0, 5_000);
-  // Same clamp ceiling as inputTicks -- this is a per-match count, never
-  // expected to be large, but never trusted to actually be small either.
   const contextLostCount = clampFiniteNumber(obj.contextLostCount, 0, 10_000_000);
   const renderStalled = typeof obj.renderStalled === 'boolean' ? obj.renderStalled : undefined;
-  if (
-    firstInputMs === undefined &&
-    inputTicks === undefined &&
-    frameMedianMs === undefined &&
-    frameP95Ms === undefined &&
-    contextLostCount === undefined &&
-    renderStalled === undefined
-  ) {
-    return null;
-  }
+  const frameHistogram = sanitiseFrameHistogram(obj.frameHistogram);
+  const hiddenFrames = clampFiniteNumber(obj.hiddenFrames, 0, 10_000_000);
+  const networkHitchCount = clampFiniteNumber(obj.networkHitchCount, 0, 10_000_000);
+  if ([firstInputMs, inputTicks, frameMedianMs, frameP95Ms, contextLostCount, renderStalled, frameHistogram, hiddenFrames, networkHitchCount].every((v) => v === undefined)) return null;
   const out: SessionReportMessage = {
     t: 'sessionReport',
     firstInputMs: firstInputMs === undefined ? null : firstInputMs,
@@ -656,6 +746,9 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   };
   if (contextLostCount !== undefined) out.contextLostCount = Math.round(contextLostCount);
   if (renderStalled !== undefined) out.renderStalled = renderStalled;
+  if (frameHistogram !== undefined) out.frameHistogram = frameHistogram;
+  if (hiddenFrames !== undefined) out.hiddenFrames = Math.round(hiddenFrames);
+  if (networkHitchCount !== undefined) out.networkHitchCount = Math.round(networkHitchCount);
   return out;
 }
 

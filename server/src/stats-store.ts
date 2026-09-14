@@ -64,6 +64,19 @@ export interface StoredSessionEndRecord {
    *  absent from records written before this field existed, which the
    *  report treats as "unknown", not as false. */
   qa: boolean;
+  /** Coarse device-capability tags (2026-09-14, see docs/MEASUREMENT.md
+   *  and ClientSessionProfile's doc comments) -- null when the client's
+   *  browser/build didn't report that field, never a real "zero". */
+  hwConcurrencyBucket: number | null;
+  deviceMemoryBucket: number | null;
+  dprBucket: number | null;
+  /** Cumulative per-match frame-time histogram in six fixed buckets, see
+   *  SessionReportMessage.frameHistogram. Null when not tracked (older
+   *  client). */
+  frameHistogram: number[] | null;
+  /** See SessionReportMessage.hiddenFrames / networkHitchCount. */
+  hiddenFrames: number | null;
+  networkHitchCount: number | null;
 }
 
 export type StatsRecord = StoredMatchEndRecord | StoredSessionEndRecord;
@@ -160,6 +173,12 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       frameMedianMs: report?.frameMedianMs ?? null,
       frameP95Ms: report?.frameP95Ms ?? null,
       qa: seat.qa,
+      hwConcurrencyBucket: profile?.hwConcurrencyBucket ?? null,
+      deviceMemoryBucket: profile?.deviceMemoryBucket ?? null,
+      dprBucket: profile?.dprBucket ?? null,
+      frameHistogram: report?.frameHistogram ?? null,
+      hiddenFrames: report?.hiddenFrames ?? null,
+      networkHitchCount: report?.networkHitchCount ?? null,
     };
     appendStatsLine(logPath, record);
   }

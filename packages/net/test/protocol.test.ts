@@ -18,7 +18,10 @@ import {
   type ErrorMessage,
   type PingMessage,
   type ServerControlMessage,
+  FRAME_HISTOGRAM_BOUNDARIES_MS,
+  FRAME_HISTOGRAM_BUCKET_COUNT,
 } from '../src/protocol.ts';
+import type { HelloMessage, SessionReportMessage } from '../src/protocol.ts';
 
 describe('input frame encode/decode', () => {
   test('round-trips a normal frame', () => {
@@ -307,5 +310,89 @@ describe('dedupeName', () => {
     const result = dedupeName(long, [long]);
     assert.ok(result.length <= 16, `expected <=16 chars, got "${result}" (${result.length})`);
     assert.notEqual(result, long);
+  });
+});
+
+describe('client telemetry: device-capability buckets and frame/network histograms (2026-09-14)', () => {
+  function helloWith(profileExtra: Record<string, unknown>) {
+    return JSON.stringify({ t: 'hello', protocolVersion: PROTOCOL_VERSION, name: 'Ann', profile: profileExtra });
+  }
+
+  test('hello.profile: accepts and clamps well-formed device-capability buckets', () => {
+    const msg = parseClientControl(helloWith({ hwConcurrencyBucket: 8, deviceMemoryBucket: 4, dprBucket: 2 }));
+    assert.equal(msg?.t, 'hello');
+    assert.deepEqual((msg as HelloMessage).profile, { hwConcurrencyBucket: 8, deviceMemoryBucket: 4, dprBucket: 2 });
+  });
+
+  test('hello.profile: clamps an absurd hwConcurrencyBucket rather than trusting the client', () => {
+    const msg = parseClientControl(helloWith({ hwConcurrencyBucket: 999999 }));
+    assert.equal((msg as HelloMessage).profile?.hwConcurrencyBucket, 128);
+  });
+
+  test('hello.profile: rejects non-numeric fields and clamps out-of-range ones instead of trusting the client', () => {
+    const msg = parseClientControl(helloWith({ hwConcurrencyBucket: 'lots', deviceMemoryBucket: -4, dprBucket: null })) as HelloMessage;
+    assert.equal(msg?.t, 'hello');
+    // hwConcurrencyBucket ('lots') and dprBucket (null) are not numbers at all -> dropped.
+    assert.equal('hwConcurrencyBucket' in msg.profile!, false);
+    assert.equal('dprBucket' in msg.profile!, false);
+    // deviceMemoryBucket (-4) is a number but below the valid floor -> clamped to the min, not dropped.
+    assert.equal(msg.profile!.deviceMemoryBucket, 0.25);
+  });
+
+  test('hello.profile: an old client that never sends these fields still parses fine (backward compatible)', () => {
+    const msg = parseClientControl(
+      JSON.stringify({ t: 'hello', protocolVersion: PROTOCOL_VERSION, name: 'Ann', profile: { touchActive: true } }),
+    );
+    assert.equal(msg?.t, 'hello');
+    assert.deepEqual((msg as HelloMessage).profile, { touchActive: true });
+  });
+
+  function sessionReportWith(extra: Record<string, unknown>) {
+    return JSON.stringify({
+      t: 'sessionReport',
+      firstInputMs: 100,
+      inputTicks: 10,
+      frameMedianMs: 16,
+      frameP95Ms: 20,
+      ...extra,
+    });
+  }
+
+  test('sessionReport: FRAME_HISTOGRAM_BOUNDARIES_MS/FRAME_HISTOGRAM_BUCKET_COUNT stay in sync', () => {
+    assert.equal(FRAME_HISTOGRAM_BUCKET_COUNT, FRAME_HISTOGRAM_BOUNDARIES_MS.length + 1);
+    assert.deepEqual(FRAME_HISTOGRAM_BOUNDARIES_MS, [20, 33, 50, 100, 250]);
+  });
+
+  test('sessionReport: accepts a well-formed frameHistogram/hiddenFrames/networkHitchCount', () => {
+    const msg = parseClientControl(
+      sessionReportWith({ frameHistogram: [1, 2, 3, 4, 5, 6], hiddenFrames: 7, networkHitchCount: 2 }),
+    ) as SessionReportMessage;
+    assert.deepEqual(msg.frameHistogram, [1, 2, 3, 4, 5, 6]);
+    assert.equal(msg.hiddenFrames, 7);
+    assert.equal(msg.networkHitchCount, 2);
+  });
+
+  test('sessionReport: drops a malformed frameHistogram entirely rather than half-trusting it', () => {
+    const wrongLength = parseClientControl(sessionReportWith({ frameHistogram: [1, 2, 3] })) as SessionReportMessage;
+    assert.equal('frameHistogram' in wrongLength, false);
+
+    const negativeElement = parseClientControl(sessionReportWith({ frameHistogram: [1, -2, 3, 4, 5, 6] })) as SessionReportMessage;
+    assert.equal('frameHistogram' in negativeElement, false);
+
+    const wrongType = parseClientControl(sessionReportWith({ frameHistogram: 'nope' })) as SessionReportMessage;
+    assert.equal('frameHistogram' in wrongType, false);
+  });
+
+  test('sessionReport: clamps an absurd/negative hiddenFrames/networkHitchCount into range rather than trusting the client', () => {
+    const msg = parseClientControl(sessionReportWith({ hiddenFrames: 1e12, networkHitchCount: -5 })) as SessionReportMessage;
+    assert.equal(msg.hiddenFrames, 10_000_000); // clamped to the max, same convention as inputTicks
+    assert.equal(msg.networkHitchCount, 0); // clamped to the min, same convention as inputTicks
+  });
+
+  test('sessionReport: an old client sending none of the new fields still parses exactly as before', () => {
+    const msg = parseClientControl(
+      JSON.stringify({ t: 'sessionReport', firstInputMs: null, inputTicks: 0, frameMedianMs: 16, frameP95Ms: 20 }),
+    ) as SessionReportMessage;
+    assert.deepEqual(msg, { t: 'sessionReport', firstInputMs: null, inputTicks: 0, frameMedianMs: 16, frameP95Ms: 20 });
   });
 });

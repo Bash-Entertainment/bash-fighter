@@ -95,3 +95,47 @@ test('buildReport: matches.qa breakdown counts matches with/without a QA seat an
   assert.equal(report.matches.qa.matchesUnknown, 1);
   assert.equal(report.matches.qa.totalQaSeatsKnown, 2);
 });
+
+test('buildReport: frame-time histogram sums per-bucket across sessions in the group', () => {
+  const storeLines = [
+    sessionLine({ matchId: 'm6', frameHistogram: [1, 2, 3, 4, 5, 6] }),
+    sessionLine({ matchId: 'm6', frameHistogram: [0, 1, 0, 1, 0, 1] }),
+    sessionLine({ matchId: 'm6' }), // legacy record, no histogram -- must not throw or pollute the sum
+  ];
+  const report = buildReport({ storeLines, extraLines: [], feedbackCount: 0, since: null });
+  const fh = report.humanSessions.all.frameHistogram;
+  assert.deepEqual(fh.buckets, [1, 3, 3, 5, 5, 7]);
+  assert.equal(fh.total, 24);
+  assert.equal(fh.sessions, 2);
+});
+
+test('buildReport: hiddenFrames and networkHitches are aggregated and counted separately from frame time', () => {
+  const storeLines = [
+    sessionLine({ matchId: 'm7', hiddenFrames: 10, networkHitchCount: 0 }),
+    sessionLine({ matchId: 'm7', hiddenFrames: 0, networkHitchCount: 3 }),
+    sessionLine({ matchId: 'm7' }), // legacy, neither field known
+  ];
+  const report = buildReport({ storeLines, extraLines: [], feedbackCount: 0, since: null });
+  const hf = report.humanSessions.all.hiddenFrames;
+  assert.equal(hf.sessionsWithAny, 1);
+  assert.equal(hf.knownDenominator, 2);
+  assert.equal(hf.total, 10);
+  const nh = report.humanSessions.all.networkHitches;
+  assert.equal(nh.sessionsWithAny, 1);
+  assert.equal(nh.knownDenominator, 2);
+  assert.equal(nh.total, 3);
+});
+
+test('buildReport: device-capability bucket distributions count known values per bucket, ignore unknown', () => {
+  const storeLines = [
+    sessionLine({ matchId: 'm8', hwConcurrencyBucket: 8, deviceMemoryBucket: 4, dprBucket: 2 }),
+    sessionLine({ matchId: 'm8', hwConcurrencyBucket: 8, deviceMemoryBucket: 2, dprBucket: 2 }),
+    sessionLine({ matchId: 'm8' }), // legacy, no capability fields at all
+  ];
+  const report = buildReport({ storeLines, extraLines: [], feedbackCount: 0, since: null });
+  const dc = report.humanSessions.all.deviceCapability;
+  assert.deepEqual(dc.hwConcurrencyBucket.counts, { 8: 2 });
+  assert.equal(dc.hwConcurrencyBucket.known, 2);
+  assert.deepEqual(dc.deviceMemoryBucket.counts, { 2: 1, 4: 1 });
+  assert.deepEqual(dc.dprBucket.counts, { 2: 2 });
+});

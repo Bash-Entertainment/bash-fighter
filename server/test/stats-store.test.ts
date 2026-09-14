@@ -277,3 +277,64 @@ test('appendStatsLine: exported directly and also never throws on a bad path', (
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('recordSessionEnd: carries device-capability buckets and frame/network telemetry (2026-09-14) through', () => {
+  const { logPath, cleanup } = scratchDir();
+  try {
+    const match = new Match('stats-session-telemetry-test-1', 2, 1, noopEvents());
+    match.addSeat('human-a', false);
+    match.addSeat('bot-1', true, undefined as unknown as string);
+    match.start();
+
+    const recorder = createStatsRecorder({ logPath, now: () => 1_700_000_010_000 });
+    const conn = fakeConn({
+      slot: 0,
+      profile: { touchActive: true, hwConcurrencyBucket: 4, deviceMemoryBucket: 2, dprBucket: 3 },
+      lastReport: {
+        firstInputMs: 900,
+        inputTicks: 42,
+        frameMedianMs: 71,
+        frameP95Ms: 95,
+        frameHistogram: [0, 2, 5, 30, 3, 0],
+        hiddenFrames: 6,
+        networkHitchCount: 1,
+      },
+    });
+    recorder.recordSessionEnd(conn, match);
+    match.stop();
+
+    const record = readLines(logPath)[0]!;
+    assert.equal(record.hwConcurrencyBucket, 4);
+    assert.equal(record.deviceMemoryBucket, 2);
+    assert.equal(record.dprBucket, 3);
+    assert.deepEqual(record.frameHistogram, [0, 2, 5, 30, 3, 0]);
+    assert.equal(record.hiddenFrames, 6);
+    assert.equal(record.networkHitchCount, 1);
+  } finally {
+    cleanup();
+  }
+});
+
+test('recordSessionEnd: absent device-capability/frame-histogram telemetry logs as null, not zero', () => {
+  const { logPath, cleanup } = scratchDir();
+  try {
+    const match = new Match('stats-session-telemetry-test-2', 2, 1, noopEvents());
+    match.addSeat('human-a', false);
+    match.addSeat('bot-1', true, undefined as unknown as string);
+    match.start();
+
+    const recorder = createStatsRecorder({ logPath, now: () => 1_700_000_010_000 });
+    recorder.recordSessionEnd(fakeConn({ slot: 0 }), match);
+    match.stop();
+
+    const record = readLines(logPath)[0]!;
+    assert.equal(record.hwConcurrencyBucket, null);
+    assert.equal(record.deviceMemoryBucket, null);
+    assert.equal(record.dprBucket, null);
+    assert.equal(record.frameHistogram, null);
+    assert.equal(record.hiddenFrames, null);
+    assert.equal(record.networkHitchCount, null);
+  } finally {
+    cleanup();
+  }
+});

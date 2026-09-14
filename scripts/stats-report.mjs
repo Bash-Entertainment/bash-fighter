@@ -33,6 +33,12 @@
 import { createReadStream, existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
+// Mirrors packages/app/src/session-report.ts's NETWORK_HITCH_THRESHOLD_MS
+// -- this script is plain .mjs (no build step), so the constant is
+// duplicated rather than imported; keep the two in sync if either
+// changes.
+const NETWORK_HITCH_THRESHOLD_MS = 250;
+
 const MODE_LABELS = {
   battleRoyale: 'Last Fighter Standing',
   timedKO: 'Timed Brawl',
@@ -213,6 +219,53 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
     const touchKnown = touchCount + keyboardCount;
     const frameMedians = group.map((s) => s.frameMedianMs).filter((v) => typeof v === 'number' && v > 0).sort((a, b) => a - b);
     const frameP95s = group.map((s) => s.frameP95Ms).filter((v) => typeof v === 'number' && v > 0).sort((a, b) => a - b);
+    // Device-capability tag distributions (2026-09-14, see
+    // docs/MEASUREMENT.md) -- each bucket already coarse and public
+    // API, so a simple count-per-bucket is safe to print as-is.
+    function bucketCounts(field) {
+      const counts = {};
+      let known = 0;
+      for (const s of group) {
+        const v = s[field];
+        if (typeof v !== 'number') continue;
+        known += 1;
+        counts[v] = (counts[v] ?? 0) + 1;
+      }
+      return { counts, known };
+    }
+    const hwConcurrency = bucketCounts('hwConcurrencyBucket');
+    const deviceMemory = bucketCounts('deviceMemoryBucket');
+    const dpr = bucketCounts('dprBucket');
+
+    // Frame-time histogram (2026-09-14): summed across every session in
+    // this group, bucket-by-bucket, in the same fixed order as
+    // packages/net/src/protocol.ts's FRAME_HISTOGRAM_BOUNDARIES_MS
+    // ([<20, 20-33, 33-50, 50-100, 100-250, >250]ms) -- this is the
+    // field that can tell a steady 14fps session apart from a smooth
+    // session with a few huge stalls, which frameMedianMs/frameP95Ms
+    // alone cannot.
+    const frameHistogramSum = [0, 0, 0, 0, 0, 0];
+    let frameHistogramSessions = 0;
+    for (const s of group) {
+      if (!Array.isArray(s.frameHistogram) || s.frameHistogram.length !== 6) continue;
+      frameHistogramSessions += 1;
+      for (let i = 0; i < 6; i += 1) {
+        const v = s.frameHistogram[i];
+        if (typeof v === 'number') frameHistogramSum[i] += v;
+      }
+    }
+    const frameHistogramTotal = frameHistogramSum.reduce((a, b) => a + b, 0);
+
+    // Hidden/backgrounded frames and network hitches (2026-09-14): the
+    // two signals that separate "this device/browser is slow" from
+    // "this player alt-tabbed" and "the network stalled", respectively.
+    const hiddenFramesKnown = group.filter((s) => typeof s.hiddenFrames === 'number');
+    const sessionsWithHiddenFrames = hiddenFramesKnown.filter((s) => s.hiddenFrames > 0).length;
+    const totalHiddenFrames = hiddenFramesKnown.reduce((sum, s) => sum + s.hiddenFrames, 0);
+    const hitchesKnown = group.filter((s) => typeof s.networkHitchCount === 'number');
+    const sessionsWithNetworkHitches = hitchesKnown.filter((s) => s.networkHitchCount > 0).length;
+    const totalNetworkHitches = hitchesKnown.reduce((sum, s) => sum + s.networkHitchCount, 0);
+
     return {
       total: group.length,
       fromStore: group.filter((s) => s.__source === 'store').length,
@@ -235,6 +288,26 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
         medianOfMedians: percentile(frameMedians, 50),
         p95OfP95s: percentile(frameP95s, 95),
         n: frameMedians.length,
+      },
+      deviceCapability: {
+        hwConcurrencyBucket: hwConcurrency,
+        deviceMemoryBucket: deviceMemory,
+        dprBucket: dpr,
+      },
+      frameHistogram: {
+        buckets: frameHistogramSum,
+        total: frameHistogramTotal,
+        sessions: frameHistogramSessions,
+      },
+      hiddenFrames: {
+        sessionsWithAny: sessionsWithHiddenFrames,
+        knownDenominator: hiddenFramesKnown.length,
+        total: totalHiddenFrames,
+      },
+      networkHitches: {
+        sessionsWithAny: sessionsWithNetworkHitches,
+        knownDenominator: hitchesKnown.length,
+        total: totalNetworkHitches,
       },
     };
   }
@@ -334,6 +407,31 @@ function printReport(report) {
     w(`  session duration (s): min ${fmt(hs.durationSec.min)}  median ${fmt(hs.durationSec.median)}  p95 ${fmt(hs.durationSec.p95)}  max ${fmt(hs.durationSec.max)}  (n=${hs.durationSec.n})`);
     w(`  input device: touch ${hs.touch.touch}, keyboard ${hs.touch.keyboard} (of ${hs.touch.knownDenominator} known; ${pct(hs.touch.touch, hs.touch.knownDenominator)} touch)`);
     w(`  client frame time (ms): median-of-medians ${fmt(hs.frameTimeMs.medianOfMedians)}  p95-of-p95s ${fmt(hs.frameTimeMs.p95OfP95s)}  (n=${hs.frameTimeMs.n})`);
+    const fh = hs.frameHistogram;
+    if (fh.sessions > 0) {
+      const labels = ['<20ms', '20-33ms', '33-50ms', '50-100ms', '100-250ms', '>250ms'];
+      const parts = fh.buckets.map((v, i) => `${labels[i]} ${pct(v, fh.total)}`);
+      w(`  frame time histogram (${fh.sessions} sessions, ${fh.total} frames): ${parts.join('  ')}`);
+    }
+    const hf = hs.hiddenFrames;
+    if (hf.knownDenominator > 0) {
+      w(`  sessions with hidden/backgrounded frames: ${hf.sessionsWithAny}/${hf.knownDenominator} known (${pct(hf.sessionsWithAny, hf.knownDenominator)}), ${hf.total} hidden frames total`);
+    }
+    const nh = hs.networkHitches;
+    if (nh.knownDenominator > 0) {
+      w(`  sessions with a network hitch (>${NETWORK_HITCH_THRESHOLD_MS}ms gap): ${nh.sessionsWithAny}/${nh.knownDenominator} known (${pct(nh.sessionsWithAny, nh.knownDenominator)}), ${nh.total} hitches total`);
+    }
+    const dc = hs.deviceCapability;
+    const bucketLine = (name, b) => {
+      if (b.known === 0) return null;
+      const entries = Object.keys(b.counts).map(Number).sort((a, b2) => a - b2);
+      const parts = entries.map((k) => `${k}: ${b.counts[k]}`);
+      return `  ${name} (n=${b.known} known): ${parts.join(', ')}`;
+    };
+    for (const [name, b] of [['hardwareConcurrency bucket', dc.hwConcurrencyBucket], ['deviceMemory bucket (GB)', dc.deviceMemoryBucket], ['devicePixelRatio bucket', dc.dprBucket]]) {
+      const line = bucketLine(name, b);
+      if (line) w(line);
+    }
   }
 
   w('human seat sessions (sessions, not people -- see note above)');

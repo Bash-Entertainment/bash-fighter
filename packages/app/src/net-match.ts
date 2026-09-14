@@ -18,7 +18,7 @@ import {
 import { PLACEHOLDER_CHARACTER, createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID } from '@bash-fighter/content';
 import type { CharacterData } from '@bash-fighter/sim';
 import { InputManager, isTouchCapable } from '@bash-fighter/input';
-import { buildClientProfile, buildSessionReportMessage, InputActivityTracker, FrameTimeTracker } from './session-report.ts';
+import { buildClientProfile, buildSessionReportMessage, InputActivityTracker, FrameTimeTracker, NetworkHitchTracker } from './session-report.ts';
 import { readBuildSha } from './ui/feedback-panel.ts';
 import {
   Renderer,
@@ -259,6 +259,11 @@ export class NetMatch {
   // the previous one.
   private inputActivity = new InputActivityTracker();
   private frameTimeTracker = new FrameTimeTracker();
+  // See NetworkHitchTracker's doc comment (session-report.ts) -- counts
+  // gaps between received server snapshots big enough to be a network
+  // stall rather than render jitter, so sessionReport can tell the two
+  // apart. Reset per-match alongside the other telemetry trackers.
+  private networkHitchTracker = new NetworkHitchTracker();
   // Count of webglcontextlost events, sent in sessionReport (see
   // docs/MEASUREMENT.md and protocol.ts's SessionReportMessage.
   // contextLostCount). Reset per-match alongside the other telemetry
@@ -331,6 +336,9 @@ export class NetMatch {
       frameP95Ms: this.frameTimeTracker.getP95Ms(),
       contextLostCount: this.contextLostCount,
       renderStalled: this.renderStalled,
+      frameHistogram: this.frameTimeTracker.getHistogram(),
+      hiddenFrames: this.frameTimeTracker.getHiddenFrames(),
+      networkHitchCount: this.networkHitchTracker.getCount(),
     });
     ws.send(JSON.stringify(report));
   }
@@ -400,6 +408,16 @@ export class NetMatch {
         viewportHeight: window.innerHeight,
         buildSha: readBuildSha() ?? null,
         qa: this.qaMode,
+        // Coarse device-capability tags (see docs/MEASUREMENT.md,
+        // 2026-09-14) -- already-public, non-identifying browser APIs,
+        // bucketed by buildClientProfile before sending. `deviceMemory`
+        // is missing on browsers without the Device Memory API (e.g.
+        // Safari); reading it via an untyped cast keeps this file free
+        // of a project-wide lib.dom.d.ts patch for one experimental
+        // field.
+        hardwareConcurrency: navigator.hardwareConcurrency,
+        deviceMemory: (navigator as unknown as { deviceMemory?: number }).deviceMemory,
+        devicePixelRatio: window.devicePixelRatio,
       });
       ws.send(JSON.stringify(hello));
     });
@@ -627,6 +645,7 @@ export class NetMatch {
     // and no final report gets out.
     this.inputActivity = new InputActivityTracker();
     this.frameTimeTracker = new FrameTimeTracker();
+    this.networkHitchTracker = new NetworkHitchTracker();
     this.contextLostCount = 0;
     this.renderStalled = false;
     this.matchStartAtMs = performance.now();
@@ -714,6 +733,12 @@ export class NetMatch {
       // and produce a visible snap on the next real snapshot.
       const measured = this.currSnapAt - previousSnapAt;
       this.snapIntervalMs = Math.min(Math.max(measured, SNAPSHOT_INTERVAL_MS * 0.5), SNAPSHOT_INTERVAL_MS * 4);
+      // Network-hitch signal only when the tab was actually visible: a
+      // backgrounded tab coalescing/delaying messages (see comment
+      // above) is the same "tab was hidden" case FrameTimeTracker
+      // already excludes, not a network problem -- counting it here
+      // would misattribute a background pause as a network stall.
+      if (!document.hidden) this.networkHitchTracker.record(measured);
     }
 
     // Confirmed-state-only event detection (see field comment above): both
@@ -906,7 +931,7 @@ export class NetMatch {
     // time between rAF-driven render() calls. Presentation/reporting
     // only; never read by tick()'s sim advance.
     const nowMs = performance.now();
-    if (this.lastRenderAtMs !== null) this.frameTimeTracker.record(nowMs - this.lastRenderAtMs);
+    if (this.lastRenderAtMs !== null) this.frameTimeTracker.record(nowMs - this.lastRenderAtMs, document.hidden);
     this.lastRenderAtMs = nowMs;
     this.checkSnapshotStall();
     const fighters: RenderFighterState[] = new Array(this.numFighters);

@@ -412,9 +412,18 @@ server already knew about the match. Exact shape (also see
   "firstInputMs": null,
   "inputTicks": 0,
   "frameMedianMs": 16.7,
-  "frameP95Ms": 34.2
+  "frameP95Ms": 34.2,
+  "hwConcurrencyBucket": 8,
+  "deviceMemoryBucket": 4,
+  "dprBucket": 3,
+  "frameHistogram": [1200, 340, 60, 30, 8, 2],
+  "hiddenFrames": 0,
+  "networkHitchCount": 1
 }
 ```
+
+(the six new fields are described just below, in "Distinguishing a slow
+device from a slow network from a backgrounded tab, 2026-09-14")
 
 `endReason` is `"eliminated"` (the seat was actually knocked out --
 already-understood territory, see [[Match-End Client Bugs and Session Wrap
@@ -471,11 +480,134 @@ node scripts/session-metrics.mjs /path/to/bash-fighter.log
   malformed control message -- the existing `bad_message` path, not a
   new failure mode. A client that sends nothing at all for either simply
   produces a `[sessionEnd]` line with `null`s in those fields.
+- **Every new field added 2026-09-14 (see below) follows this exact
+  convention too.** Each is optional on the wire; absent means "this
+  client's build/browser didn't report it", never a real zero or a
+  dropped value. `frameHistogram` is validated as a whole array (wrong
+  length, wrong element type, or a negative element drops the entire
+  array rather than half-trusting it) since a partial histogram is not a
+  usable one; the scalar fields (`hwConcurrencyBucket`,
+  `deviceMemoryBucket`, `dprBucket`, `hiddenFrames`,
+  `networkHitchCount`) are clamped into a fixed valid range like every
+  pre-existing numeric field here, never trusted raw.
 - **No PII, ever.** No IP, no user agent, no header, no cookie, no
   account/session id that outlives one connection. If you are a
   contributor auditing this before relying on it: `grep -rn
   "req.headers\|remoteAddress\|user-agent" server/src/session-telemetry.ts
   packages/net/src/protocol.ts` should come back empty, and it does.
+
+### Distinguishing a slow device from a slow network from a backgrounded tab, 2026-09-14
+
+Motivated by a specific gap: our private stats store shows 82% of real
+sessions are on touch devices, and their p95 client frame time is
+~71ms (~14fps) against our own QA sessions' ~18ms (see [[Real Player
+Measurements 2026-09-14: Phones Are the Primary Platform]]). Two
+separate in-container profiling passes could not reproduce anything
+close to 71ms -- render cost measured a few hundred microseconds against
+a 16.7ms budget (see [[Client Frame Time Measurements 2026-09-12]]) --
+so the sandbox structurally cannot explain a real phone's 71ms. The six
+fields below exist to let the *next few days of real sessions* answer
+that, rather than guessing between "weak/thermal-throttled device",
+"browser compositor/tab backgrounding", and "network hitch misread as
+frame time".
+
+**`hello.profile`: coarse device-capability tags**, added alongside the
+existing `touchActive`/`viewportWidth`/`viewportHeight`:
+`hwConcurrencyBucket` (`navigator.hardwareConcurrency`, bucketed up to
+the nearest of 2/4/8/16/32/64), `deviceMemoryBucket`
+(`navigator.deviceMemory` in GB, bucketed to 0.25/0.5/1/2/4/6/8/16/32;
+absent on browsers without the Device Memory API, notably Safari --
+absence means "not available", never "zero memory"), and `dprBucket`
+(`window.devicePixelRatio`, bucketed to 1/1.5/2/3/4). All three are
+already-public, non-identifying browser APIs (a huge fraction of all
+devices share each bucket), bucketed client-side in
+`packages/app/src/session-report.ts` (`bucketHardwareConcurrency`/
+`bucketDeviceMemory`/`bucketDevicePixelRatio`) before sending, and
+clamped again server-side rather than trusted
+(`packages/net/src/protocol.ts`'s `sanitiseClientProfile`). A session
+with a small `hwConcurrencyBucket`/`deviceMemoryBucket` and a
+consistently high `frameMedianMs` is evidence for "weak device"; a
+session with generous buckets and the same high frame time is evidence
+against it, pointing at the network or the browser instead.
+
+**`sessionReport`: a frame-time histogram**, `frameHistogram`, a
+cumulative (whole-match, not rolling-window) count of rendered frames in
+six fixed buckets: `[<20ms, 20-33ms, 33-50ms, 50-100ms, 100-250ms,
+>250ms]` (boundaries shared as `FRAME_HISTOGRAM_BOUNDARIES_MS` in
+`packages/net/src/protocol.ts`, imported by both the client and
+`scripts/stats-report.mjs` so they can never drift apart). This exists
+because `frameMedianMs`/`frameP95Ms` alone cannot tell a *steady* 14fps
+session (every frame ~71ms) from an otherwise-smooth 60fps session with
+a handful of huge stalls (say, one 3-second GC pause) -- the two can
+produce a similar p95 but need completely different fixes. See
+`packages/app/test/session-report.test.ts`'s
+"a steady-71ms session and a mostly-smooth-with-one-huge-stall session"
+test for the exact worked example.
+
+**Backgrounded-tab frames are separated out, not counted as slow
+render.** `FrameTimeTracker.record()` now takes a second `hidden`
+argument (`packages/app/src/net-match.ts` passes `document.hidden`); a
+frame measured while the tab was hidden is excluded from the rolling
+median/p95 samples *and* the histogram, and only bumps the new
+`hiddenFrames` counter. A backgrounded tab is throttled by the browser
+on purpose (rAF fires rarely, sometimes with one huge coalesced delta on
+return) -- folding that into the frame-time distribution would misreport
+a player who alt-tabbed or turned their phone screen off as "a slow
+device", which is a completely different, non-actionable case. A high
+`hiddenFrames` relative to session length is itself a useful (different)
+signal: this player was not actually watching for some of the match.
+
+**A network-hitch counter, separate from render**: `networkHitchCount`,
+a count of gaps between consecutively *received* server snapshots that
+exceeded 250ms (`NETWORK_HITCH_THRESHOLD_MS` in
+`packages/app/src/session-report.ts`) -- well above the ~50ms expected
+interval at the server's 20Hz snapshot rate. Measured at the point
+`packages/app/src/net-match.ts` already computes the raw inter-snapshot
+gap for its own display-interpolation clamp, so this adds no new
+measurement machinery, just a threshold counter on an existing number.
+Also skipped while the tab is hidden, for the same reason as
+`hiddenFrames` above -- a backgrounded tab coalescing/delaying messages
+is not a network problem. A session with a high `networkHitchCount` but
+a clean `frameHistogram` points at the network, not the device or the
+renderer; the reverse points the other way.
+
+**What was deliberately left out, and why:**
+
+- **No user agent string, no GPU/renderer string, no canvas/audio
+  fingerprint.** These would be the single most informative fields for
+  this exact investigation (a UA string all but names the device model)
+  and were the first thing considered -- rejected because they are
+  exactly the kind of high-entropy, potentially-unique strings the
+  owner's private-stats decision and this feature's whole privacy stance
+  (see above) rule out. The bucketed capability tags are a deliberately
+  blunter substitute: enough to separate "old, weak phone" from
+  "capable phone with a bad network" in aggregate, not enough to pick
+  out one device.
+- **No page-visibility *duration* (ms spent hidden), only a frame
+  *count*.** A duration would need a monotonic timer started/stopped on
+  every visibilitychange, adding real complexity for a number the frame
+  count already answers well enough for this decision (steady low
+  frame-rate vs. a background pause vs. a network hitch); if this later
+  proves too coarse, duration is the natural next addition.
+  `hiddenFrames` alone was enough to keep `FrameTimeTracker`'s existing
+  no-argument call sites in `packages/app/test/session-report.test.ts`
+  working unchanged.
+  Note this is a size decision, not a privacy one: mirroring
+  `frameHistogram`, wall-clock hidden-duration is not device-identifying.
+- **No per-frame timestamps or a raw frame-time array.** Would have
+  answered "when exactly did it go bad" but at unbounded, per-session
+  size; the six-bucket histogram is the deliberately coarse compromise
+  that answers "steady vs. stalled" without the array.
+- **No battery/thermal API (`navigator.getBattery`, deprecated and
+  increasingly unsupported) and no `navigator.connection`
+  (`effectiveType`/`downlink`, still Chrome-only and itself somewhat
+  fingerprint-y).** Both were considered as more direct signals for
+  "thermal-throttled" and "weak network" respectively; both are
+  non-standard/inconsistently supported enough that they would mostly
+  read as "unknown" across the real phone-heavy traffic this is aimed
+  at, for a privacy cost similar to the UA string above. The existing
+  `networkHitchCount` measures the network's actual observed behaviour
+  instead of asking the browser to self-report a category.
 
 ### What this still cannot tell us
 
@@ -525,8 +657,12 @@ deploy. Two record shapes, one per line, distinguished by `type`:
 
 ```json
 {"type":"matchEnd","ts":"2026-09-14T07:00:00.000Z","matchId":"m1","arenaId":"battle-royale-20","winCondition":"battleRoyale","endReason":"resolved","durationSec":92.3,"totalSeats":3,"humanSeats":1,"totalKOs":2,"maxKoCount":1}
-{"type":"sessionEnd","ts":"2026-09-14T07:00:05.000Z","matchId":"m1","winCondition":"battleRoyale","eliminated":false,"endReason":"disconnected","sessionDurationSec":21.4,"touchActive":false,"firstInputMs":620,"inputTicks":340,"frameMedianMs":15.9,"frameP95Ms":19.4}
+{"type":"sessionEnd","ts":"2026-09-14T07:00:05.000Z","matchId":"m1","winCondition":"battleRoyale","eliminated":false,"endReason":"disconnected","sessionDurationSec":21.4,"touchActive":false,"firstInputMs":620,"inputTicks":340,"frameMedianMs":15.9,"frameP95Ms":19.4,"hwConcurrencyBucket":4,"deviceMemoryBucket":2,"dprBucket":2,"frameHistogram":[300,40,5,2,0,0],"hiddenFrames":0,"networkHitchCount":0}
 ```
+
+(the last six fields are the 2026-09-14 device-capability/frame-histogram/
+network-hitch additions described above; `null` on records from an
+older client build, never a fabricated zero)
 
 `matchEnd` is written from `Match`'s `onMatchSummary` event -- the same
 data as the existing `[matchSummary]` console line, just also persisted.
@@ -569,7 +705,16 @@ distribution (min/median/p95/max); touch vs. keyboard share; client
 frame-time distribution; feedback submission count (count only); and,
 broken out three ways (all / not marked QA / marked QA, plus an
 "unknown" count for pre-existing records), the self-declared `?qa=1`
-hint described in the privacy section below.
+hint described in the privacy section below. Since 2026-09-14 it
+also reports, per group (all/not-QA/QA): the frame-time histogram summed
+across sessions, how many sessions had any hidden/backgrounded frames
+and the total count, how many sessions had any network hitch (>250ms
+gap between received snapshots) and the total count, and the
+device-capability bucket distributions (`hwConcurrencyBucket`/
+`deviceMemoryBucket`/`dprBucket`) -- all straight aggregates over the
+fields described above, all omitted from the printed report when no
+session in the group reports that field at all (an old-client-only log
+stays exactly as terse as before).
 
 ### Privacy stance, restated plainly for this store
 
