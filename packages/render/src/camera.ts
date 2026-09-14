@@ -66,12 +66,33 @@ export interface CameraConfig {
 let cameraReducedMotion = false;
 let smoothedView: CameraView | null = null;
 
-/** How much of the remaining distance to the freshly computed camera
- * target is closed per render call while reduced motion is on. Lower =
- * calmer/slower to follow the arena shrink or fighter spread, higher =
- * snappier. 1 (or reduced motion off) means "jump straight to target",
- * matching the previous, undamped behaviour exactly. */
-const REDUCED_MOTION_SMOOTHING = 0.12;
+
+/** Time constants for the camera's follow damping, in milliseconds: the
+ * time it takes to close ~63% of the distance to a new target.
+ *
+ * Damping used to apply *only* when the reduced-motion setting was on;
+ * everyone else got a camera that jumped straight to a fresh target every
+ * frame. With twenty fighters that target is anything but stable -- the
+ * frame is derived from the outermost fighters, so every elimination,
+ * every fighter launched toward a blast zone and every scatter changes
+ * both the centre and the zoom discontinuously. The first real player
+ * feedback we ever received led with it: "Camera jerks around too much,
+ * like it has no idea who it should follow ... I had no idea what was
+ * going on." Damping is not an accessibility nicety here, it is the
+ * baseline. Reduced motion stays calmer still. */
+const FOLLOW_TAU_MS = 90;
+const REDUCED_MOTION_TAU_MS = 260;
+/** A jump this large (in fractions of the view) is a cut, not a move: a
+ * new match, a stage change or a spectator switching whom they watch.
+ * Easing across it would look like a long, wrong slide. */
+const SNAP_DISTANCE_VIEWS = 1.5;
+
+/** Forget where the camera was, so the next frame starts exactly on its
+ * target instead of gliding in from a stale position. Call this whenever
+ * the thing being watched changes discontinuously. */
+export function resetCameraSmoothing(): void {
+  smoothedView = null;
+}
 
 export function setCameraReducedMotion(reduced: boolean): void {
   cameraReducedMotion = reduced;
@@ -92,20 +113,34 @@ function lerp(a: number, b: number, t: number): number {
 export function computeCamera(
   positions: readonly { x: number; y: number }[],
   cfg: CameraConfig,
+  dtMs = 1000 / 60,
 ): CameraView {
   const raw = computeRawCamera(positions, cfg);
-  if (!cameraReducedMotion) {
-    smoothedView = null;
-    return raw;
-  }
   if (smoothedView === null) {
     smoothedView = raw;
     return raw;
   }
+  // Frame-rate independent easing: the same wall-clock time constant
+  // whether the device is managing 60fps or 15. A per-frame fraction
+  // (what the reduced-motion damping used to use) makes the camera crawl
+  // on a slow phone, which is exactly the device that can least afford
+  // a camera lagging behind the fight.
+  const tau = cameraReducedMotion ? REDUCED_MOTION_TAU_MS : FOLLOW_TAU_MS;
+  const dt = Math.max(0, Math.min(250, dtMs));
+  const t = 1 - Math.exp(-dt / tau);
+  const jumpX = Math.abs(raw.centerX - smoothedView.centerX) * raw.scale;
+  const jumpY = Math.abs(raw.centerY - smoothedView.centerY) * raw.scale;
+  if (
+    jumpX > cfg.viewWidth * SNAP_DISTANCE_VIEWS ||
+    jumpY > cfg.viewHeight * SNAP_DISTANCE_VIEWS
+  ) {
+    smoothedView = raw;
+    return raw;
+  }
   smoothedView = {
-    centerX: lerp(smoothedView.centerX, raw.centerX, REDUCED_MOTION_SMOOTHING),
-    centerY: lerp(smoothedView.centerY, raw.centerY, REDUCED_MOTION_SMOOTHING),
-    scale: lerp(smoothedView.scale, raw.scale, REDUCED_MOTION_SMOOTHING),
+    centerX: lerp(smoothedView.centerX, raw.centerX, t),
+    centerY: lerp(smoothedView.centerY, raw.centerY, t),
+    scale: lerp(smoothedView.scale, raw.scale, t),
   };
   return smoothedView;
 }

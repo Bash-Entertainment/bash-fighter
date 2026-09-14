@@ -5,7 +5,14 @@
 import { Application, Container, Graphics, Text } from 'pixi.js';
 import { fixed as fx, FighterStateId, findMove, windowAtFrame, type CharacterData, type FighterStateValue } from '@bash-fighter/sim';
 import { PALETTE, FONT_FAMILY } from './palette.ts';
-import { computeCamera, worldToScreen, type ArenaBounds, type CameraConfig, type CameraView } from './camera.ts';
+import {
+  computeCamera,
+  resetCameraSmoothing,
+  worldToScreen,
+  type ArenaBounds,
+  type CameraConfig,
+  type CameraView,
+} from './camera.ts';
 import { drawStage, type StageBounds } from './stage.ts';
 import { FighterSprite } from './fighter-sprite.ts';
 import { BODY_WIDTH, BODY_HEIGHT, HEAD_RADIUS } from './fighter-shape-placeholder.ts';
@@ -29,7 +36,7 @@ export { EffectsLayer, type HitEffectInput, setReducedMotion, isReducedMotion } 
 export type { StageBounds, StagePlatform } from './stage.ts';
 export { arenaDataToStageBounds } from './arena-adapter.ts';
 export type { ArenaBounds, CameraView, CameraConfig } from './camera.ts';
-export { computeCamera, worldToScreen } from './camera.ts';
+export { computeCamera, resetCameraSmoothing, worldToScreen } from './camera.ts';
 export { computeFollowCamera, computeOverviewCamera, SmoothedCamera, type FollowConfig } from './spectator-camera.ts';
 export { PALETTE, FONT_FAMILY, UI_FONT_FAMILY } from './palette.ts';
 export { renderCharacterIcon } from './character-icon.ts';
@@ -439,6 +446,9 @@ export class Renderer {
       this.app.renderer.resize(width, height);
     };
     syncToParent();
+    // A fresh renderer means a fresh match: the camera must start framed
+    // on the action, not glide in from wherever the previous one left off.
+    resetCameraSmoothing();
     if (typeof ResizeObserver !== 'undefined') {
       this.parentResizeObserver = new ResizeObserver(() => {
         syncToParent();
@@ -681,6 +691,10 @@ export class Renderer {
         this.attractFraming
           ? attractCameraConfig(stageForDraw, vw, vh, fighterPositions)
           : cameraConfig(stageForDraw, vw, vh, liveFighters.length),
+        // Real elapsed time between draws, so the camera's follow damping
+        // runs on the same wall clock on a phone managing 15fps as on a
+        // 60fps desktop.
+        dtMs,
       );
 
     // Translate any hit/elimination effects the app layer observed since

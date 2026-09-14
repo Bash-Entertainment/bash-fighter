@@ -1,11 +1,12 @@
 // Unit tests for packages/render/src/camera.ts's computeCamera aspect-ratio
 // framing math (issue #18). Pure math over plain numbers, no Pixi/DOM --
 // matches the node:test + node:assert style of palette.test.ts.
-import { test } from 'node:test';
+import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   computeCamera,
   computeRawCamera,
+  resetCameraSmoothing,
   setCameraReducedMotion,
   isCameraReducedMotion,
   type ArenaBounds,
@@ -13,6 +14,14 @@ import {
 } from '../src/camera.ts';
 
 const EPS = 1e-6;
+
+// computeCamera now damps every frame, not only under reduced motion, so
+// it carries state between calls. Each test starts from a clean camera:
+// the first call after a reset returns the raw target exactly.
+beforeEach(() => {
+  resetCameraSmoothing();
+  setCameraReducedMotion(false);
+});
 
 function cfg(overrides: Partial<CameraConfig> = {}): CameraConfig {
   return {
@@ -295,4 +304,79 @@ test('GROUND_BIAS falls back to plain arena centering when there are no fighters
   const arena: ArenaBounds = { minX: -200, maxX: 200, minY: -50, maxY: 250 };
   const cam = computeRawCamera([], cfg({ arena, minScale: 1, maxScale: 5.5 }));
   assert.equal(cam.centerY, (arena.minY + arena.maxY) / 2);
+});
+
+// The camera's centre only has room to move when the fighters are spread
+// wider than the arena box, so that the clamp against the arena edges is
+// not what decides the centre. These two spreads differ only in where
+// their midpoint sits: 0, then 200.
+const SPREAD_A = [
+  { x: -1000, y: 50 },
+  { x: 1000, y: 50 },
+];
+const SPREAD_B = [
+  { x: -1000, y: 50 },
+  { x: 1400, y: 50 },
+];
+
+test('the camera damps its follow for every player, not only reduced motion', () => {
+  const c = cfg({ arena: { minX: -600, maxX: 600, minY: 0, maxY: 200 } });
+  const first = computeCamera(SPREAD_A, c, 16.7);
+  const target = computeRawCamera(SPREAD_B, c);
+  const second = computeCamera(SPREAD_B, c, 16.7);
+  assert.ok(
+    second.centerX > first.centerX,
+    'the camera should move toward the fighters',
+  );
+  assert.ok(
+    second.centerX < target.centerX - EPS,
+    'but must not arrive in a single frame -- that is the jerk players reported',
+  );
+});
+
+test('damping closes the same distance per unit of wall-clock time, not per frame', () => {
+  const c = cfg({ arena: { minX: -600, maxX: 600, minY: 0, maxY: 200 } });
+  computeCamera(SPREAD_A, c, 16.7);
+  const oneLongFrame = computeCamera(SPREAD_B, c, 66.8).centerX;
+
+  resetCameraSmoothing();
+  computeCamera(SPREAD_A, c, 16.7);
+  let fourShortFrames = 0;
+  for (let i = 0; i < 4; i += 1) {
+    fourShortFrames = computeCamera(SPREAD_B, c, 16.7).centerX;
+  }
+  assert.ok(
+    Math.abs(oneLongFrame - fourShortFrames) < 1,
+    `one 66.8ms frame (${oneLongFrame}) should land where four 16.7ms frames do (${fourShortFrames})`,
+  );
+});
+
+test('reduced motion is calmer than the default follow, not the only damping', () => {
+  const c = cfg({ arena: { minX: -600, maxX: 600, minY: 0, maxY: 200 } });
+  computeCamera(SPREAD_A, c, 16.7);
+  const normal = computeCamera(SPREAD_B, c, 16.7).centerX;
+
+  resetCameraSmoothing();
+  setCameraReducedMotion(true);
+  computeCamera(SPREAD_A, c, 16.7);
+  const reduced = computeCamera(SPREAD_B, c, 16.7).centerX;
+  assert.ok(reduced < normal, 'reduced motion should trail further behind the target');
+});
+
+test('a cut, not a move: a huge jump is taken instantly', () => {
+  const c = cfg({ arena: { minX: -100000, maxX: 100000, minY: 0, maxY: 200 } });
+  computeCamera(SPREAD_A, c, 16.7);
+  const target = computeRawCamera([{ x: 90000, y: 50 }], c);
+  const jumped = computeCamera([{ x: 90000, y: 50 }], c, 16.7);
+  assert.ok(Math.abs(jumped.centerX - target.centerX) < EPS);
+});
+
+test('resetting smoothing lands exactly on the target again', () => {
+  const c = cfg({ arena: { minX: -600, maxX: 600, minY: 0, maxY: 200 } });
+  computeCamera(SPREAD_A, c, 16.7);
+  computeCamera(SPREAD_B, c, 16.7);
+  resetCameraSmoothing();
+  const after = computeCamera(SPREAD_B, c, 16.7);
+  const raw = computeRawCamera(SPREAD_B, c);
+  assert.ok(Math.abs(after.centerX - raw.centerX) < EPS);
 });
