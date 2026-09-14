@@ -54,7 +54,11 @@ test('both Match and NetMatch wire the renderer context events to their own even
 test('main.ts shows a calm, jargon-free message with a Reload action, and replaces it on restore', () => {
   const idx = main.indexOf('function showContextLostOverlay()');
   const body = main.slice(idx, idx + 700);
-  assert.match(body, /Lost the graphics context/);
+  assert.match(body, /title: 'The game stopped drawing'/);
+  // An uppercase micro-caps eyebrow label above the heading is banned by
+  // this project's design language, and this is the only caller that has
+  // ever been tempted to use the overlay's kicker slot.
+  assert.doesNotMatch(body, /kicker:/);
   assert.doesNotMatch(body, /!/); // no exclamation marks, per voice guidelines
   assert.doesNotMatch(body, /[\u{1F300}-\u{1FAFF}]/u); // no emoji
   assert.match(body, /label: 'Reload'/);

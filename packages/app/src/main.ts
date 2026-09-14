@@ -127,9 +127,14 @@ const matchOverlay = new MatchOverlay(appRoot);
 // is not attempted automatically.
 function showContextLostOverlay(): void {
   matchOverlay.show({
-    kicker: 'GRAPHICS LOST',
-    title: 'Lost the graphics context',
-    message: 'Your browser dropped the graphics connection for this tab. Reload the page to keep playing.',
+    // Deliberately no eyebrow label. An uppercase micro-caps line above a heading is
+    // exactly the generic-template look this project's design language
+    // rules out, and this is the first and only caller that would use one.
+    // The heading carries the message on its own.
+    title: 'The game stopped drawing',
+    message:
+      "Your browser dropped this tab's graphics, usually because memory ran " +
+      'short or the device switched graphics chips. Reload to carry on.',
     tone: 'danger',
     actions: [{ label: 'Reload', onClick: () => location.reload() }],
   });
