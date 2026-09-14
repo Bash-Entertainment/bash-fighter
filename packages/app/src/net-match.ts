@@ -102,6 +102,13 @@ export interface NetMatchEvents {
    * a specific "you placed Nth" + play-again offer instead of leaving the
    * player in an unexplained spectate view. */
   onEliminated?(placement: number, totalFighters: number): void;
+  /** Fired once per match, the moment this client has a seat and a real sim
+   *  to play. Exists because a player dropped into a filling lobby gets no
+   *  countdown moment of their own, and our first real player reported
+   *  taking "a minute to even find my dude". joinedLate is true when we
+   *  never saw a lobby countdown, i.e. play began as far as we can tell
+   *  without any run-up. */
+  onMatchBegan?(slot: number, name: string, joinedLate: boolean): void;
   /** Fired once when the canvas's WebGL context is lost (see
    * packages/render/src/index.ts's Renderer.onContextLost). The match
    * keeps running server-side regardless -- this is presentation-only,
@@ -198,6 +205,10 @@ export class NetMatch {
   private edgeDangerSounding = false;
   private spectating = false;
   private matchStarted = false;
+  /** Whether this client actually watched a lobby countdown before play
+   *  began. Presentation only: it decides whether the match-start intro
+   *  says the fight is already going. */
+  private sawCountdown = false;
   private over = false;
 
   private localTick = 0;
@@ -535,6 +546,7 @@ export class NetMatch {
         break;
       case 'lobby':
         this.names = msg.names ?? [];
+        if (msg.countdownTicks > 0) this.sawCountdown = true;
         this.events.onLobby?.(msg.players, msg.capacity, msg.countdownTicks, msg.modeName);
         break;
       case 'matchStart':
@@ -666,6 +678,10 @@ export class NetMatch {
     );
     this.loop.start();
     this.armRenderWatchdog();
+    if (this.mySlot >= 0 && !this.spectating) {
+      this.events.onMatchBegan?.(this.mySlot, this.nameFor(this.mySlot), !this.sawCountdown);
+    }
+    this.sawCountdown = false;
   }
 
   // See Match.start()'s identical watchdog in match.ts for the full

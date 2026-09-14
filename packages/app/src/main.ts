@@ -12,6 +12,7 @@ import { SimMatchAdapter } from './spectator/sim-adapter.ts';
 import { SpectatorController } from './spectator/controller.ts';
 import { NetMatch, type ConnectionState } from './net-match.ts';
 import { SpectateChip } from './ui/spectate-chip.ts';
+import { MatchIntro } from './ui/match-intro.ts';
 import { MatchOverlay, SPECTATE_OFFER, type MatchOverlayContent } from './ui/match-overlay.ts';
 import { ControlsHint } from './ui/controls-hint.ts';
 import { MoveReferencePanel } from './ui/move-reference-panel.ts';
@@ -29,7 +30,7 @@ import {
   shouldIgnoreKeydown,
 } from '@bash-fighter/input';
 import { PLACEHOLDER_CHARACTER, resolveCharacterId, ALL_CHARACTERS, isKnownArenaId } from '@bash-fighter/content';
-import { setReducedMotion, type ArenaBounds } from '@bash-fighter/render';
+import { setReducedMotion, PALETTE, type ArenaBounds } from '@bash-fighter/render';
 import { AudioManager } from '@bash-fighter/audio';
 
 // This local build has no networking, so "the local player" is just
@@ -213,6 +214,15 @@ function onRendererInitFailed(where: string, error: unknown): void {
   showContextLostOverlay();
 }
 const spectateChip = new SpectateChip(appRoot, () => void beginOnlineMatch());
+const matchIntro = new MatchIntro(appRoot);
+/** The 20-slot FFA palette entry for a seat, as a CSS colour -- the same
+ *  colour the renderer fills that fighter with, so the intro's swatch and
+ *  the fighter on screen are recognisably the same thing. */
+function localPlayerColour(slot: number): string {
+  const colours = PALETTE.playerColors;
+  const c = colours[((slot % colours.length) + colours.length) % colours.length] ?? 0xe8b23c;
+  return `#${c.toString(16).padStart(6, '0')}`;
+}
 const controlsHint = new ControlsHint(appRoot);
 
 const touchControls = new TouchControls(appRoot);
@@ -559,6 +569,7 @@ async function beginOnlineMatch(): Promise<void> {
   timedBrawlEndScreen.hide();
   spectatorBanner.hide();
   matchOverlay.hide();
+  matchIntro.hide();
   hud.hide();
       inMatchMovesButton.classList.add('hidden');
       inMatchSettingsButton.classList.add('hidden');
@@ -714,7 +725,13 @@ async function beginOnlineMatch(): Promise<void> {
         winScreen.show(winnerIndex, netMatch?.localSlot(), netMatch ? (slot) => netMatch!.nameFor(slot) : undefined);
       }
     },
+    onMatchBegan: (slot, name, joinedLate) => {
+      // Names the fighter that belongs to this player for the opening
+      // couple of seconds. See ui/match-intro.ts for why.
+      matchIntro.show(name, localPlayerColour(slot), joinedLate);
+    },
     onEliminated: (placement, totalFighters) => {
+      matchIntro.hide();
       eliminatedThisOnlineMatch = true;
       touchControls.hide();
       lastEliminationContent = {

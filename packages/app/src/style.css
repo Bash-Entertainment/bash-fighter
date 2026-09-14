@@ -1965,3 +1965,63 @@ html, body {
   font-size: 13px;
   color: var(--ink-dim);
 }
+
+/* Match intro -- names the fighter that belongs to you for the first
+   couple of seconds of play. Never interactive: pointer events pass
+   straight through to the game underneath. */
+.match-intro {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 22%;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.match-intro.hidden {
+  display: none;
+}
+
+.match-intro-card {
+  background: rgba(11, 13, 16, 0.82);
+  border: 1px solid #2a2f36;
+  border-left: 3px solid var(--accent);
+  padding: 14px 22px;
+  max-width: 26rem;
+  animation: match-intro-fade 2.6s ease-out forwards;
+}
+
+.match-intro-who {
+  margin: 0;
+  font-size: 1.35rem;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.match-intro-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.match-intro-hint {
+  margin: 6px 0 0;
+  font-size: 0.95rem;
+  color: var(--ink-dim);
+}
+
+@keyframes match-intro-fade {
+  0% { opacity: 0; }
+  8% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .match-intro-card { animation: none; }
+}
