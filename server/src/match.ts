@@ -104,6 +104,13 @@ export interface Seat {
   /** Wall-clock time (Date.now()) the seat's socket most recently closed,
    *  or null while connected. */
   disconnectedAt: number | null;
+  /** Wall-clock time (Date.now()) this seat was created. Used only for
+   *  the engagement-telemetry `[sessionEnd]` log (server/src/index.ts) to
+   *  measure how long a human sat in this seat before their session
+   *  ended -- deliberately anchored to seat creation, not to any one
+   *  connection, so a reconnect mid-match doesn't reset the clock on
+   *  "how long has this player been in this match". */
+  joinedAt: number;
 }
 
 export type MatchPhase = 'lobby' | 'playing' | 'ended';
@@ -333,6 +340,7 @@ export class Match {
       lastInputTick: -1,
       resumeToken: isBot ? null : generateResumeToken(),
       disconnectedAt: null,
+      joinedAt: Date.now(),
     };
     this.seats.push(seat);
     return seat;

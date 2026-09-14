@@ -17,7 +17,9 @@ import {
 } from '@bash-fighter/sim';
 import { PLACEHOLDER_CHARACTER, createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID } from '@bash-fighter/content';
 import type { CharacterData } from '@bash-fighter/sim';
-import { InputManager } from '@bash-fighter/input';
+import { InputManager, isTouchCapable } from '@bash-fighter/input';
+import { buildClientProfile, buildSessionReportMessage, InputActivityTracker, FrameTimeTracker } from './session-report.ts';
+import { readBuildSha } from './ui/feedback-panel.ts';
 import {
   Renderer,
   arenaDataToStageBounds,
@@ -233,6 +235,21 @@ export class NetMatch {
   private readonly url: string;
   private readonly events: NetMatchEvents;
 
+  // Engagement telemetry only (see docs/MEASUREMENT.md) -- presentation/
+  // reporting, never read by tick()'s sim advance and never part of
+  // localSim/renderSim state. Reset at the start of every match so a
+  // resumed/second match starts a fresh reading rather than carrying over
+  // the previous one.
+  private inputActivity = new InputActivityTracker();
+  private frameTimeTracker = new FrameTimeTracker();
+  private matchStartAtMs = 0;
+  private lastRenderAtMs: number | null = null;
+  private reportTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly REPORT_INTERVAL_MS = 5000;
+  private readonly visibilityHandler = (): void => {
+    if (document.hidden) this.sendSessionReport();
+  };
+
   // Not a TS parameter-property constructor: this class is imported
   // directly (not through vite) by a plain `node --test` regression test
   // (net-match-stale-socket.test.ts) for the stale-socket-message guard,
@@ -250,6 +267,24 @@ export class NetMatch {
   async init(parent: HTMLElement): Promise<void> {
     await this.renderer.init(parent);
     this.input.attach(window);
+    document.addEventListener('visibilitychange', this.visibilityHandler);
+  }
+
+  /** Sends the small, infrequent sessionReport (see docs/MEASUREMENT.md).
+   *  Best-effort: a closed/absent socket is simply skipped, never queued
+   *  or retried -- this is presentation/reporting only, so losing one is
+   *  fine, and it must never affect the sim or reconnection. */
+  private sendSessionReport(): void {
+    if (!this.matchStarted || this.spectating || this.mySlot < 0) return;
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const report = buildSessionReportMessage({
+      firstInputMs: this.inputActivity.getFirstInputMs(),
+      inputTicks: this.inputActivity.getInputTicks(),
+      frameMedianMs: this.frameTimeTracker.getMedianMs(),
+      frameP95Ms: this.frameTimeTracker.getP95Ms(),
+    });
+    ws.send(JSON.stringify(report));
   }
 
   /** Sends the "Start now" request from the waiting screen's button: the
@@ -309,6 +344,14 @@ export class NetMatch {
       const hello: Record<string, unknown> = { t: 'hello', protocolVersion: PROTOCOL_VERSION, name: this.name };
       if (this.resumeToken) hello.resume = this.resumeToken;
       if (this.characterId) hello.characterId = this.characterId;
+      // Engagement telemetry only (see docs/MEASUREMENT.md) -- small,
+      // non-identifying environment snapshot, sent once per connection.
+      hello.profile = buildClientProfile({
+        touchActive: isTouchCapable(),
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        buildSha: readBuildSha() ?? null,
+      });
       ws.send(JSON.stringify(hello));
     });
     ws.addEventListener('message', (ev) => {
@@ -380,6 +423,13 @@ export class NetMatch {
     this.stopped = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
+    // Best-effort final sessionReport (see docs/MEASUREMENT.md) before the
+    // socket closes -- a deliberate stop() (leaving the match) is exactly
+    // the case a periodic-only report would most often miss.
+    this.sendSessionReport();
+    if (this.reportTimer) clearInterval(this.reportTimer);
+    this.reportTimer = null;
+    document.removeEventListener('visibilitychange', this.visibilityHandler);
     this.loop?.stop();
     this.input.detach(window);
     this.ws?.close();
@@ -517,6 +567,18 @@ export class NetMatch {
     this.inputHistory.clear();
     this.events.onStateChange?.(this.spectating ? 'spectating' : 'in-match');
 
+    // Engagement telemetry only (see docs/MEASUREMENT.md) -- fresh
+    // trackers per match so a reconnect/resume doesn't carry over a
+    // previous match's readings, and a periodic report so the server
+    // still learns something useful even if the tab is closed abruptly
+    // and no final report gets out.
+    this.inputActivity = new InputActivityTracker();
+    this.frameTimeTracker = new FrameTimeTracker();
+    this.matchStartAtMs = performance.now();
+    this.lastRenderAtMs = null;
+    if (this.reportTimer) clearInterval(this.reportTimer);
+    this.reportTimer = setInterval(() => this.sendSessionReport(), this.REPORT_INTERVAL_MS);
+
     this.loop = new FixedTimestepLoop(
       () => this.tick(),
       () => this.render(),
@@ -532,6 +594,11 @@ export class NetMatch {
       const local = this.input.poll()[0] ?? makeInputFrame();
       inputs[this.mySlot] = local;
       this.inputHistory.set(this.localTick, local);
+      // Engagement telemetry only (see docs/MEASUREMENT.md) -- reads the
+      // same local input frame already computed above for the sim, never
+      // adds a poll or touches the sim's inputs array.
+      const hadInput = local.buttons !== 0 || local.stickX !== 0 || local.stickY !== 0;
+      this.inputActivity.recordTick(hadInput, performance.now() - this.matchStartAtMs);
       const ws = this.ws;
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(
@@ -756,6 +823,12 @@ export class NetMatch {
 
   private render(): void {
     if (!this.localSim || !this.renderSim) return;
+    // Engagement telemetry only (see docs/MEASUREMENT.md) -- client frame
+    // time between rAF-driven render() calls. Presentation/reporting
+    // only; never read by tick()'s sim advance.
+    const nowMs = performance.now();
+    if (this.lastRenderAtMs !== null) this.frameTimeTracker.record(nowMs - this.lastRenderAtMs);
+    this.lastRenderAtMs = nowMs;
     this.checkSnapshotStall();
     const fighters: RenderFighterState[] = new Array(this.numFighters);
 

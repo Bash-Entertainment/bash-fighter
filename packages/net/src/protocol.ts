@@ -69,6 +69,26 @@ export interface HelloMessage {
    *  any client built before character selection existed. Unrecognised
    *  ids are also treated as absent by the server, never rejected. */
   characterId?: string;
+  /** Small, non-identifying client environment snapshot -- added for the
+   *  engagement-telemetry work (2026-09-13, see docs/MEASUREMENT.md) so a
+   *  `[sessionEnd]` log line can tell "no touch support" and "tiny
+   *  viewport" apart from a plain fun/pacing loss. Exactly the same
+   *  fields/conventions as `FeedbackContext` in server/src/feedback.ts:
+   *  no IP, no user agent, no persistent id, nothing that survives past
+   *  this one connection. Optional so an older client that predates this
+   *  still parses as a normal hello. */
+  profile?: ClientSessionProfile;
+}
+
+/** See HelloMessage.profile. Match-scoped, non-identifying: whether a
+ *  touch input source is active, the viewport size, and the build sha the
+ *  client was served -- nothing that identifies a person or survives
+ *  across sessions. */
+export interface ClientSessionProfile {
+  touchActive?: boolean;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  buildSha?: string;
 }
 
 /** Sent by a client that wants to keep watching after being eliminated. */
@@ -94,7 +114,33 @@ export interface StartNowMessage {
   t: 'startNow';
 }
 
-export type ClientControlMessage = HelloMessage | SpectateMessage | PongMessage | StartNowMessage;
+/** Small, infrequent client -> server report used only for the engagement-
+ *  telemetry work: how quickly (if ever) this seat's player gave a real
+ *  control input after match start, how many ticks carried any input, and
+ *  a rough client frame-time distribution. Sent periodically (every few
+ *  seconds) and best-effort once more when the tab is hidden -- never on
+ *  a hot path, never large, never required for the match to function.
+ *  See docs/MEASUREMENT.md for exactly what this is and is not. */
+export interface SessionReportMessage {
+  t: 'sessionReport';
+  /** Milliseconds from match start to this seat's first non-neutral
+   *  local input, or null if none has happened yet. */
+  firstInputMs: number | null;
+  /** Count of simulation ticks in which this seat supplied any non-
+   *  neutral input, cumulative for the match so far. */
+  inputTicks: number;
+  /** Median client frame time in ms over a recent rolling window. */
+  frameMedianMs: number;
+  /** 95th-percentile client frame time in ms over the same window. */
+  frameP95Ms: number;
+}
+
+export type ClientControlMessage =
+  | HelloMessage
+  | SpectateMessage
+  | PongMessage
+  | StartNowMessage
+  | SessionReportMessage;
 
 // ---------------------------------------------------------------------------
 // Control messages: server -> client
@@ -490,12 +536,14 @@ export function parseClientControl(text: string): ClientControlMessage | null {
       const resume = typeof obj.resume === 'string' && obj.resume.length > 0 ? obj.resume : undefined;
       const characterId =
         typeof obj.characterId === 'string' && obj.characterId.length > 0 ? obj.characterId : undefined;
+      const profile = sanitiseClientProfile(obj.profile);
       return {
         t: 'hello',
         protocolVersion: obj.protocolVersion,
         name: sanitiseName(obj.name),
         ...(resume ? { resume } : {}),
         ...(characterId ? { characterId } : {}),
+        ...(profile ? { profile } : {}),
       };
     }
     case 'spectate':
@@ -505,9 +553,67 @@ export function parseClientControl(text: string): ClientControlMessage | null {
     case 'pong':
       if (typeof obj.id !== 'number') return null;
       return { t: 'pong', id: obj.id };
+    case 'sessionReport':
+      return sanitiseSessionReport(obj);
     default:
       return null;
   }
+}
+
+function clampFiniteNumber(value: unknown, min: number, max: number): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  return Math.max(min, Math.min(max, value));
+}
+
+function clampCappedString(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const cleaned = value.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim();
+  if (cleaned.length === 0) return undefined;
+  return cleaned.slice(0, maxLength);
+}
+
+/** Validates and clamps HelloMessage.profile -- never trusts a client to
+ *  have sent sane values, exactly like the rest of this boundary. Every
+ *  field is optional and independently dropped if malformed rather than
+ *  rejecting the whole `hello`: a garbled profile must never keep a
+ *  player out of their match. Returns undefined for "nothing usable". */
+function sanitiseClientProfile(value: unknown): ClientSessionProfile | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const input = value as Record<string, unknown>;
+  const out: ClientSessionProfile = {};
+  if (typeof input.touchActive === 'boolean') out.touchActive = input.touchActive;
+  const width = clampFiniteNumber(input.viewportWidth, 0, 20000);
+  if (width !== undefined) out.viewportWidth = Math.round(width);
+  const height = clampFiniteNumber(input.viewportHeight, 0, 20000);
+  if (height !== undefined) out.viewportHeight = Math.round(height);
+  const buildSha = clampCappedString(input.buildSha, 64);
+  if (buildSha) out.buildSha = buildSha;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** Validates and clamps a `sessionReport`. Any field that is the wrong
+ *  type or out of range is clamped/dropped rather than rejecting the
+ *  whole message -- a client that sends garbage here must never be able
+ *  to break its own match, only to produce a less useful telemetry line.
+ *  Returns null only when there is nothing usable at all (e.g. not an
+ *  object, or every field malformed), which the caller treats as "ignore
+ *  this frame" -- it never desyncs or blocks anything either way since
+ *  sessionReport never touches match state. */
+function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessage | null {
+  const firstInputMs = obj.firstInputMs === null ? null : clampFiniteNumber(obj.firstInputMs, 0, 600_000);
+  const inputTicks = clampFiniteNumber(obj.inputTicks, 0, 10_000_000);
+  const frameMedianMs = clampFiniteNumber(obj.frameMedianMs, 0, 5_000);
+  const frameP95Ms = clampFiniteNumber(obj.frameP95Ms, 0, 5_000);
+  if (firstInputMs === undefined && inputTicks === undefined && frameMedianMs === undefined && frameP95Ms === undefined) {
+    return null;
+  }
+  return {
+    t: 'sessionReport',
+    firstInputMs: firstInputMs === undefined ? null : firstInputMs,
+    inputTicks: inputTicks !== undefined ? Math.round(inputTicks) : 0,
+    frameMedianMs: frameMedianMs ?? 0,
+    frameP95Ms: frameP95Ms ?? 0,
+  };
 }
 
 /** Max characters kept from a client-supplied name. Applied after

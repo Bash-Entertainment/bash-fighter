@@ -29,10 +29,28 @@ anywhere. Any other message before `hello`, or a malformed message, gets
 
 | `t` | Fields | Meaning |
 |---|---|---|
-| `hello` | `protocolVersion`, `name` | First message. Server assigns a match/slot and replies `welcome`. |
+| `hello` | `protocolVersion`, `name`, `profile`? | First message. Server assigns a match/slot and replies `welcome`. `profile` is an optional, small, non-identifying client snapshot (see below) used only for engagement telemetry -- see `docs/MEASUREMENT.md`. |
 | `spectate` | — | Client wants to only watch, not play (used after being assigned, or after elimination to keep watching without reconciliation). |
 | `pong` | `id` | Echo of a server `ping`, for RTT measurement. |
 | `startNow` | — | Sent by a client holding a seat in a still-filling lobby (the waiting screen's "Start now" button): fills the rest of that lobby with bots and starts immediately, instead of waiting out the countdown/bot-fill grace period. The server only honours this from a connection that actually holds a seat in that exact match (never a spectator, never a stranger); once the match has left the lobby phase, further `startNow` messages for it are a silent no-op, so a client may resend freely (e.g. a double click). |
+| `sessionReport` | `firstInputMs`, `inputTicks`, `frameMedianMs`, `frameP95Ms` | Engagement telemetry only, added 2026-09-13 -- see `docs/MEASUREMENT.md`. Sent periodically (every ~5s) and once more, best-effort, when the tab is hidden. Never required for the match to function; a client that never sends one simply produces a less complete `[sessionEnd]` server log line. `firstInputMs` is milliseconds from match start to this seat's first non-neutral local input, or `null` if none yet. `inputTicks` is the cumulative count of ticks with any input. `frameMedianMs`/`frameP95Ms` are a rolling client frame-time distribution in ms. All fields are validated and clamped server-side (see `packages/net/src/protocol.ts`); a malformed payload is simply rejected like any other bad control message, never trusted partially. |
+
+### `hello.profile`
+
+An optional, small, non-identifying snapshot of the client's environment,
+added 2026-09-13 for engagement telemetry (see `docs/MEASUREMENT.md` for
+the full privacy statement -- short version: no IP, no user agent, no
+persistent id, nothing that survives past this one connection):
+
+| Field | Type | Meaning |
+|---|---|---|
+| `touchActive` | boolean | Whether a touch input source is active in this client. |
+| `viewportWidth` / `viewportHeight` | number | The viewport size in CSS pixels, clamped to `[0, 20000]`. |
+| `buildSha` | string | The build sha the client was served, capped at 64 characters. |
+
+Every field is optional and independently dropped if malformed rather than
+rejecting the whole `hello` -- a garbled profile must never keep a player
+out of their match.
 
 ## Control messages, server -> client
 

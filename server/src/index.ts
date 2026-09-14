@@ -17,7 +17,10 @@ import {
   SnapshotStreamEncoder,
   sanitiseName,
   type ServerControlMessage,
+  type ClientSessionProfile,
+  type SessionReportMessage,
 } from '@bash-fighter/net/src/protocol.ts';
+import { logSessionEnd } from './session-telemetry.ts';
 import { RoomManager, DEFAULT_CAPACITY, DEFAULT_MINIMUM } from './rooms.ts';
 import { tickMetricsSnapshot } from './tick-metrics.ts';
 import { modeDisplayName } from './mode-rotation.ts';
@@ -30,7 +33,7 @@ export interface ServerOptions {
   minimum?: number;
 }
 
-interface ClientConn {
+export interface ClientConn {
   id: string;
   ws: WebSocket;
   match: Match | null;
@@ -53,6 +56,21 @@ interface ClientConn {
    *  first snapshot is a full keyframe -- there is no way for a client to
    *  receive a delta against a baseline it could not possibly have. */
   snapshotEncoder: SnapshotStreamEncoder;
+  /** Small, non-identifying client environment snapshot from `hello`, see
+   *  ClientSessionProfile -- null until a hello with one arrives (an
+   *  older client, or a resume, may never send one). Engagement-
+   *  telemetry only, see docs/MEASUREMENT.md; never touches match state. */
+  profile: ClientSessionProfile | null;
+  /** Most recent `sessionReport` this connection has sent, or null if it
+   *  never has. Overwritten in place -- only the latest matters, since
+   *  `[sessionEnd]` logs a snapshot of "how things stood" when the
+   *  session ended, not a full history. */
+  lastReport: SessionReportMessage | null;
+  /** Wall-clock time this connection was accepted, for the engagement-
+   *  telemetry `[sessionEnd]` line's own bookkeeping (distinct from
+   *  Seat.joinedAt, which survives a reconnect; this is this socket's own
+   *  lifetime). */
+  connectedAt: number;
 }
 
 const clients = new Map<string, ClientConn>();
@@ -106,6 +124,7 @@ function logConn(conn: ClientConn, event: string, extra?: Record<string, unknown
   };
   console.log(`[conn] ${JSON.stringify(line)}`);
 }
+
 
 function watcherSet(matchId: string): Set<string> {
   let s = watchers.get(matchId);
@@ -305,6 +324,9 @@ const wss = new WebSocketServer({ server, path: '/socket' });
     helloed: false,
     superseded: false,
     snapshotEncoder: new SnapshotStreamEncoder(),
+    profile: null,
+    lastReport: null,
+    connectedAt: Date.now(),
   };
   clients.set(conn.id, conn);
   logConn(conn, 'connected');
@@ -341,6 +363,7 @@ const wss = new WebSocketServer({ server, path: '/socket' });
     // now, so it must never call markDisconnected again.
     const hadLiveSeat = conn.match && !conn.spectating && conn.slot >= 0 && !conn.superseded;
     if (hadLiveSeat && conn.match) {
+      logSessionEnd(conn, conn.match);
       conn.match.markDisconnected(conn.slot);
       logConn(conn, 'seat_disconnected', { gracePeriod: true, ...closeInfo });
     } else if (conn.superseded) {
@@ -575,6 +598,11 @@ function handleText(conn: ClientConn, text: string): void {
       }
       if (conn.helloed) return; // ignore duplicate hello
       conn.helloed = true;
+      // Engagement telemetry only (see docs/MEASUREMENT.md) -- stored on
+      // the connection, never touches match state, and is simply absent
+      // if the client didn't send one (older client, or malformed profile
+      // already dropped by parseClientControl).
+      if (msg.profile) conn.profile = msg.profile;
 
       if (msg.resume) {
         handleResume(conn, msg.resume);
@@ -610,6 +638,15 @@ function handleText(conn: ClientConn, text: string): void {
     }
     case 'pong': {
       // Round-trip measurement hook; nothing to do server-side yet.
+      break;
+    }
+    case 'sessionReport': {
+      // Engagement telemetry only (see docs/MEASUREMENT.md): overwritten
+      // in place, read only when this connection's session ends. Never
+      // gates or touches match/sim state, so a client that never sends
+      // one, or sends nonsense (already clamped by parseClientControl),
+      // simply leaves `[sessionEnd]` reporting nulls/zeros for it.
+      conn.lastReport = msg;
       break;
     }
     case 'startNow': {

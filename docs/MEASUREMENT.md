@@ -332,5 +332,158 @@ and two scripts' call sites, never `Sim`'s behavior.
   seats; see e.g. matchId "m4" above with humanSeats=2) — this harness only
   ever runs one human-analog seat.
 
+## Engagement telemetry: why a real player leaves in the first 10-30s
+
+Added 2026-09-13. This section is about live production, not the offline
+harness above -- a different problem: of 8 recent real matches, 6 ended
+with the human closing the tab within 8-33 seconds *while still alive and
+never eliminated*. Before this, the server could not tell apart four very
+different explanations, each implying a different fix:
+
+1. the player joined, never pressed anything, and left (a controls/
+   first-impression failure);
+2. the player played actively and left anyway (a fun/pacing failure);
+3. the player was on a phone and touch controls did not work for them;
+4. the game ran badly for them (low frame rate) and they gave up.
+
+### What is collected, and why it's safe to be public about it
+
+This is match-scoped telemetry only, in the same spirit as the existing
+player-feedback endpoint (`server/src/feedback.ts`, see [[Player Feedback
+Channel 2026-09-13]]): **no IP address, no user agent, no request headers,
+no persistent identifier, no fingerprinting.** Every field below either
+comes from the match itself (things the server already knows: which
+match, which arena, how it ended) or is a small, coarse client snapshot
+that cannot identify a person and is discarded once the connection closes
+-- nothing here is stored per-player across sessions, and there is no
+player-account system to attach it to even if we wanted to.
+
+**On `hello` (`packages/net/src/protocol.ts`, `HelloMessage.profile`):**
+a client sends `touchActive` (is a touch input source active),
+`viewportWidth`/`viewportHeight` (CSS pixels, clamped 0-20000), and
+`buildSha` (which build was served, capped at 64 chars). See
+`docs/PROTOCOL.md`'s `hello.profile` section for the exact wire shape.
+
+**Periodically during the match (`sessionReport`, every ~5s and once
+more, best-effort, when the tab is hidden):** `firstInputMs` (ms from
+match start to this seat's first non-neutral local input, or `null` if
+there has been none), `inputTicks` (a running count of ticks that
+carried any input), and `frameMedianMs`/`frameP95Ms` (a rolling client
+frame-time distribution, so a session running at 15fps is visible). This
+is deliberately tiny and infrequent -- it does not meaningfully add to
+bandwidth, which protocol v3 already delta-compresses (see [[Bandwidth
+Reduction Pass 2026-09-11]]).
+
+**On session end, one `[sessionEnd]` line in the production log
+(`server/src/session-telemetry.ts`, called from the WebSocket `close`
+handler in `server/src/index.ts`):** joins the above with what the
+server already knew about the match. Exact shape (also see
+`server/test/session-telemetry.test.ts`):
+
+```json
+{
+  "ts": "2026-09-13T21:00:00.000Z",
+  "matchId": "m123",
+  "arenaId": "battle-royale-20",
+  "winCondition": "battleRoyale",
+  "eliminated": false,
+  "endReason": "disconnected",
+  "sessionDurationSec": 21.4,
+  "touchActive": true,
+  "viewportWidth": 390,
+  "viewportHeight": 844,
+  "buildSha": "98ebe1a",
+  "firstInputMs": null,
+  "inputTicks": 0,
+  "frameMedianMs": 16.7,
+  "frameP95Ms": 34.2
+}
+```
+
+`endReason` is `"eliminated"` (the seat was actually knocked out --
+already-understood territory, see [[Match-End Client Bugs and Session Wrap
+2026-09-09]]), `"matchEnded"` (the match resolved with this seat's
+player still connected and alive), or `"disconnected"` -- the case this
+was built for: the connection closed while the match was still live and
+this seat had not been eliminated. `sessionDurationSec` is measured from
+when the seat was created (`Seat.joinedAt` in `server/src/match.ts`),
+not from the socket's own connect time, so it survives a reconnect. A
+missing profile or report (older client, or one that never got around to
+sending a report before closing) simply logs as `null`, never throws and
+never blocks seat cleanup.
+
+Reading `firstInputMs: null, inputTicks: 0` alongside `endReason:
+"disconnected"` is case 1 above (never touched the controls). The same
+with `touchActive: true` and a small viewport strongly suggests case 3.
+A high `frameMedianMs`/`frameP95Ms` (say, consistently above ~33ms, i.e.
+under 30fps) suggests case 4. `inputTicks` clearly above zero with a
+short `sessionDurationSec` and `endReason: "disconnected"` is case 2 --
+they played and left anyway, which is the only one of the four that is a
+fun/pacing problem rather than an onboarding/technical one.
+
+### How to read it
+
+`scripts/session-metrics.mjs` parses `[sessionEnd]` lines from a log file
+(stdin or a path argument) and prints a summary table: count, endReason
+breakdown, median/p25/p75 session duration, how many never pressed a key,
+how many were on touch, and the frame-time distribution. Typical use
+against the production log:
+
+```
+ssh root@135.181.45.254 "journalctl -u bash-fighter --no-pager" | node scripts/session-metrics.mjs
+```
+
+or against a saved file:
+
+```
+node scripts/session-metrics.mjs /path/to/bash-fighter.log
+```
+
+### Hard guarantees
+
+- **Never affects the simulation.** Nothing here is read by `tick()`'s
+  sim advance, never enters `inputs[]`, never touches `Sim.advance`,
+  never appears in a determinism hash. It is pure presentation/reporting,
+  wired in `packages/app/src/net-match.ts`'s `render()`/`tick()` glue and
+  `server/src/session-telemetry.ts`'s read-only join.
+- **Never breaks on bad input.** Every field is validated and clamped in
+  `packages/net/src/protocol.ts` (`sanitiseClientProfile`,
+  `sanitiseSessionReport`) using the same conventions as
+  `server/src/feedback.ts`: wrong types are dropped field-by-field rather
+  than rejecting the whole message where that's safe (`hello.profile`),
+  and an unparseable `sessionReport` is rejected outright like any other
+  malformed control message -- the existing `bad_message` path, not a
+  new failure mode. A client that sends nothing at all for either simply
+  produces a `[sessionEnd]` line with `null`s in those fields.
+- **No PII, ever.** No IP, no user agent, no header, no cookie, no
+  account/session id that outlives one connection. If you are a
+  contributor auditing this before relying on it: `grep -rn
+  "req.headers\|remoteAddress\|user-agent" server/src/session-telemetry.ts
+  packages/net/src/protocol.ts` should come back empty, and it does.
+
+### What this still cannot tell us
+
+- **Why**, in the sense of player intent or opinion -- "played and left
+  anyway" (case 2) is a real signal but not a reason; it cannot
+  distinguish "got bored", "got hit by something that felt unfair", and
+  "was just testing the link and never meant to stay" from each other.
+  The in-game feedback panel ([[Player Feedback Channel 2026-09-13]]) is
+  the closer tool for that, and is opt-in/free-text, so it will always be
+  sparser.
+- **Anything about the seconds before `hello`** -- page load time, asset
+  fetch time, or a player who loaded the page and left before ever
+  reaching the lobby. This telemetry only exists once a WebSocket
+  connection and a seat exist.
+- **A precise frame-rate reading for a session that closes before its
+  first periodic report goes out** (under ~5s of play). `render()` still
+  feeds the tracker every frame, and `stop()`/tab-hidden send a
+  best-effort final report, but a hard-crash tab close faster than that
+  can still leave `frameMedianMs`/`frameP95Ms` at `0` (no samples) even
+  though the player clearly saw some frames.
+- **Cross-session patterns for one real person** -- by design, nothing
+  here persists a per-player identity, so "the same player tried three
+  times and left each time" is not something this can see, on purpose.
+
 See also: [[20-Player Production-Hardware Measurements 2026-09-08]],
-[[Bot Combat Engagement Fix 2026-09-09]], [[Match Duration Contradiction: The Spire Firing Squad 2026-09-09]].
+[[Bot Combat Engagement Fix 2026-09-09]], [[Match Duration Contradiction: The Spire Firing Squad 2026-09-09]],
+[[Player Feedback Channel 2026-09-13]], [[Bandwidth Reduction Pass 2026-09-11]].

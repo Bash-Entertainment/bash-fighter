@@ -43,7 +43,7 @@ const GITHUB_ISSUES_URL = 'https://github.com/BashEntertainment/bash-fighter/iss
  *  = '<sha>'` injected at deploy time) so submissions carry a build sha
  *  when one exists. Nothing sets this today -- reading it is forward
  *  -looking and always falls back to undefined, never throws. */
-function readBuildSha(): string | undefined {
+export function readBuildSha(): string | undefined {
   const sha = (window as unknown as { __BASH_BUILD_SHA__?: unknown }).__BASH_BUILD_SHA__;
   return typeof sha === 'string' && sha.length > 0 ? sha : undefined;
 }
