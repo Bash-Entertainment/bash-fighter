@@ -264,3 +264,39 @@ test('computeLocalPointer: still returns a position even when the local badge de
   assert.ok(pointer);
   assert.equal(pointer!.y, local!.box.top - LOCAL_POINTER_GAP_PX);
 });
+
+// 2026-09-14: measured on production, at least one living fighter was outside
+// the frame on 208 of 442 sampled frames -- launched toward a blast zone, or
+// briefly beyond the edge while the follow damping caught up. The "this is
+// you" pointer went with them and vanished, at precisely the moment a player
+// needs it most.
+test('the local pointer clamps to the view edge and points off-screen', () => {
+  const placements = [
+    {
+      candidate: { headX: 1400, headY: 300, isLocalPlayer: true, digits: 2 },
+      box: { top: 280, bottom: 296, left: 1380, right: 1420 },
+    },
+  ] as unknown as Parameters<typeof computeLocalPointer>[0];
+  const view = { width: 1280, height: 720 };
+  const p = computeLocalPointer(placements, view);
+  assert.ok(p);
+  assert.equal(p.offScreen, true);
+  assert.ok(p.x <= view.width - 1, 'clamped inside the right edge');
+  assert.ok(p.x > view.width - 40, 'clamped to the edge it left by');
+  // Pointing right: rotated a quarter turn from its resting downward aim.
+  assert.ok(Math.abs(p.angle - Math.PI / 2) < 0.2, `angle was ${p.angle}`);
+});
+
+test('an on-screen local pointer is unrotated and not flagged off-screen', () => {
+  const placements = [
+    {
+      candidate: { headX: 600, headY: 300, isLocalPlayer: true, digits: 2 },
+      box: { top: 280, bottom: 296, left: 580, right: 620 },
+    },
+  ] as unknown as Parameters<typeof computeLocalPointer>[0];
+  const p = computeLocalPointer(placements, { width: 1280, height: 720 });
+  assert.ok(p);
+  assert.equal(p.offScreen, false);
+  assert.equal(p.angle, 0);
+  assert.equal(p.x, 600);
+});

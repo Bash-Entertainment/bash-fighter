@@ -131,11 +131,47 @@ export const LOCAL_POINTER_GAP_PX = 4;
  * there is no local-player placement this frame. */
 export function computeLocalPointer(
   placements: readonly BadgePlacement[],
-): { x: number; y: number } | null {
+  view?: { width: number; height: number },
+): LocalPointer | null {
   const local = placements.find((p) => p.candidate.isLocalPlayer);
   if (!local) return null;
-  return { x: local.candidate.headX, y: local.box.top - LOCAL_POINTER_GAP_PX };
+  const x = local.candidate.headX;
+  const y = local.box.top - LOCAL_POINTER_GAP_PX;
+  if (!view) return { x, y, offScreen: false, angle: 0 };
+  // A fighter can genuinely be outside the frame: launched toward a blast
+  // zone, or momentarily beyond the edge while the camera's follow damping
+  // catches up. That is exactly the moment a player most needs to know
+  // where they are, and until now the pointer simply went with them and
+  // vanished. Clamp it to the edge of the view and record the direction it
+  // was pushed from, so it can be drawn pointing off-screen at the fighter
+  // rather than down at empty air.
+  const inset = OFF_SCREEN_POINTER_INSET_PX;
+  const cx = Math.min(Math.max(x, inset), Math.max(inset, view.width - inset));
+  const cy = Math.min(Math.max(y, inset), Math.max(inset, view.height - inset));
+  const offScreen = cx !== x || cy !== y;
+  return {
+    x: cx,
+    y: cy,
+    offScreen,
+    // Screen space: 0 points down, matching the resting pointer.
+    angle: offScreen ? Math.atan2(x - cx, cy - y) : 0,
+  };
 }
+
+export interface LocalPointer {
+  x: number;
+  y: number;
+  /** True when the local fighter is outside the view and this pointer has
+   *  been clamped to the edge, pointing at them. */
+  offScreen: boolean;
+  /** Radians to rotate the pointer by, 0 being its resting downward
+   *  orientation. Always 0 when the fighter is on screen. */
+  angle: number;
+}
+
+/** How far inside the view edge a clamped off-screen pointer sits, in
+ *  pixels -- far enough in that the whole triangle is visible. */
+export const OFF_SCREEN_POINTER_INSET_PX = 16;
 
 export const BADGE_FONT_SIZE = 13;
 // Rough monospace glyph width at BADGE_FONT_SIZE, used only to build an

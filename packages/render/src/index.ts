@@ -621,18 +621,33 @@ export class Renderer {
    * i.e. whenever there is no local player at all (attract mode) -- by
    * computeLocalPointer returning null. */
   private drawLocalPointer(placements: ReturnType<typeof computeBadgePlacements>): void {
-    const pos = computeLocalPointer(placements);
+    const pos = computeLocalPointer(placements, {
+      width: this.viewSize.width,
+      height: this.viewSize.height,
+    });
     this.localPointer.clear();
     if (!pos) {
       this.localPointer.visible = false;
       return;
     }
     this.localPointer.visible = true;
-    const w = 7;
-    const h = 8;
+    // Slightly larger when it is standing in for a fighter you cannot see,
+    // since then it is the only thing telling you where you are.
+    const w = pos.offScreen ? 9 : 7;
+    const h = pos.offScreen ? 11 : 8;
+    const sin = Math.sin(pos.angle);
+    const cos = Math.cos(pos.angle);
+    // Rotate about the pointer's tip, which is the point that means
+    // something: it is aimed at the fighter.
+    const rot = (dx: number, dy: number): [number, number] => [
+      pos.x + dx * cos - dy * sin,
+      pos.y + dx * sin + dy * cos,
+    ];
+    const [ax, ay] = rot(-w, -h);
+    const [bx, by] = rot(w, -h);
     this.localPointer
-      .moveTo(pos.x - w, pos.y - h)
-      .lineTo(pos.x + w, pos.y - h)
+      .moveTo(ax, ay)
+      .lineTo(bx, by)
       .lineTo(pos.x, pos.y)
       .closePath()
       .fill({ color: PALETTE.hud });
