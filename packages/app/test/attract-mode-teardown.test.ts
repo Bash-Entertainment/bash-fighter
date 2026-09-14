@@ -54,8 +54,30 @@ test('a renderer that fails to initialise says so instead of showing a black scr
   assert.match(handler.slice(0, 400), /if \(contextLostOverlayShowing\) return;/);
 });
 
-test('both match start paths catch a failed renderer init', () => {
-  assert.match(MAIN, /try \{\s*await net\.init\(canvasRoot\);\s*\} catch/);
-  assert.match(MAIN, /try \{\s*await localMatch\.init\(canvasRoot\);\s*\} catch/);
-  assert.equal((MAIN.match(/onRendererInitFailed\('/g) ?? []).length, 2);
+test('both match start paths go through the timed init and bail on failure', () => {
+  assert.match(MAIN, /initWithTimeout\(net\.init\(canvasRoot\), 'online match'\)\)\) return;/);
+  assert.match(MAIN, /initWithTimeout\(localMatch\.init\(canvasRoot\), 'local match'\)\)\) return;/);
+});
+
+test('an init that never settles is treated as a failure, not waited on forever', () => {
+  const fn = MAIN.slice(MAIN.indexOf('async function initWithTimeout'));
+  const body = fn.slice(0, 900);
+  assert.match(body, /Promise\.race/);
+  assert.match(body, /onRendererInitFailed\(where, error\)/);
+  assert.match(body, /clearTimeout\(timer\)/);
+  assert.match(MAIN, /const RENDERER_INIT_TIMEOUT_MS = 8000;/);
+});
+
+test('destroying a renderer releases its WebGL context immediately', () => {
+  const render = readFileSync(
+    new URL('../../render/src/index.ts', import.meta.url),
+    'utf8',
+  );
+  const destroy = render.slice(render.indexOf('  destroy(): void {'));
+  assert.match(destroy, /WEBGL_lose_context/);
+  assert.match(destroy, /loseContext\?\.loseContext\(\)/);
+  assert.ok(
+    destroy.indexOf('loseContext?.loseContext()') < destroy.indexOf('this.app.destroy('),
+    'the context must be released before Pixi tears the app down',
+  );
 });

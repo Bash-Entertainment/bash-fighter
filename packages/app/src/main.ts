@@ -172,6 +172,33 @@ function onRendererRenderStalled(): void {
   showContextLostOverlay();
 }
 
+/** How long a renderer gets to become able to draw before we stop waiting.
+ * Observed on production: `app.init()` can simply never settle when the
+ * browser has no context left to give, so neither a rejection nor the
+ * frames-presented watchdog (which is only armed once a match starts) ever
+ * fires, and the player sits in front of a permanently black page. Eight
+ * seconds is far longer than a cold init on a slow phone. */
+const RENDERER_INIT_TIMEOUT_MS = 8000;
+
+async function initWithTimeout(init: Promise<void>, where: string): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`renderer init did not settle within ${RENDERER_INIT_TIMEOUT_MS}ms`)),
+      RENDERER_INIT_TIMEOUT_MS,
+    );
+  });
+  try {
+    await Promise.race([init, timeout]);
+    return true;
+  } catch (error) {
+    onRendererInitFailed(where, error);
+    return false;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 // A renderer that never gets off the ground at all: `Renderer.init()`
 // rejects, usually because the browser refused or immediately lost the
 // WebGL context. Before this, the rejection propagated out of the match
@@ -721,12 +748,7 @@ async function beginOnlineMatch(): Promise<void> {
   netMatch = net;
   net.input.setBinding(0, currentBindings.p1);
   net.input.setBinding(1, currentBindings.p2);
-  try {
-    await net.init(canvasRoot);
-  } catch (error) {
-    onRendererInitFailed('online match', error);
-    return;
-  }
+  if (!(await initWithTimeout(net.init(canvasRoot), 'online match'))) return;
   net.connect(name, characterId);
   if (touchCapable) net.input.setTouchSource(LOCAL_SLOT, touchControls.source);
 
@@ -956,12 +978,7 @@ async function beginMatch(): Promise<void> {
     scale: 3,
   });
 
-  try {
-    await localMatch.init(canvasRoot);
-  } catch (error) {
-    onRendererInitFailed('local match', error);
-    return;
-  }
+  if (!(await initWithTimeout(localMatch.init(canvasRoot), 'local match'))) return;
   localMatch.start();
   // Local two-player harness: touch, if available, always drives slot 0
   // (the local human) same as online mode -- P2 stays keyboard/gamepad

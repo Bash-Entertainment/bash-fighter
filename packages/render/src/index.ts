@@ -923,6 +923,26 @@ export class Renderer {
     // already tolerates that internally, so no extra guard is needed
     // here, but this comment exists so the next person doesn't have to
     // re-derive that from scratch.
+    // Hand the WebGL context back to the browser *now*, explicitly.
+    //
+    // A browser grants a page only a handful of live contexts (roughly a
+    // dozen in Firefox), and dropping the last JavaScript reference to
+    // one only queues it for garbage collection at some unspecified later
+    // time. Attract mode builds a fresh renderer for every demo cycle, so
+    // in a long session the page can hold far more contexts than it is
+    // owed; the browser then starts killing the oldest ones ("WebGL
+    // context was lost") and refuses new ones, which is how a real match
+    // ended up with a renderer that could never draw. WEBGL_lose_context
+    // is the only portable way to release one deterministically.
+    const canvas: HTMLCanvasElement | null =
+      this.app.canvas instanceof HTMLCanvasElement ? this.app.canvas : null;
+    const gl =
+      (canvas?.getContext('webgl2') as WebGL2RenderingContext | null) ??
+      (canvas?.getContext('webgl') as WebGLRenderingContext | null);
+    if (gl && !gl.isContextLost()) {
+      const loseContext = gl.getExtension('WEBGL_lose_context');
+      loseContext?.loseContext();
+    }
     this.app.destroy(true, { children: true });
   }
 }
