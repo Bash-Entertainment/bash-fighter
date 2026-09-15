@@ -134,6 +134,41 @@ export function computeKnockbackMagnitude(
   return fx.mul(raw, earlyMatchKnockbackScale(tick));
 }
 
+// CROWD-AWARE DAMAGE SCALE (2026-09-14, see wiki "20-Player Damage Curve
+// Rework 2026-09-14"): in a 20-fighter free-for-all, a fighter can be hit by
+// many attackers in the same window, so per-hit damage authored for a 1v1
+// duel (Combat Model: Knockback, Hitstun, and DI) produces roughly an order
+// of magnitude more incoming damage per second than the 1v1 model assumed.
+// Measured before this change (scripts/damage-curve-metrics.mjs, EASY bots,
+// battle-royale-20, 10 seeds): median percent already 34% at 10s and 61% at
+// 20s, saturating the 0-150ish% kill-range curve inside the opening seconds
+// -- production logs cross-checked the same match ended with the first
+// knockout at 15.3s and the eventual winner still finishing around 78s
+// (journalctl elimination events, matchId m1, 2026-09-15 03:06 UTC).
+//
+// This scales *only the damage number itself* -- not the knockback formula,
+// not weight, not DI -- by how many fighters are alive right now, so a 1v1
+// or small-lobby fight keeps exactly the tuning in the combat model doc
+// (scale = 1.0 at CROWD_SCALE_REFERENCE_ALIVE or fewer alive) while a full
+// 20-player lobby takes a fraction of that per hit. It converges back to
+// 1.0 as the lobby thins out over the match, which is what makes percent
+// climb through the *whole* match instead of saturating in the opening
+// scrum: the same fighter that took 20%-scaled hits at 20 alive takes
+// full-scale hits once only a handful of fighters remain.
+export const CROWD_SCALE_REFERENCE_ALIVE = fx.fromInt(8);
+export const CROWD_SCALE_MIN: Fixed = fx.fromFloat(0.2);
+
+/** 1.0 at <= CROWD_SCALE_REFERENCE_ALIVE fighters alive (duel-tuned damage
+ * is untouched), falling off toward CROWD_SCALE_MIN as more fighters are
+ * alive simultaneously. Pure function of an integer count -- deterministic,
+ * fixed-point, no wall clock, no RNG. */
+export function crowdDamageScale(aliveCount: number): Fixed {
+  const alive = aliveCount < 1 ? 1 : aliveCount;
+  const scale = fx.div(CROWD_SCALE_REFERENCE_ALIVE, fx.fromInt(alive));
+  const capped = (scale as number) > (fx.fromInt(1) as number) ? fx.fromInt(1) : scale;
+  return (capped as number) < (CROWD_SCALE_MIN as number) ? CROWD_SCALE_MIN : capped;
+}
+
 export function computeHitstunTicks(magnitude: Fixed): number {
   const ticks = fx.toInt(fx.mul(magnitude, HITSTUN_PER_MAGNITUDE));
   if (ticks < MIN_HITSTUN_TICKS) return MIN_HITSTUN_TICKS;

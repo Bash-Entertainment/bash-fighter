@@ -20,6 +20,7 @@ import { MoveId, findMove, moveTotalDuration, windowAtFrame } from './moves/type
 import { makeBoxCentered, aabbOverlap, type Box } from './hitbox.ts';
 import {
   computeKnockbackMagnitude,
+  crowdDamageScale,
   computeHitstunTicks,
   mirrorAngleIdx,
 } from './knockback.ts';
@@ -1329,12 +1330,20 @@ export class Sim {
       return;
     }
 
+    // Crowd-aware damage scale (see knockback.ts crowdDamageScale): a
+    // 20-player free-for-all lets many attackers land hits on the same
+    // fighter in a window a 1v1 combat model never accounted for, so scale
+    // the authored per-move damage down while many fighters are alive and
+    // let it converge back to full duel damage as the lobby thins out.
+    // Deliberately scoped to fighter-vs-fighter hits only -- ring pressure
+    // and item/hazard damage keep their own separately-tuned constants.
+    const scaledDamage = fx.mul(hb.damage, crowdDamageScale(this.aliveCount()));
     const percentBefore = d[dBase + FighterField.PERCENT] as number;
-    const percentAfter = fx.add(percentBefore, hb.damage);
+    const percentAfter = fx.add(percentBefore, scaledDamage);
     d[dBase + FighterField.PERCENT] = percentAfter;
 
     const magnitude = computeKnockbackMagnitude(
-      hb.damage,
+      scaledDamage,
       percentAfter,
       hb.baseKnockback,
       hb.knockbackGrowth,
