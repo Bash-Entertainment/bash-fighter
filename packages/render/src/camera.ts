@@ -297,16 +297,26 @@ export function computeRawCamera(
   // ARENA_FLOOR_SLACK_MIN_COUNT and keep the full, unslacked floor).
   const ARENA_FLOOR_SLACK_MIN_COUNT = 12;
   const ARENA_FLOOR_SLACK_FACTOR = 1.05;
+  // X-ONLY, on purpose (2026-09-15 follow-up): fSpanY reflects the
+  // fighters' *current* vertical spread, which is ~0 for a ground-
+  // hugging pack and only grows when someone actually jumps. Capping
+  // the Y floor the same way as X would tie JUMP_HEADROOM_WORLD/
+  // FALL_HEADROOM_WORLD's pre-reserved room (deliberately reserved so a
+  // jump doesn't cause a visible zoom/lurch, see framing.ts and "Camera
+  // Framing: Ground Anchor and Jump-Space Bias") to whatever the
+  // fighters happen to be doing this frame -- to the letter, it would
+  // shrink cappedArenaSpanY to ~fSpanY*1.05 (tens of world units)
+  // whenever the whole lobby is grounded, discarding the reserved
+  // headroom and inviting exactly the jump-triggered camera lurch that
+  // pass fixed. The X axis has no such headroom concept to protect --
+  // fighters don't need pre-reserved horizontal running room the way
+  // they need vertical jump room -- so only X is capped.
   const cappedArenaSpanX =
     positions.length >= ARENA_FLOOR_SLACK_MIN_COUNT
       ? Math.min(arenaSpanX, fSpanX * ARENA_FLOOR_SLACK_FACTOR)
       : arenaSpanX;
-  const cappedArenaSpanY =
-    positions.length >= ARENA_FLOOR_SLACK_MIN_COUNT
-      ? Math.min(arenaSpanY, fSpanY * ARENA_FLOOR_SLACK_FACTOR)
-      : arenaSpanY;
   const spanX = Math.max(fSpanX, cappedArenaSpanX);
-  const spanY = Math.max(fSpanY, cappedArenaSpanY);
+  const spanY = Math.max(fSpanY, arenaSpanY);
 
   const scaleX = cfg.viewWidth / spanX;
   const scaleY = cfg.viewHeight / spanY;
@@ -346,21 +356,28 @@ export function computeRawCamera(
   // own midpoint) and it automatically yields to full centering as
   // fSpanY grows toward filling the viewport, because the safe range
   // itself shrinks toward that single fCenterY point.
-  // DEAD-SPACE-BELOW-FLOOR PASS (2026-09-14): raised from 0.5. At 0.5 the
-  // ground line lands at a fixed ~75% down the viewport for any
-  // ground-hugging pack regardless of stage (measured:
-  // scripts/camera-framing-metrics.mjs put 26-32% of every real stage's
-  // viewport below the floor at 1280x720 and 390x844, matching the first
-  // real player's "took a minute to even find my dude"). 0.85 moves that
-  // fixed floor line to ~92.5% down the viewport instead (belowFloorFrac
-  // = 0.5 - GROUND_BIAS/2), leaving a modest, deliberately non-zero
-  // margin below the ground -- enough that a fighter falling out still
-  // visibly falls before leaving frame, not enough to reserve a
-  // quarter of the screen for a pit almost nothing happens in. Still
+  // DEAD-SPACE-BELOW-FLOOR PASS (2026-09-14): raised from 0.5 to 0.75,
+  // which pinned the ground line to ~87.5% down the viewport.
+  //
+  // EMPTY-SKY-AT-20 FOLLOW-UP (2026-09-15): 0.75 fixed the *below*-floor
+  // waste but over-corrected into a different complaint -- with the
+  // arena-floor/spawn-spread trims above already doing the real work of
+  // making fighters bigger, pinning the ground line at 87.5% down still
+  // read as "figures stuck along the bottom edge of a mostly empty
+  // screen" once fighters were actually large enough to judge the
+  // composition by (see the owner's review of after_desktop.png). The
+  // vertical *window* size itself (viewHeight/scale) doesn't change with
+  // this constant -- only where within that window the ground sits --
+  // so this cannot make fighters bigger or smaller, only better or
+  // worse *centered*. 0.35 lands the ground line at ~62-66% down instead
+  // (measured on battle-royale-20, both 1280x720 and 390x844) --
+  // fighters sit in roughly the lower-middle third with visible room on
+  // both sides of them, rather than jammed against one edge, while still
+  // leaving more room above than below (jumps go up, not down). Still
   // picks a point *inside* the same never-crop-a-fighter safe range
-  // documented below -- raising this constant cannot by itself introduce
-  // cropping, jitter, or a second competing clamp.
-  const GROUND_BIAS = 0.75;
+  // documented below -- changing this constant cannot by itself
+  // introduce cropping, jitter, or a second competing clamp.
+  const GROUND_BIAS = 0.35;
   // With no fighters at all (e.g. a spectator view before anyone has
   // spawned) fMinY/fMaxY fall back to the whole arena above, and the
   // "whole arena" framing should stay plainly centered rather than

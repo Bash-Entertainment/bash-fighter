@@ -72,10 +72,32 @@ export const FALL_HEADROOM_WORLD = 40;
  * tighter than. Intersected with the *live* (possibly shrunk) blast rect
  * so the floor honestly shrinks as the collapsing arena does, instead of
  * permanently reserving room for a blast zone that no longer exists. */
+// Empty-sky-at-20 follow-up (2026-09-15): at a full/near-full lobby the
+// platform footprint's raw width (e.g. battle-royale-20's solid ground,
+// 960 world units) is noticeably wider than the fighters' own spawn
+// spread (~774 units) -- dead margin nobody occupies. Trimming it here,
+// BEFORE the aspect-ratio padding step below, is what makes the trim
+// actually pay off: trimming it later (e.g. only in camera.ts, tried
+// first) leaves the aspect step still inflating the vertical span to
+// match the *untrimmed* width, which silently cancels the horizontal
+// gain by making the view Y-bound at the old scale instead. Gated the
+// same way as camera.ts's population floor: only once the lobby is
+// large enough (>= ARENA_FLOOR_SLACK_MIN_COUNT) that the fighters'
+// spread is itself already arena-sized, so 2-3 fighter endgames are
+// untouched. `fighterSpanXHint`, when supplied, is the caller's current
+// (fighter-position-derived) horizontal spread, already including the
+// same padding camera.ts's own fSpanX uses -- optional and ignored
+// below that population, so every existing caller that doesn't pass it
+// keeps the old, un-trimmed behaviour exactly.
+export const ARENA_FLOOR_SLACK_MIN_COUNT = 12;
+export const ARENA_FLOOR_SLACK_FACTOR = 1.05;
+
 export function computeFramingFloor(
   stage: FramingStageBounds,
   viewWidth: number,
   viewHeight: number,
+  livingCount = 0,
+  fighterSpanXHint?: number,
 ): ArenaBounds {
   let minX = Infinity;
   let maxX = -Infinity;
@@ -94,6 +116,17 @@ export function computeFramingFloor(
   }
   minY -= FALL_HEADROOM_WORLD;
   maxY += JUMP_HEADROOM_WORLD;
+
+  if (
+    fighterSpanXHint !== undefined &&
+    livingCount >= ARENA_FLOOR_SLACK_MIN_COUNT &&
+    maxX - minX > fighterSpanXHint * ARENA_FLOOR_SLACK_FACTOR
+  ) {
+    const cx = (minX + maxX) / 2;
+    const half = (fighterSpanXHint * ARENA_FLOOR_SLACK_FACTOR) / 2;
+    minX = cx - half;
+    maxX = cx + half;
+  }
 
   // Never claim more than the live blast rect actually covers -- this is
   // what makes the floor shrink correctly as the collapsing arena closes
@@ -226,7 +259,8 @@ export function computePopulationAwareFramingFloor(
   viewWidth: number,
   viewHeight: number,
   livingCount: number,
+  fighterSpanXHint?: number,
 ): ArenaBounds {
-  const floor = computeFramingFloor(stage, viewWidth, viewHeight);
+  const floor = computeFramingFloor(stage, viewWidth, viewHeight, livingCount, fighterSpanXHint);
   return scaleFramingFloor(floor, populationFloorFrac(livingCount));
 }

@@ -101,10 +101,33 @@ export const BATTLE_ROYALE_20_ARENA: ArenaData = {
   // pass on 2026-09-10 (see [[Character Roster]] history) for this stage
   // only. No dense-scrum regression was observed in the crowd20 checks
   // run for this fix, but it was not exhaustively re-verified.
+  // EMPTY-SKY-AT-20 SPAWN TIGHTENING (2026-09-15, owner-approved
+  // simulation change, see wiki "Empty-Sky-at-20 Camera Fix"): the
+  // opening-seconds boundary-clearance fix above compressed spacing to
+  // 34/37 purely to buy horizontal distance from the live boundary --
+  // it never claimed 37 was the *minimum* safe spacing, and the ground
+  // platform (+-480) was never the actual constraint (outer spawn sits
+  // hundreds of units inside it either way). Tightened further to
+  // 22/24 (base=22, per-slot=24; outer spawn now +-238, total fighter
+  // spread ~734 units down from the platform's full 960) to shrink the
+  // fought-over footprint the camera has to fit (helps every viewport,
+  // worst on narrow phones) while *increasing* boundary clearance,
+  // since the boundary is derived from the unchanged ground width, not
+  // from spawn spacing (re-verified: scripts/spawn-clearance-audit.mjs,
+  // outer slot clearance grew from 151.4 (1.40x) to 280.4 (2.59x) --
+  // every slot on every stage still clears the required >=1.15x
+  // safety factor by a wide margin). Adjacent same-side gap 37->24,
+  // cross-side gap 34->22: re-checked against
+  // scripts/opening-milestone-metrics.mjs at production's real EASY bot
+  // difficulty for a denser-scrum regression (the exact failure mode
+  // the original 40->45 anti-scrum widening was chasing) over 30 seeds
+  // -- t15 (first 5 eliminations) median went from 36.7s to 40.9s
+  // (slightly slower, not faster); nobody eliminated in the true
+  // opening seconds either way.
   spawnPoints: Array.from({ length: 20 }, (_, i) => {
     const slot = 9 - Math.floor(i / 2);
     const side = i % 2 === 0 ? 1 : -1;
-    const x = side * fx.fromInt(34 + slot * 37);
+    const x = side * fx.fromInt(22 + slot * 24);
     return { x, y: fx.fromInt(0) };
   }),
 };

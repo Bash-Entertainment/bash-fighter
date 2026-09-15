@@ -175,6 +175,7 @@ function cameraConfig(
   viewWidth: number,
   viewHeight: number,
   livingCount = 20,
+  fighterSpanXHint?: number,
 ): CameraConfig {
   return {
     viewWidth,
@@ -182,7 +183,7 @@ function cameraConfig(
     minScale: 1.6,
     maxScale: 5.5,
     paddingWorld: 20,
-    arena: computePopulationAwareFramingFloor(stage, viewWidth, viewHeight, livingCount),
+    arena: computePopulationAwareFramingFloor(stage, viewWidth, viewHeight, livingCount, fighterSpanXHint),
     // Clamp centering to the true (live, possibly-shrunk) blast rect, not
     // the padded/aspect-corrected floor box above -- see camera.ts's
     // CameraConfig.clampBounds doc comment for why using the floor here
@@ -789,13 +790,24 @@ export class Renderer {
       : this.stageBounds;
 
     const fighterPositions = liveFighters.map((f) => ({ x: f.x, y: f.y }));
+    // Matches camera.ts's own fSpanX padding exactly, so the framing
+    // floor's aspect-ratio step (framing.ts) trims to the same effective
+    // width computeRawCamera will end up using -- see
+    // ARENA_FLOOR_SLACK_FACTOR/MIN_COUNT in framing.ts for why this needs
+    // to happen before, not after, that step.
+    const fighterSpanXHint =
+      fighterPositions.length > 0
+        ? Math.max(...fighterPositions.map((p) => p.x)) -
+          Math.min(...fighterPositions.map((p) => p.x)) +
+          2 * 20
+        : undefined;
     const cam =
       frame.cameraOverride ??
       computeCamera(
         fighterPositions,
         this.attractFraming
           ? attractCameraConfig(stageForDraw, vw, vh, fighterPositions)
-          : cameraConfig(stageForDraw, vw, vh, liveFighters.length),
+          : cameraConfig(stageForDraw, vw, vh, liveFighters.length, fighterSpanXHint),
         // Real elapsed time between draws, so the camera's follow damping
         // runs on the same wall clock on a phone managing 15fps as on a
         // 60fps desktop.

@@ -227,16 +227,15 @@ test('clampBounds lets the camera center follow ground-level fighters instead of
 
   // Before the fix, the ground line sits in the bottom ~15-20% of the
   // screen (pinned near the edge). After, the deliberate ground-anchor
-  // bias (GROUND_BIAS in camera.ts, set to 0.75 in the
+  // bias (GROUND_BIAS in camera.ts, retuned to 0.35 in the
+  // empty-sky-at-20 follow-up 2026-09-15, down from 0.75 set in the
   // dead-space-below-floor pass 2026-09-14 -- see wiki "Camera Framing:
-  // Ground Anchor and Jump-Space Bias 2026-09-14") should put it at
-  // roughly 85-93% down the viewport -- most of the frame above the
-  // ground where the actual platform-fighter action (jumps, aerials,
-  // recoveries) happens, only a modest margin below it (enough that a
-  // fighter falling out still visibly falls before leaving frame), not
-  // a quarter of the screen reserved for an empty pit.
+  // Ground Anchor and Jump-Space Bias 2026-09-14" and the GROUND_BIAS
+  // comment in camera.ts) should put it at roughly 60-68% down the
+  // viewport -- more room above the ground than below it (jumps go up,
+  // not down), without pinning the action to either edge.
   assert.ok(beforeFrac > 0.75, `expected pre-fix ground line pinned near bottom, got ${beforeFrac}`);
-  assert.ok(afterFrac > 0.80 && afterFrac < 0.89, `expected post-fix ground line at ~80-88% down, got ${afterFrac}`);
+  assert.ok(afterFrac > 0.60 && afterFrac < 0.68, `expected post-fix ground line at ~60-68% down, got ${afterFrac}`);
 });
 
 test('clampBounds still prevents the camera from showing dead space beyond the true world edges', () => {
@@ -262,11 +261,15 @@ test('clampBounds defaults to arena bounds when omitted (unchanged behaviour for
 // the ground-anchor fix above (clampBounds) was correct but overcorrected
 // to dead-center the fighters (~50% down), leaving a big band of empty
 // pit below them. A platform fighter's action is mostly *above* the
-// floor, so the frame should be biased to put the ground at ~65-75% down
-// the viewport when the fighters are a ground-hugging pack, while never
-// cropping a fighter who is genuinely spread out vertically (jumping,
-// falling below the floor).
-test('GROUND_BIAS puts a ground-hugging pack at ~80-88% down the viewport, on multiple stage shapes', () => {
+// floor, so the frame should be biased to put the ground below center.
+//
+// EMPTY-SKY-AT-20 FOLLOW-UP (2026-09-15): the 80-88% value this test used
+// to pin was itself later found to overcorrect the other way once
+// fighters were big enough to read the composition by -- GROUND_BIAS was
+// retuned from 0.75 to 0.35, moving the ground line to ~62-66% down
+// instead. See the GROUND_BIAS comment in camera.ts for the full
+// before/after reasoning.
+test('GROUND_BIAS puts a ground-hugging pack at ~60-68% down the viewport, on multiple stage shapes', () => {
   const stages: Array<{ name: string; arena: ArenaBounds; clampBounds: ArenaBounds }> = [
     {
       name: 'battle-royale-20-shaped (wide, short)',
@@ -284,7 +287,7 @@ test('GROUND_BIAS puts a ground-hugging pack at ~80-88% down the viewport, on mu
     const cam = computeRawCamera(positions, cfg({ arena, clampBounds, minScale: 1.2, maxScale: 5.5 }));
     const groundScreenY = 720 / 2 + cam.centerY * cam.scale;
     const frac = groundScreenY / 720;
-    assert.ok(frac > 0.80 && frac < 0.89, `${name}: expected ground line at ~80-88% down, got ${frac}`);
+    assert.ok(frac > 0.60 && frac < 0.68, `${name}: expected ground line at ~60-68% down, got ${frac}`);
   }
 });
 
@@ -457,7 +460,12 @@ test('damped steady-state scale matches raw scale on a wide arena that needs to 
 // "Camera Framing: Ground Anchor and Jump-Space Bias" wiki history and
 // scripts/camera-framing-metrics.mjs.
 test('a large, tightly-spread lobby zooms in past the raw arena footprint, never past cfg.maxScale, and still contains everyone', () => {
-  const arena: ArenaBounds = { minX: -480, maxX: 480, minY: -100, maxY: 540 };
+  // minY/maxY sized to a realistic jump/fall headroom band (like a real
+  // stage's framing floor, not an arbitrary wide box) so this test
+  // isolates the X-axis cap under test rather than accidentally binding
+  // on Y, which production's aspect-correction step (framing.ts) would
+  // ordinarily have already shrunk to match.
+  const arena: ArenaBounds = { minX: -480, maxX: 480, minY: -40, maxY: 150 };
   const c = cfg({
     viewWidth: 1280,
     viewHeight: 720,
@@ -473,7 +481,10 @@ test('a large, tightly-spread lobby zooms in past the raw arena footprint, never
     x: -367 + (i / 19) * 734,
     y: 0,
   }));
-  const arenaFootprintScale = c.viewWidth / (arena.maxX - arena.minX);
+  const arenaFootprintScale = Math.min(
+    c.viewWidth / (arena.maxX - arena.minX),
+    c.viewHeight / (arena.maxY - arena.minY),
+  );
   const view = computeRawCamera(positions, c);
   assert.ok(
     view.scale > arenaFootprintScale,
