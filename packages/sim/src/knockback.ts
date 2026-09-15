@@ -104,8 +104,26 @@ export const KB_GROWTH_SCALE: Fixed = fx.fromFloat(0.6);
 // soft-start buys more of the "many fighters still alive, jockeying"
 // phase the owner's 150-180s target arc describes before the first kills
 // land, without touching damage percent at all.
+//
+// PACING CORRECTION 2026-09-15: Lever 8's widening (above) was tuned
+// against pre-crowd-scale duel-strength damage, to buy time before the
+// opening scrum's *first* exchange could convert straight into a kill.
+// crowdDamageScale() (commit 1e96eee) now does that same job directly and
+// far more precisely -- it scales percent accrual itself down to floor
+// 0.2-0.4x whenever the lobby is still crowded, self-adjusting as players
+// die, rather than a fixed 60 real-time seconds regardless of population.
+// With both stacked, the opening quarter of a 20-player match (measured:
+// 49s to reach 15 alive) was being double-suppressed: soft damage *and*
+// soft knockback on top of it. Narrowed the ramp back to its pre-Lever-8
+// 30s width (1800 ticks); crowdDamageScale now does the population-aware
+// part of this job. Left the tick-0 dampener depth (0.35x) unchanged --
+// content/test/spawn-clearance.test.ts's worst-case-early-hit-arc margin
+// is computed at tick 0 and is load-bearing for a real fixed defect
+// (see wiki "Spawn Clearance Audit: All Stages 2026-09-11"); raising the
+// tick-0 floor back toward 0.45x reintroduced that shortfall on
+// the-quarry when tried, so only the ramp *duration* changed here.
 export const EARLY_MATCH_KB_DAMPENER_START = fx.fromFloat(0.35);
-export const EARLY_MATCH_RAMP_TICKS = 3600; // 60s @ 60Hz
+export const EARLY_MATCH_RAMP_TICKS = 1800; // 30s @ 60Hz
 
 /** 0.45x at tick 0, ramping linearly to 1.0x at EARLY_MATCH_RAMP_TICKS and
  * beyond. Pure function of tick -- safe from both server and client sims,

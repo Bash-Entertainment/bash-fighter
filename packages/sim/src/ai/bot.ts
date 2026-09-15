@@ -253,11 +253,22 @@ const EMPTY_SET: ReadonlySet<number> = new Set();
 // bots look idle or passive, only slower to actually connect early on,
 // spreading first-blood eliminations out over more of the match instead
 // of clustering them in the opening flurry. Ramps down to 0 by
-// EARLY_ENGAGEMENT_RAMP_TICKS, matching the existing early-match
-// knockback dampener's 60s window (knockback.ts) so the two levers ease
-// off together rather than one dragging past the other.
+// EARLY_ENGAGEMENT_RAMP_TICKS, matching the early-match knockback
+// dampener's window (knockback.ts) so the two levers ease off together
+// rather than one dragging past the other.
+//
+// PACING CORRECTION 2026-09-15: this bonus and the knockback dampener
+// were both widened to a 60s window on 2026-09-10, before
+// crowdDamageScale() (knockback.ts, 2026-09-14) existed. crowdDamageScale
+// now suppresses early percent gain directly and in proportion to how
+// crowded the lobby actually is, which is exactly the mass-wipe
+// protection this fixed 60s hesitation window was standing in for. With
+// both active, measured time-to-15-alive on battle-royale-20 was 49.2s --
+// nearly half the 100s target consumed before a quarter of the field is
+// even gone. Narrowed back to the pre-2026-09-10-widening 30s window;
+// crowdDamageScale is left to do the population-aware part of the job.
 const EARLY_ENGAGEMENT_HESITATION_BONUS = 300;
-const EARLY_ENGAGEMENT_RAMP_TICKS = 3600; // 60s @ 60Hz
+const EARLY_ENGAGEMENT_RAMP_TICKS = 1800; // 30s @ 60Hz
 
 // LATE-GAME FINISH FIX (task: endgame time-budget 2026-09-15): measured
 // via scripts/time-budget-metrics.mjs that once the field thins to the
