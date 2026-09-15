@@ -69,11 +69,29 @@ html, body {
   align-items: center;
   background: var(--bg);
   z-index: 10;
-  /* Short viewports must be able to reach everything below the fold
-     (the character roster). A player reported the roster being
-     unreachable at 720px height on 2026-09-13: .below-fold scrolls, but
-     it collapses to almost nothing once the hero grows, so the screen
-     itself has to scroll as a fallback. */
+  /* .screen is the ONLY scroll container on the start/end screens, and
+     this must hold regardless of cursor position. A player reported on
+     2026-09-13 that the roster was unreachable at 720px height; the fix
+     then made .below-fold scroll internally *in addition to* this rule,
+     which created a second, nested scroll region. A flex child with
+     flex:1 1 auto and min-height:0 shrinks to fit its allotted space
+     instead of forcing its parent to overflow, so with .below-fold
+     scrolling on its own, .screen's scrollHeight never exceeds its
+     clientHeight -- this overflow-y:auto became dead CSS satisfied by
+     zero scrollable distance. A visitor whose cursor sits anywhere
+     *outside* .below-fold's own (often tiny) band -- over the attract
+     canvas, the hero text, anywhere else -- got a wheel/touch event
+     that reached a "scrollable" element with nothing left to scroll,
+     and since html/body are overflow:hidden there was nowhere left to
+     chain to. Confirmed live 2026-09-15 with real wheel scroll dispatch
+     at 1280x600: scrolling over #attract-frame moved nothing anywhere;
+     the same gesture over the .below-fold band worked. Reported
+     externally, twice, as "still doesn't work. i have the cursor below
+     the played game on the homepage and still can't scroll down." See
+     [[First Ten Seconds and Phone Pass 2026-09-12]] for the fix and
+     evidence -- .below-fold no longer scrolls itself; its overflow
+     belongs to .screen so every cursor position and every input device
+     reaches the same, always-scrollable container. */
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0;
@@ -123,10 +141,14 @@ html, body {
 }
 
 .below-fold {
+  /* No overflow-y here -- see the note on .screen above. flex:1 1 auto
+     with no min-height override means this box does not shrink smaller
+     than its content, so its overflow becomes .screen's overflow and
+     .screen's own scrollbar (the only one on this page) actually has
+     something to scroll, reachable from a wheel or touch anywhere on
+     the screen, not just over this element. */
   flex: 1 1 auto;
-  min-height: 0;
   width: 100%;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
