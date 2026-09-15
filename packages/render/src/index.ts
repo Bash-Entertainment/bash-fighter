@@ -380,10 +380,18 @@ export class Renderer {
   // whether a given frame's numbers are worth accumulating.
   private lastFrameFightersAlive = 0;
   private lastFrameFightersOnScreen = 0;
-  // Freeze-frame ("hitstop") state: purely a rendering hold -- the sim
-  // keeps advancing at 60Hz underneath regardless. See render()'s early
-  // return. Duration is short and capped so it reads as a punch landing,
-  // not as lag.
+  // Freeze-frame state, now used *only* by the dev-only debug hooks
+  // (__debugFreezeOnNextEffect / __debugFreezeOnAttackActive) below, for
+  // holding a rendered frame still long enough to screenshot it. The
+  // real per-hit impact freeze is sim-side now (Sim's HITSTOP_TICKS,
+  // packages/sim/src/knockback.ts) -- both attacker and defender's
+  // simulated position genuinely stop advancing for a few ticks, so the
+  // renderer displays it for free by just drawing whatever the sim
+  // reports, with no render-side timer of its own. A render-side "hold
+  // the picture on a strong hit" used to live here as a stand-in before
+  // the sim grew a real one; keeping it too would have stacked an extra,
+  // untuned wall-clock freeze on top of the deterministic one this was
+  // designed to replace, so it was removed rather than left to double up.
   private freezeRemainingMs = 0;
 
   constructor(stageBounds: StageBounds) {
@@ -809,7 +817,6 @@ export class Renderer {
         shakeAttenuation: shakeAttenuationFor(hit.worldX, hit.worldY),
       });
       this.effects.flashFighter(hit.fighterIndex, hit.strong);
-      if (hit.strong) this.freezeRemainingMs = Math.max(this.freezeRemainingMs, 55);
     }
     for (const elim of frame.eliminationEffects ?? []) {
       const screen = worldToScreen(elim.worldX, elim.worldY, cam, vw, vh);

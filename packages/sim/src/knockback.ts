@@ -194,6 +194,42 @@ export function computeHitstunTicks(magnitude: Fixed): number {
   return ticks;
 }
 
+// HITSTOP (2026-09-15): the brief freeze on contact that the presentation
+// pass ([[Game Feel, Audio, and Reconnection]]) deliberately left out of
+// the renderer and flagged as a real gameplay change requiring a decision.
+// See wiki "Combat Model: Knockback, Hitstun, and DI" 2026-09-15 addendum
+// for the full writeup (durations tried, match-length effect, why both
+// attacker and defender freeze). Short version of what the constants
+// below encode:
+//
+// - Scales with the same `magnitude` that already drives hitstun, so a
+//   jab (magnitude ~3-5 for the placeholder's moveset) and a heavy aerial
+//   (magnitude ~15-20) do not freeze for the same duration -- a light tap
+//   should barely register as a freeze, a kill-range hit should read as a
+//   real event.
+// - Deliberately much shorter than hitstun (HITSTOP_PER_MAGNITUDE is
+//   roughly 1/10th of HITSTUN_PER_MAGNITUDE): hitstop is the *impact*
+//   instant, hitstun is what happens *after* it, and letting hitstop eat
+//   into hitstun would mean strong hits (long hitstun already) also lose
+//   proportionally more of it to the freeze, which is backwards -- weak
+//   hits should feel snappy, not draggy.
+// - Hard-capped at MAX_HITSTOP_TICKS regardless of magnitude or how many
+//   hits land: this is what keeps a barrage of hits from ever stalling a
+//   fighter indefinitely (see sim.ts tryApplyHit, which takes the max of
+//   the current remaining freeze and each new hit's contribution rather
+//   than summing them -- a second hit landing mid-freeze can *refresh*
+//   the freeze up to the cap, never extend past it).
+export const HITSTOP_PER_MAGNITUDE: Fixed = fx.fromFloat(0.32);
+export const MIN_HITSTOP_TICKS = 2;
+export const MAX_HITSTOP_TICKS = 8;
+
+export function computeHitstopTicks(magnitude: Fixed): number {
+  const ticks = fx.toInt(fx.mul(magnitude, HITSTOP_PER_MAGNITUDE));
+  if (ticks < MIN_HITSTOP_TICKS) return MIN_HITSTOP_TICKS;
+  if (ticks > MAX_HITSTOP_TICKS) return MAX_HITSTOP_TICKS;
+  return ticks;
+}
+
 /** Mirror an angle index horizontally (flip X, keep Y) for an attacker
  * facing left, so authored hitbox angles are always written as if facing
  * right. */

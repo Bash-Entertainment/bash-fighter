@@ -22,6 +22,7 @@ import {
   computeKnockbackMagnitude,
   crowdDamageScale,
   computeHitstunTicks,
+  computeHitstopTicks,
   mirrorAngleIdx,
 } from './knockback.ts';
 import { sinLUT, cosLUT } from './math/fixed.ts';
@@ -195,7 +196,8 @@ export const FighterField = {
   DROP_THROUGH_TIMER: 25, // ticks remaining to ignore 'pass-through' platforms, 0 = none
   RING_DAMAGE_TICK: 26, // last tick this fighter took ring (out-of-bounds) damage, -1 if never
   LAST_HIT_TICK: 27, // last tick a combat hit landed on this fighter, -1 if never (see DEATH_CAUSE below)
-  FIELD_COUNT: 28,
+  HITSTOP_TICKS: 28, // ticks remaining of a sim-side impact freeze (see HITSTOP_* in knockback.ts); 0 = not frozen
+  FIELD_COUNT: 29,
 } as const;
 
 /** Ring-pressure tuning (2026-09-10): the collapsing boundary no longer kills on contact. A
@@ -273,6 +275,7 @@ export interface FighterSnapshot {
   placement: number; // 0 until decided; 1 = winner
   jumpsUsed: number; // jumps taken since last grounded (0..MAX_JUMPS)
   inRingDanger: boolean; // taking ring (out-of-bounds) damage this tick -- presentation hook
+  hitstopTicks: number; // ticks remaining of an active impact freeze, 0 = not frozen (see HITSTOP_* in knockback.ts)
 }
 
 export interface ItemSnapshot {
@@ -478,6 +481,7 @@ export class Sim {
     d[base + FighterField.DROP_THROUGH_TIMER] = 0;
     d[base + FighterField.RING_DAMAGE_TICK] = -1;
     d[base + FighterField.LAST_HIT_TICK] = -1;
+    d[base + FighterField.HITSTOP_TICKS] = 0;
   }
 
   /** Mid-match life reset after a non-final KO: position/percent/shield
@@ -511,6 +515,7 @@ export class Sim {
     d[base + FighterField.DROP_THROUGH_TIMER] = 0;
     d[base + FighterField.RING_DAMAGE_TICK] = -1;
     d[base + FighterField.LAST_HIT_TICK] = -1;
+    d[base + FighterField.HITSTOP_TICKS] = 0;
     this.setState(base, FighterStateId.IDLE);
   }
 
@@ -637,6 +642,7 @@ export class Sim {
       eliminatedTick: d[base + FighterField.ELIMINATED_TICK] as number,
       placement: d[base + FighterField.PLACEMENT] as number,
       jumpsUsed: d[base + FighterField.JUMPS_USED] as number,
+      hitstopTicks: d[base + FighterField.HITSTOP_TICKS] as number,
       // Presentation-only flag (see the field comment above): "did this
       // fighter take ring pressure on the tick that was just simulated".
       // RING_DAMAGE_TICK is written inside checkBlastZone using the
@@ -953,6 +959,31 @@ export class Sim {
   private stepFighter(index: number, input: InputFrame): void {
     const base = index * FighterField.FIELD_COUNT;
     const d = this.data;
+
+    // HITSTOP: a brief, deterministic freeze of this fighter's own
+    // simulation on contact -- gameplay, not presentation (see wiki
+    // "Game Feel, Audio, and Reconnection"'s presentation-only rule and
+    // its explicit callout that a *real* hitstop would have to live here,
+    // identically on server and every client, or online play desyncs).
+    // Frozen means frozen: position, velocity, state, move timing, invuln
+    // and drop-through timers, jump-edge bookkeeping -- nothing for this
+    // fighter advances this tick, only the freeze countdown itself. This
+    // is deliberately scoped to a single fighter's own slice of the state
+    // array: an uninvolved fighter's stepFighter call is entirely
+    // unaffected, so a hit anywhere in a 20-player brawl never stalls
+    // anyone but the two fighters actually in it. checkBlastZone (ring
+    // damage/push, blast-zone elimination) and resolveHitsFor both still
+    // run against a frozen fighter's unchanged-this-tick position exactly
+    // as they would for any other tick, so a frozen fighter can still be
+    // pushed out of bounds, take ring damage, be eliminated, or take a
+    // second real hit -- hitstop holds the *actor*, it grants no
+    // invulnerability. See knockback.ts HITSTOP_* for how long this is.
+    const hitstopTicks = d[base + FighterField.HITSTOP_TICKS] as number;
+    if (hitstopTicks > 0) {
+      d[base + FighterField.HITSTOP_TICKS] = (hitstopTicks - 1) | 0;
+      return;
+    }
+
     const state = d[base + FighterField.STATE] as FighterStateValue;
 
     if ((d[base + FighterField.INVULN_TIMER] as number) > 0) {
@@ -1374,6 +1405,24 @@ export class Sim {
     d[dBase + FighterField.MOVE_ID] = -1;
     d[dBase + FighterField.MOVE_FRAME] = 0;
     this.setState(dBase, FighterStateId.HITSTUN);
+
+    // HITSTOP: both attacker and defender freeze (the standard genre
+    // convention -- freezing only the victim reads as the attacker's
+    // limb clipping through a statue; freezing only the attacker reads as
+    // the victim being unaffected). Scoped to exactly these two fighter
+    // slots, so the other (up to) eighteen fighters in the match are
+    // never touched. Take the max against whatever freeze is already
+    // queued rather than adding, so simultaneous multi-hitbox hits (or a
+    // hit landing again before an already-queued freeze finishes ticking
+    // down) can refresh the freeze up to computeHitstopTicks' own cap,
+    // never stack past it -- see knockback.ts HITSTOP_* doc.
+    const hitstopTicks = computeHitstopTicks(magnitude);
+    const currentDefenderHitstop = d[dBase + FighterField.HITSTOP_TICKS] as number;
+    d[dBase + FighterField.HITSTOP_TICKS] =
+      currentDefenderHitstop > hitstopTicks ? currentDefenderHitstop : hitstopTicks;
+    const currentAttackerHitstop = d[attackerBase + FighterField.HITSTOP_TICKS] as number;
+    d[attackerBase + FighterField.HITSTOP_TICKS] =
+      currentAttackerHitstop > hitstopTicks ? currentAttackerHitstop : hitstopTicks;
   }
 
   /** Shared damage/knockback/hitstun application for items and hazards:

@@ -19,6 +19,7 @@ function baseFighter(overrides: Partial<FighterSnapshot> = {}): FighterSnapshot 
     grounded: true,
     moveId: -1,
     moveFrame: 0,
+    hitstopTicks: 0,
     percent: fx.fromFloat(0),
     stocks: 3,
     shieldHealth: fx.fromFloat(100),
