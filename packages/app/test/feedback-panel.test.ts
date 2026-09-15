@@ -64,7 +64,7 @@ test('touch ergonomics question is marked touch-only and visibility is driven by
 });
 
 test('a secondary link points at the real GitHub issue tracker', () => {
-  assert.match(panel, /https:\/\/github\.com\/BashEntertainment\/bash-fighter\/issues/);
+  assert.match(panel, /https:\/\/github\.com\/Bash-Entertainment\/bash-fighter\/issues/);
   assert.match(panel, /target="_blank" rel="noopener noreferrer"/);
 });
 

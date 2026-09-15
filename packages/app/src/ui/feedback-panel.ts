@@ -37,7 +37,7 @@ export interface FeedbackContext {
   result?: string | null;
 }
 
-const GITHUB_ISSUES_URL = 'https://github.com/BashEntertainment/bash-fighter/issues';
+const GITHUB_ISSUES_URL = 'https://github.com/Bash-Entertainment/bash-fighter/issues';
 
 /** Optional global a build step can set (e.g. `window.__BASH_BUILD_SHA__
  *  = '<sha>'` injected at deploy time) so submissions carry a build sha

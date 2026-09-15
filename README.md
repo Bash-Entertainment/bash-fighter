@@ -45,7 +45,7 @@ readability, fun, touch ergonomics, lobby clarity. Two ways to tell us:
 - In-game: click the **Feedback** button (start screen, in-match HUD, or
   match-end screen). It's a short form, free text plus optional 1-5 ratings,
   needs no account, and posts straight to our server.
-- On GitHub: [open an issue](https://github.com/BashEntertainment/bash-fighter/issues)
+- On GitHub: [open an issue](https://github.com/Bash-Entertainment/bash-fighter/issues)
   if you prefer that route, especially for bugs or specific reproduction steps.
 
 ## Repository layout
@@ -79,7 +79,7 @@ via Node's built-in type-stripping, so older Node versions will not run it.
 CI covers Node 22 and 24.
 
 ```sh
-git clone https://github.com/BashEntertainment/bash-fighter.git
+git clone https://github.com/Bash-Entertainment/bash-fighter.git
 cd bash-fighter
 npm install
 npm test            # packages/*/test only — see CONTRIBUTING.md "Running the tests"
@@ -142,12 +142,12 @@ tracks what's built, in progress, and not started. Use the issue forms
 under `.github/ISSUE_TEMPLATE/` to report bugs or propose features, and
 see [`SECURITY.md`](./SECURITY.md) to report a vulnerability privately.
 
-Playtest feedback, feature ideas, and general questions are meant to go in
-GitHub Discussions, but **Discussions is not enabled on this repo yet**
-(admin setting outside current maintainer tooling's reach). Until it is,
-open a regular issue for any of that too — see "Discussions vs. issues"
-in `CONTRIBUTING.md`. Played a match on the live server? Tell us how it
-felt, in an issue.
+Playtest feedback and general questions go in
+[GitHub Discussions](https://github.com/Bash-Entertainment/bash-fighter/discussions)
+(Q&A for questions, General or Show and tell for feedback and playtest
+reports); concrete bugs and scoped feature requests go in Issues — see
+"Discussions vs. issues" in `CONTRIBUTING.md`. Played a match on the live
+server? Tell us how it felt, in Discussions.
 
 ## License
 

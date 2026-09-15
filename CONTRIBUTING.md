@@ -60,7 +60,7 @@ still memory-safe mode if it doesn't -- see "Running the tests" below for
 why this is a probe and not a version check.
 
 ```sh
-git clone https://github.com/BashEntertainment/bash-fighter.git
+git clone https://github.com/Bash-Entertainment/bash-fighter.git
 cd bash-fighter
 npm install
 npm test            # packages/*/test — see "Running the tests" below
@@ -261,12 +261,10 @@ do not open a public issue — see [`SECURITY.md`](./SECURITY.md).
 
 ## Discussions vs. issues
 
-**GitHub Discussions is not enabled on this repository yet** (it's a
-repo-admin setting current maintainer tooling can't flip; tracked
-internally). The `/discussions` link 404s today. Until it's turned on,
-open an issue instead (use the "Question / open-ended" option in the
-issue form if your topic isn't a concrete bug or scoped feature) and it
-will be triaged manually.
+[GitHub Discussions](https://github.com/Bash-Entertainment/bash-fighter/discussions)
+is enabled on this repository. Use the **Q&A** category for questions,
+**General** or **Show and tell** for playtest feedback and anything
+open-ended, and **Ideas** for feature suggestions.
 
 Once enabled, the intended split is: issues are for concrete, actionable
 work (a specific bug with repro steps, or a feature request scoped

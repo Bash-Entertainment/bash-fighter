@@ -84,5 +84,5 @@ Within "what's left," prefer picking up whatever unblocks the next item
 on this list over something further down it — check open issues and PRs
 first to avoid duplicating in-flight work. For raw playtest feedback and
 feature ideas that aren't scoped issues yet, check
-[Discussions](https://github.com/BashEntertainment/bash-fighter/discussions)
+[Discussions](https://github.com/Bash-Entertainment/bash-fighter/discussions)
 too — this roadmap gets pulled from there.
