@@ -33,7 +33,7 @@ anywhere. Any other message before `hello`, or a malformed message, gets
 | `spectate` | — | Client wants to only watch, not play (used after being assigned, or after elimination to keep watching without reconciliation). |
 | `pong` | `id` | Echo of a server `ping`, for RTT measurement. |
 | `startNow` | — | Sent by a client holding a seat in a still-filling lobby (the waiting screen's "Start now" button): fills the rest of that lobby with bots and starts immediately, instead of waiting out the countdown/bot-fill grace period. The server only honours this from a connection that actually holds a seat in that exact match (never a spectator, never a stranger); once the match has left the lobby phase, further `startNow` messages for it are a silent no-op, so a client may resend freely (e.g. a double click). |
-| `sessionReport` | `firstInputMs`, `inputTicks`, `frameMedianMs`, `frameP95Ms` | Engagement telemetry only, added 2026-09-13 -- see `docs/MEASUREMENT.md`. Sent periodically (every ~5s) and once more, best-effort, when the tab is hidden. Never required for the match to function; a client that never sends one simply produces a less complete `[sessionEnd]` server log line. `firstInputMs` is milliseconds from match start to this seat's first non-neutral local input, or `null` if none yet. `inputTicks` is the cumulative count of ticks with any input. `frameMedianMs`/`frameP95Ms` are a rolling client frame-time distribution in ms. All fields are validated and clamped server-side (see `packages/net/src/protocol.ts`); a malformed payload is simply rejected like any other bad control message, never trusted partially. |
+| `sessionReport` | `firstInputMs`, `inputTicks`, `frameMedianMs`, `frameP95Ms`, plus optional device/frame/input telemetry (see below) | Engagement telemetry only, added 2026-09-13 -- see `docs/MEASUREMENT.md`. Sent periodically (every ~5s) and once more, best-effort, when the tab is hidden. Never required for the match to function; a client that never sends one simply produces a less complete `[sessionEnd]` server log line. `firstInputMs` is milliseconds from match start to this seat's first non-neutral local input, or `null` if none yet. `inputTicks` is the cumulative count of ticks with any input. `frameMedianMs`/`frameP95Ms` are a rolling client frame-time distribution in ms. All fields are validated and clamped server-side (see `packages/net/src/protocol.ts`); a malformed payload is simply rejected like any other bad control message, never trusted partially. All fields beyond the four above are optional and may be absent from an older client build -- the server always treats absence as "not tracked", never a fabricated zero, and a report with none of them still validates and stores. As of 2026-09-15 this includes six `slowFrame*` fields (see "Slow-frame attribution" table below); an earlier 2026-09-14 change added `frameHistogram`, `hiddenFrames`, `networkHitchCount`, `keyboardInputTicks`, `touchInputTicks`, `gamepadInputTicks` (see `packages/net/src/protocol.ts` for their exact shapes -- not re-documented here). |
 
 ### `hello.profile`
 
@@ -48,6 +48,10 @@ persistent id, nothing that survives past this one connection):
 | `viewportWidth` / `viewportHeight` | number | The viewport size in CSS pixels, clamped to `[0, 20000]`. |
 | `buildSha` | string | The build sha the client was served, capped at 64 characters. |
 | `qa` | boolean | Self-declared QA hint, sent only when the client was opened with `?qa=1` (see docs/MEASUREMENT.md). A HINT, not proof -- a real player could set it, a tester could forget it. |
+| `hwConcurrencyBucket` / `deviceMemoryBucket` / `dprBucket` | number | Bucketed `navigator.hardwareConcurrency`/`.deviceMemory`/`devicePixelRatio` (added 2026-09-14) -- rounded up to a small fixed set of public ceilings, never the raw reading. |
+| `canvasWidthPx` / `canvasHeightPx` | number | **Added 2026-09-15, see "Slow-frame attribution" below.** The real `<canvas>` device-pixel backing-store size (CSS size times whatever resolution Pixi applied), clamped to `[0, 20000]`. Not bucketed -- see the field's doc comment in `packages/net/src/protocol.ts` for why. |
+| `screenWidthBucket` / `screenHeightBucket` | number | **Added 2026-09-15.** Bucketed `window.screen.width`/`.height` (the physical screen, not the browser viewport) -- rounded up to one of `[480, 768, 1024, 1440, 1920, 2560, 3840, 7680]`. |
+| `uaFamily` | `'chrome' \| 'firefox' \| 'safari' \| 'other'` | **Added 2026-09-15.** A coarse browser family derived client-side from `navigator.userAgent`, one of exactly these four values -- the raw user-agent string itself is never read into the profile or sent anywhere. Exists to tell a Safari-family mobile browser apart from a Chromium-family one when correlating slow frames, nothing finer. |
 
 Every field is optional and independently dropped if malformed rather than
 rejecting the whole `hello` -- a garbled profile must never keep a player
@@ -199,6 +203,28 @@ frame, or a stale decoder after some other frame was applied), `decode`
 returns `null` for that frame — the caller simply skips that tick's update,
 never guesses, and self-heals cleanly at the next full keyframe (at most
 `KEYFRAME_INTERVAL_SNAPSHOTS` away).
+
+## `sessionReport`'s `slowFrame*` fields: slow-frame attribution (2026-09-15)
+
+See `docs/MEASUREMENT.md` ("Slow-frame attribution") for the why. All six
+fields are optional, independently validated, and each conditioned on
+`SLOW_FRAME_THRESHOLD_MS` (33ms, exported from `packages/net/src/protocol.ts`)
+-- a frame delta at or above that threshold is what counts as "slow" for
+every field below. Sent as a running cumulative total for the match so far,
+same convention as `frameHistogram`.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `slowFrameCount` | number | How many rendered frames this match have met the threshold. The denominator every other field below is conditioned on. |
+| `slowFrameFightersAliveBuckets` | `number[4]` | Of those slow frames, how many happened while `[0-5, 6-10, 11-15, 16-20]` fighters (respectively) were still alive. |
+| `slowFrameFightersOnScreenBuckets` | `number[4]` | Same shape, but counting fighters the camera actually drew on screen. Expected to closely track the alive buckets -- the camera is built never to crop a live fighter out of frame -- so a persistent gap between the two is itself a signal. |
+| `slowFrameEffectsLoadBuckets` | `number[4]` | Of those slow frames, how many happened while `[0-20, 21-60, 61-120, 121+]` particles/pops/trail segments (respectively) were live in the effects layer. |
+| `slowFrameHitchCoincidentCount` | number | Of those slow frames, how many happened within 1s of a network hitch (see `networkHitchCount`). |
+| `slowFrameTransitionCoincidentCount` | number | Of those slow frames, how many happened within 1s of an elimination/match-transition effect being queued. |
+
+Every `number[4]` field is rejected whole (not partially trusted) if it is
+not an array of exactly 4 finite, non-negative numbers -- see
+`sanitiseFixedNumberArray` in `packages/net/src/protocol.ts`.
 
 ## Client responsibilities
 

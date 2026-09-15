@@ -119,6 +119,37 @@ export interface ClientSessionProfile {
    *  logical viewport suggests -- useful context for a frame-time
    *  reading that otherwise looks the same as a low-DPR phone. */
   dprBucket?: number;
+  /** Device pixel canvas backing-store size (2026-09-15, see
+   *  docs/MEASUREMENT.md "Slow-frame attribution") -- the real
+   *  `<canvas>.width`/`.height` the renderer draws into, i.e. CSS size
+   *  times the resolution Pixi actually applied, not the CSS/viewport
+   *  size already covered by `viewportWidth`/`viewportHeight` above. A
+   *  phone can report a small CSS viewport but a large device-pixel
+   *  canvas (high DPR), which is exactly the fill-rate cost
+   *  `viewportWidth`/`viewportHeight` alone cannot show. Not bucketed --
+   *  canvas pixel dimensions are already coarse (tied to common device
+   *  screen sizes) and clamped hard by the sanitiser below, so a second
+   *  bucketing pass would only lose precision for no privacy gain. */
+  canvasWidthPx?: number;
+  canvasHeightPx?: number;
+  /** Coarse, bucketed `window.screen.width`/`.height` (physical screen
+   *  size, not the browser viewport) -- lets a report tell a small-
+   *  screen phone apart from a windowed desktop browser with a small
+   *  viewport, which `viewportWidth`/`viewportHeight` cannot do alone.
+   *  Bucketed the same "round up to the nearest public ceiling" way as
+   *  the other capability fields via `bucketScreenDimension` in
+   *  `packages/app/src/session-report.ts`. */
+  screenWidthBucket?: number;
+  screenHeightBucket?: number;
+  /** Coarse browser *family*, not a version string and not the raw user
+   *  agent -- derived client-side from `navigator.userAgent` down to one
+   *  of a fixed, small set of values (see `detectUaFamily` in
+   *  session-report.ts). Exists only to tell "a Safari-family mobile
+   *  browser" from "a Chromium-family one" when correlating slow frames,
+   *  since the two have meaningfully different GPU/compositor paths on
+   *  phones. Never the full UA string -- that is deliberately never
+   *  read into this profile at all. */
+  uaFamily?: 'chrome' | 'firefox' | 'safari' | 'other';
 }
 
 /** Sent by a client that wants to keep watching after being eliminated. */
@@ -239,7 +270,68 @@ export interface SessionReportMessage {
    *  connected gamepad actually producing the frame. Optional/absent
    *  means "not tracked". */
   gamepadInputTicks?: number;
+  /** Cumulative count, this match so far, of *rendered* frames whose
+   *  delta met or exceeded `SLOW_FRAME_THRESHOLD_MS` (2026-09-15, see
+   *  docs/MEASUREMENT.md "Slow-frame attribution") -- deliberately a
+   *  second, coarser threshold than `frameHistogram`'s buckets: this is
+   *  the denominator every `slowFrame*` field below is conditioned on.
+   *  Optional/absent means "not tracked" (older client), never a
+   *  fabricated zero. */
+  slowFrameCount?: number;
+  /** For every frame counted in `slowFrameCount`, which of four fixed
+   *  buckets (`[0-5, 6-10, 11-15, 16-20]` fighters) the count of *alive*
+   *  fighters fell into at that moment, summed across the match so far
+   *  -- lets a report ask "do slow frames cluster when the lobby is
+   *  still full?" without shipping a per-frame sample. Always exactly 4
+   *  entries when present. Optional/absent means "not tracked". */
+  slowFrameFightersAliveBuckets?: number[];
+  /** Same shape and bucket boundaries as
+   *  `slowFrameFightersAliveBuckets`, but counting fighters the camera
+   *  actually drew on screen rather than fighters still alive in the
+   *  match -- these are expected to match almost always (the camera is
+   *  built never to crop a live fighter out of frame), so a persistent
+   *  gap between the two histograms is itself a signal that invariant
+   *  has regressed, not just a frame-cost signal. Optional/absent means
+   *  "not tracked". */
+  slowFrameFightersOnScreenBuckets?: number[];
+  /** Same shape, but bucketing the live particle/pop/trail-segment count
+   *  the effects layer was holding (`[0-20, 21-60, 61-120, 121+]`) at
+   *  the moment of a slow frame -- distinguishes "slow because the arena
+   *  is crowded with fighters" from "slow because of an effects burst"
+   *  (a simultaneous multi-hit pile-up), which a fighter count alone
+   *  cannot tell apart. Optional/absent means "not tracked". */
+  slowFrameEffectsLoadBuckets?: number[];
+  /** Of the frames counted in `slowFrameCount`, how many happened within
+   *  one second of a network hitch (see `networkHitchCount`) -- lets a
+   *  report separate "the render pipeline itself is slow" from "the
+   *  network stalled and dragged the next render down with it".
+   *  Optional/absent means "not tracked". */
+  slowFrameHitchCoincidentCount?: number;
+  /** Of the frames counted in `slowFrameCount`, how many happened within
+   *  one second of an elimination/match-transition effect being queued
+   *  -- a plausible source of a momentary spike (several simultaneous
+   *  elimination effects, a stage-shrink cut) that would otherwise look
+   *  identical to a steady per-frame cost problem. Optional/absent means
+   *  "not tracked". */
+  slowFrameTransitionCoincidentCount?: number;
 }
+
+/** Frame-delta threshold (ms) at which a rendered frame counts toward
+ *  `SessionReportMessage.slowFrameCount` and its accompanying
+ *  attribution buckets (2026-09-15, see docs/MEASUREMENT.md "Slow-frame
+ *  attribution"). Deliberately a plain "worse than 30fps" cut, coarser
+ *  than `FRAME_HISTOGRAM_BOUNDARIES_MS`'s finest buckets -- this is the
+ *  denominator for a handful of *conditional* counters, so it is kept to
+ *  one clearly-worse-than-smooth threshold rather than a second full
+ *  histogram. Shared between the client (session-report.ts) and this
+ *  validator so they can never drift apart. */
+export const SLOW_FRAME_THRESHOLD_MS = 33;
+
+/** Number of buckets in every `slowFrame*Buckets` array above -- fixed at
+ *  4 for all three (fighters-alive, fighters-on-screen, effects-load),
+ *  each with its own boundaries documented on the client-side bucketing
+ *  helpers in `packages/app/src/session-report.ts`. */
+export const SLOW_FRAME_BUCKET_COUNT = 4;
 
 export type ClientControlMessage =
   | HelloMessage
@@ -704,6 +796,21 @@ function sanitiseFrameHistogram(value: unknown): number[] | undefined {
   return out;
 }
 
+/** Validates a fixed-length array of finite, non-negative numbers of
+ *  exactly `length` elements -- same all-or-nothing discipline as
+ *  `sanitiseFrameHistogram`: a partially-wrong bucket array is not a
+ *  usable one, so there is no safe partial-clamp, only accept-whole or
+ *  drop-whole. Shared by every `slowFrame*Buckets` field. */
+function sanitiseFixedNumberArray(value: unknown, length: number): number[] | undefined {
+  if (!Array.isArray(value) || value.length !== length) return undefined;
+  const out: number[] = [];
+  for (const v of value) {
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return undefined;
+    out.push(Math.round(Math.min(v, 10_000_000)));
+  }
+  return out;
+}
+
 /** Validates and clamps HelloMessage.profile -- never trusts a client to
  *  have sent sane values, exactly like the rest of this boundary. Every
  *  field is optional and independently dropped if malformed rather than
@@ -736,6 +843,24 @@ function sanitiseClientProfile(value: unknown): ClientSessionProfile | undefined
   if (deviceMemory !== undefined) out.deviceMemoryBucket = deviceMemory;
   const dpr = clampFiniteNumber(input.dprBucket, 0.5, 8);
   if (dpr !== undefined) out.dprBucket = dpr;
+  // Canvas device-pixel size and screen/browser-family context
+  // (2026-09-15, see docs/MEASUREMENT.md "Slow-frame attribution").
+  // Same clamp-not-trust discipline as every field above.
+  const canvasWidthPx = clampFiniteNumber(input.canvasWidthPx, 0, 20000);
+  if (canvasWidthPx !== undefined) out.canvasWidthPx = Math.round(canvasWidthPx);
+  const canvasHeightPx = clampFiniteNumber(input.canvasHeightPx, 0, 20000);
+  if (canvasHeightPx !== undefined) out.canvasHeightPx = Math.round(canvasHeightPx);
+  const screenWidthBucket = clampFiniteNumber(input.screenWidthBucket, 0, 20000);
+  if (screenWidthBucket !== undefined) out.screenWidthBucket = Math.round(screenWidthBucket);
+  const screenHeightBucket = clampFiniteNumber(input.screenHeightBucket, 0, 20000);
+  if (screenHeightBucket !== undefined) out.screenHeightBucket = Math.round(screenHeightBucket);
+  // Fixed enum, not a free string -- anything unrecognised (including a
+  // client that mistakenly forwarded a real UA fragment) is dropped
+  // rather than accepted, so this can never become a fingerprinting
+  // channel via a hostile/buggy client.
+  if (input.uaFamily === 'chrome' || input.uaFamily === 'firefox' || input.uaFamily === 'safari' || input.uaFamily === 'other') {
+    out.uaFamily = input.uaFamily;
+  }
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -760,7 +885,13 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   const keyboardInputTicks = clampFiniteNumber(obj.keyboardInputTicks, 0, 10_000_000);
   const touchInputTicks = clampFiniteNumber(obj.touchInputTicks, 0, 10_000_000);
   const gamepadInputTicks = clampFiniteNumber(obj.gamepadInputTicks, 0, 10_000_000);
-  if ([firstInputMs, inputTicks, frameMedianMs, frameP95Ms, contextLostCount, renderStalled, frameHistogram, hiddenFrames, networkHitchCount, keyboardInputTicks, touchInputTicks, gamepadInputTicks].every((v) => v === undefined)) return null;
+  const slowFrameCount = clampFiniteNumber(obj.slowFrameCount, 0, 10_000_000);
+  const slowFrameFightersAliveBuckets = sanitiseFixedNumberArray(obj.slowFrameFightersAliveBuckets, SLOW_FRAME_BUCKET_COUNT);
+  const slowFrameFightersOnScreenBuckets = sanitiseFixedNumberArray(obj.slowFrameFightersOnScreenBuckets, SLOW_FRAME_BUCKET_COUNT);
+  const slowFrameEffectsLoadBuckets = sanitiseFixedNumberArray(obj.slowFrameEffectsLoadBuckets, SLOW_FRAME_BUCKET_COUNT);
+  const slowFrameHitchCoincidentCount = clampFiniteNumber(obj.slowFrameHitchCoincidentCount, 0, 10_000_000);
+  const slowFrameTransitionCoincidentCount = clampFiniteNumber(obj.slowFrameTransitionCoincidentCount, 0, 10_000_000);
+  if ([firstInputMs, inputTicks, frameMedianMs, frameP95Ms, contextLostCount, renderStalled, frameHistogram, hiddenFrames, networkHitchCount, keyboardInputTicks, touchInputTicks, gamepadInputTicks, slowFrameCount, slowFrameFightersAliveBuckets, slowFrameFightersOnScreenBuckets, slowFrameEffectsLoadBuckets, slowFrameHitchCoincidentCount, slowFrameTransitionCoincidentCount].every((v) => v === undefined)) return null;
   const out: SessionReportMessage = {
     t: 'sessionReport',
     firstInputMs: firstInputMs === undefined ? null : firstInputMs,
@@ -776,6 +907,12 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   if (keyboardInputTicks !== undefined) out.keyboardInputTicks = Math.round(keyboardInputTicks);
   if (touchInputTicks !== undefined) out.touchInputTicks = Math.round(touchInputTicks);
   if (gamepadInputTicks !== undefined) out.gamepadInputTicks = Math.round(gamepadInputTicks);
+  if (slowFrameCount !== undefined) out.slowFrameCount = Math.round(slowFrameCount);
+  if (slowFrameFightersAliveBuckets !== undefined) out.slowFrameFightersAliveBuckets = slowFrameFightersAliveBuckets;
+  if (slowFrameFightersOnScreenBuckets !== undefined) out.slowFrameFightersOnScreenBuckets = slowFrameFightersOnScreenBuckets;
+  if (slowFrameEffectsLoadBuckets !== undefined) out.slowFrameEffectsLoadBuckets = slowFrameEffectsLoadBuckets;
+  if (slowFrameHitchCoincidentCount !== undefined) out.slowFrameHitchCoincidentCount = Math.round(slowFrameHitchCoincidentCount);
+  if (slowFrameTransitionCoincidentCount !== undefined) out.slowFrameTransitionCoincidentCount = Math.round(slowFrameTransitionCoincidentCount);
   return out;
 }
 

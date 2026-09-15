@@ -79,6 +79,22 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
       keyboardInputTicks: report?.keyboardInputTicks ?? null,
       touchInputTicks: report?.touchInputTicks ?? null,
       gamepadInputTicks: report?.gamepadInputTicks ?? null,
+      // Slow-frame attribution (2026-09-15, see docs/MEASUREMENT.md
+      // "Slow-frame attribution") -- device/canvas context sent once in
+      // hello.profile, plus per-match slow-frame-conditioned histograms
+      // from the periodic sessionReport. `?? null` means "this client
+      // build didn't report it", same convention as every field above.
+      canvasWidthPx: profile?.canvasWidthPx ?? null,
+      canvasHeightPx: profile?.canvasHeightPx ?? null,
+      screenWidthBucket: profile?.screenWidthBucket ?? null,
+      screenHeightBucket: profile?.screenHeightBucket ?? null,
+      uaFamily: profile?.uaFamily ?? null,
+      slowFrameCount: report?.slowFrameCount ?? null,
+      slowFrameFightersAliveBuckets: report?.slowFrameFightersAliveBuckets ?? null,
+      slowFrameFightersOnScreenBuckets: report?.slowFrameFightersOnScreenBuckets ?? null,
+      slowFrameEffectsLoadBuckets: report?.slowFrameEffectsLoadBuckets ?? null,
+      slowFrameHitchCoincidentCount: report?.slowFrameHitchCoincidentCount ?? null,
+      slowFrameTransitionCoincidentCount: report?.slowFrameTransitionCoincidentCount ?? null,
     };
     console.log(`[sessionEnd] ${JSON.stringify(line)}`);
   } catch (err) {

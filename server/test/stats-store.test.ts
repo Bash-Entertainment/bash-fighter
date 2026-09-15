@@ -347,3 +347,77 @@ test('recordSessionEnd: absent device-capability/frame-histogram telemetry logs 
     cleanup();
   }
 });
+
+test('recordSessionEnd: carries slow-frame attribution and device/canvas fields (2026-09-15) through', () => {
+  const { logPath, cleanup } = scratchDir();
+  try {
+    const match = new Match('stats-session-telemetry-test-3', 2, 1, noopEvents());
+    match.addSeat('human-a', false);
+    match.addSeat('bot-1', true, undefined as unknown as string);
+    match.start();
+
+    const recorder = createStatsRecorder({ logPath, now: () => 1_700_000_010_000 });
+    const conn = fakeConn({
+      slot: 0,
+      profile: {
+        touchActive: true,
+        canvasWidthPx: 1080,
+        canvasHeightPx: 2340,
+        screenWidthBucket: 480,
+        screenHeightBucket: 1024,
+        uaFamily: 'safari',
+      },
+      lastReport: {
+        firstInputMs: 900,
+        inputTicks: 42,
+        frameMedianMs: 71,
+        frameP95Ms: 95,
+        slowFrameCount: 9,
+        slowFrameFightersAliveBuckets: [0, 1, 3, 5],
+        slowFrameFightersOnScreenBuckets: [0, 1, 3, 5],
+        slowFrameEffectsLoadBuckets: [1, 2, 3, 3],
+        slowFrameHitchCoincidentCount: 4,
+        slowFrameTransitionCoincidentCount: 2,
+      },
+    });
+    recorder.recordSessionEnd(conn, match);
+    match.stop();
+
+    const record = readLines(logPath)[0]!;
+    assert.equal(record.canvasWidthPx, 1080);
+    assert.equal(record.canvasHeightPx, 2340);
+    assert.equal(record.screenWidthBucket, 480);
+    assert.equal(record.screenHeightBucket, 1024);
+    assert.equal(record.uaFamily, 'safari');
+    assert.equal(record.slowFrameCount, 9);
+    assert.deepEqual(record.slowFrameFightersAliveBuckets, [0, 1, 3, 5]);
+    assert.deepEqual(record.slowFrameFightersOnScreenBuckets, [0, 1, 3, 5]);
+    assert.deepEqual(record.slowFrameEffectsLoadBuckets, [1, 2, 3, 3]);
+    assert.equal(record.slowFrameHitchCoincidentCount, 4);
+    assert.equal(record.slowFrameTransitionCoincidentCount, 2);
+  } finally {
+    cleanup();
+  }
+});
+
+test('recordSessionEnd: absent slow-frame/canvas telemetry logs as null, not zero (mixed-version deploy safety)', () => {
+  const { logPath, cleanup } = scratchDir();
+  try {
+    const match = new Match('stats-session-telemetry-test-4', 2, 1, noopEvents());
+    match.addSeat('human-a', false);
+    match.addSeat('bot-1', true, undefined as unknown as string);
+    match.start();
+
+    const recorder = createStatsRecorder({ logPath, now: () => 1_700_000_010_000 });
+    recorder.recordSessionEnd(fakeConn({ slot: 0 }), match);
+    match.stop();
+
+    const record = readLines(logPath)[0]!;
+    assert.equal(record.canvasWidthPx, null);
+    assert.equal(record.uaFamily, null);
+    assert.equal(record.slowFrameCount, null);
+    assert.equal(record.slowFrameFightersAliveBuckets, null);
+  } finally {
+    cleanup();
+  }
+});

@@ -112,6 +112,18 @@ export class EffectsLayer {
   private particles: Particle[] = [];
   private pops: Pop[] = [];
   private trails: TrailSegment[] = [];
+
+  /** Live spark particle + pop + trail-segment count right now
+   *  (2026-09-15, see docs/MEASUREMENT.md "Slow-frame attribution") -- a
+   *  plain length read on three arrays this class already holds, no
+   *  allocation. Only ever called by the app layer's telemetry when it
+   *  has already decided a frame is worth attributing (see
+   *  SlowFrameTracker in packages/app/src/session-report.ts), never once
+   *  per frame unconditionally, so this getter itself cannot be the
+   *  thing that makes a frame slow. */
+  getLiveEffectsLoad(): number {
+    return this.particles.length + this.pops.length + this.trails.length;
+  }
   // Last known screen position per fighter index, used only to measure
   // frame-to-frame screen-space speed for the launch trail -- never
   // read from or fed back into sim state.

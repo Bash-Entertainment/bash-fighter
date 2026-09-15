@@ -372,6 +372,14 @@ export class Renderer {
   private stageBounds: StageBounds;
   private readonly effects = new EffectsLayer();
   private lastFrameTimeMs: number | null = null;
+  // Slow-frame attribution counters (2026-09-15, see
+  // docs/MEASUREMENT.md "Slow-frame attribution"): recomputed every
+  // render() call from data already being iterated for sprite placement
+  // below, so reading them back costs nothing extra on the hot path --
+  // only the app layer's SlowFrameTracker decides, after the fact,
+  // whether a given frame's numbers are worth accumulating.
+  private lastFrameFightersAlive = 0;
+  private lastFrameFightersOnScreen = 0;
   // Freeze-frame ("hitstop") state: purely a rendering hold -- the sim
   // keeps advancing at 60Hz underneath regardless. See render()'s early
   // return. Duration is short and capped so it reads as a punch landing,
@@ -512,6 +520,43 @@ export class Renderer {
     // reaching any of that while contextLost is true anyway).
     if (!this.app.renderer) return { width: 0, height: 0 };
     return { width: this.app.renderer.width, height: this.app.renderer.height };
+  }
+
+  /** Real device-pixel backing-store size of the canvas -- CSS `viewSize`
+   *  above times whatever resolution Pixi actually applied -- plus that
+   *  resolution itself, so a report can tell a small-viewport/high-DPR
+   *  phone apart from a small-viewport/low-DPR one (2026-09-15, see
+   *  docs/MEASUREMENT.md "Slow-frame attribution"). Reads straight off
+   *  the live `<canvas>` element and the renderer's own resolution
+   *  field; same 0x0-on-lost-context honesty as `viewSize`. */
+  getCanvasPixelSize(): { widthPx: number; heightPx: number; resolution: number } {
+    if (!this.app.renderer) return { widthPx: 0, heightPx: 0, resolution: 1 };
+    const canvas = this.app.canvas as HTMLCanvasElement | undefined;
+    const resolution = this.app.renderer.resolution || 1;
+    return {
+      widthPx: canvas?.width ?? Math.round(this.app.renderer.width * resolution),
+      heightPx: canvas?.height ?? Math.round(this.app.renderer.height * resolution),
+      resolution,
+    };
+  }
+
+  /** How many fighters were alive, and how many of those the camera
+   *  actually drew inside the canvas bounds, as of the most recently
+   *  completed render() call (2026-09-15, see docs/MEASUREMENT.md
+   *  "Slow-frame attribution"). The two are expected to match almost
+   *  always -- the camera is built never to crop a live fighter out of
+   *  frame (see "Camera Framing" in the wiki) -- so a persistent gap is
+   *  itself a signal, not just a frame-cost one. */
+  getLastFrameFighterCounts(): { alive: number; onScreen: number } {
+    return { alive: this.lastFrameFightersAlive, onScreen: this.lastFrameFightersOnScreen };
+  }
+
+  /** Live particle/pop/trail-segment count as of the most recently
+   *  completed render() call (2026-09-15, see docs/MEASUREMENT.md
+   *  "Slow-frame attribution"). Delegates straight to the effects
+   *  layer's own O(1) length read. */
+  getLiveEffectsLoad(): number {
+    return this.effects.getLiveEffectsLoad();
   }
 
   /** Pool a sprite per fighter slot — created once, reused every frame so
@@ -795,6 +840,12 @@ export class Renderer {
 
     const badgeCandidates: BadgeCandidate[] = [];
     const bodyBoxes: BodyBox[] = [];
+    // Slow-frame attribution (2026-09-15, see docs/MEASUREMENT.md
+    // "Slow-frame attribution"): plain counters bumped inline in a loop
+    // this method already runs every frame regardless -- no extra
+    // iteration, no allocation.
+    let fightersAlive = 0;
+    let fightersOnScreen = 0;
     for (let i = 0; i < frame.fighters.length; i++) {
       const f = frame.fighters[i] as RenderFighterState;
       const sprite = this.sprites[i] as FighterSprite;
@@ -803,8 +854,10 @@ export class Renderer {
         this.effects.resetTrail(i);
         continue;
       }
+      fightersAlive += 1;
       sprite.root.visible = true;
       const screen = worldToScreen(f.x, f.y, cam, vw, vh);
+      if (screen.x >= 0 && screen.x <= vw && screen.y >= 0 && screen.y <= vh) fightersOnScreen += 1;
       sprite.root.position.set(screen.x, screen.y);
       sprite.root.scale.set(cam.scale); // silhouette is drawn in world units
       this.effects.trailFighter(i, screen.x, screen.y, f.hitstun > 0);
@@ -846,6 +899,8 @@ export class Renderer {
         bottom: screen.y,
       });
     }
+    this.lastFrameFightersAlive = fightersAlive;
+    this.lastFrameFightersOnScreen = fightersOnScreen;
     this.names = frame.names;
     this.layoutBadges(badgeCandidates, bodyBoxes);
 

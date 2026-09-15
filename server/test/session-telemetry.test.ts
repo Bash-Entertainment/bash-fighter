@@ -305,3 +305,68 @@ test('[sessionEnd]: a missing profile/report logs the new fields as null too, no
   assert.equal(record.touchInputTicks, null);
   assert.equal(record.gamepadInputTicks, null);
 });
+
+test('[sessionEnd]: slow-frame attribution and device/canvas fields (2026-09-15) log through when present', () => {
+  const match = realMatch();
+  const hello = parseClientControl(
+    JSON.stringify({
+      t: 'hello',
+      protocolVersion: PROTOCOL_VERSION,
+      name: 'Ann',
+      profile: {
+        touchActive: true,
+        canvasWidthPx: 1080,
+        canvasHeightPx: 2340,
+        screenWidthBucket: 480,
+        screenHeightBucket: 1024,
+        uaFamily: 'safari',
+      },
+    }),
+  ) as HelloMessage;
+  const report = parseClientControl(
+    JSON.stringify({
+      t: 'sessionReport',
+      firstInputMs: 100,
+      inputTicks: 5,
+      frameMedianMs: 71,
+      frameP95Ms: 90,
+      slowFrameCount: 6,
+      slowFrameFightersAliveBuckets: [0, 1, 2, 3],
+      slowFrameFightersOnScreenBuckets: [0, 1, 2, 3],
+      slowFrameEffectsLoadBuckets: [1, 1, 2, 2],
+      slowFrameHitchCoincidentCount: 2,
+      slowFrameTransitionCoincidentCount: 1,
+    }),
+  ) as SessionReportMessage;
+  const conn = fakeConn({ slot: 0, profile: hello.profile ?? null, lastReport: report });
+  const lines = captureLogs(() => logSessionEnd(conn, match));
+  const record = JSON.parse(lines.find((l) => l.startsWith('[sessionEnd]'))!.slice('[sessionEnd] '.length));
+  assert.equal(record.canvasWidthPx, 1080);
+  assert.equal(record.canvasHeightPx, 2340);
+  assert.equal(record.screenWidthBucket, 480);
+  assert.equal(record.screenHeightBucket, 1024);
+  assert.equal(record.uaFamily, 'safari');
+  assert.equal(record.slowFrameCount, 6);
+  assert.deepEqual(record.slowFrameFightersAliveBuckets, [0, 1, 2, 3]);
+  assert.deepEqual(record.slowFrameFightersOnScreenBuckets, [0, 1, 2, 3]);
+  assert.deepEqual(record.slowFrameEffectsLoadBuckets, [1, 1, 2, 2]);
+  assert.equal(record.slowFrameHitchCoincidentCount, 2);
+  assert.equal(record.slowFrameTransitionCoincidentCount, 1);
+});
+
+test('[sessionEnd]: an older client that never reports slow-frame/canvas fields logs them as null, not throw (mixed-version deploy safety)', () => {
+  const match = realMatch();
+  const hello = parseClientControl(
+    JSON.stringify({ t: 'hello', protocolVersion: PROTOCOL_VERSION, name: 'Ann', profile: { touchActive: true } }),
+  ) as HelloMessage;
+  const report = parseClientControl(
+    JSON.stringify({ t: 'sessionReport', firstInputMs: 100, inputTicks: 5, frameMedianMs: 71, frameP95Ms: 90 }),
+  ) as SessionReportMessage;
+  const conn = fakeConn({ slot: 0, profile: hello.profile ?? null, lastReport: report });
+  const lines = captureLogs(() => logSessionEnd(conn, match));
+  const record = JSON.parse(lines.find((l) => l.startsWith('[sessionEnd]'))!.slice('[sessionEnd] '.length));
+  assert.equal(record.canvasWidthPx, null);
+  assert.equal(record.uaFamily, null);
+  assert.equal(record.slowFrameCount, null);
+  assert.equal(record.slowFrameFightersAliveBuckets, null);
+});

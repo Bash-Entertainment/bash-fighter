@@ -16,6 +16,12 @@ import {
   bucketDeviceMemory,
   bucketDevicePixelRatio,
   frameHistogramBucketIndex,
+  bucketScreenDimension,
+  detectUaFamily,
+  bucketFighterCount,
+  bucketEffectsLoad,
+  SlowFrameTracker,
+  SLOW_FRAME_THRESHOLD_MS,
 } from '../src/session-report.ts';
 
 test('buildClientProfile: constructs exactly the documented shape', () => {
@@ -278,4 +284,113 @@ test('buildSessionReportMessage: input-usage fields omitted when absent, carried
   assert.equal(carried.keyboardInputTicks, 8);
   assert.equal(carried.touchInputTicks, 0);
   assert.equal(carried.gamepadInputTicks, 2);
+});
+
+test('bucketScreenDimension: rounds up to the nearest public ceiling', () => {
+  assert.equal(bucketScreenDimension(390), 480);
+  assert.equal(bucketScreenDimension(1920), 1920);
+  assert.equal(bucketScreenDimension(4000), 7680);
+  assert.equal(bucketScreenDimension(undefined), undefined);
+});
+
+test('detectUaFamily: picks the right family and checks more specific tokens first', () => {
+  assert.equal(detectUaFamily('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36'), 'chrome');
+  assert.equal(detectUaFamily('Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0'), 'firefox');
+  assert.equal(detectUaFamily('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15'), 'safari');
+  assert.equal(detectUaFamily('SomeWeirdBot/1.0'), 'other');
+  assert.equal(detectUaFamily(undefined), 'other');
+  assert.equal(detectUaFamily(''), 'other');
+});
+
+test('bucketFighterCount/bucketEffectsLoad: fixed 4-bucket boundaries', () => {
+  assert.equal(bucketFighterCount(0), 0);
+  assert.equal(bucketFighterCount(5), 0);
+  assert.equal(bucketFighterCount(6), 1);
+  assert.equal(bucketFighterCount(15), 2);
+  assert.equal(bucketFighterCount(20), 3);
+  assert.equal(bucketEffectsLoad(0), 0);
+  assert.equal(bucketEffectsLoad(20), 0);
+  assert.equal(bucketEffectsLoad(21), 1);
+  assert.equal(bucketEffectsLoad(120), 2);
+  assert.equal(bucketEffectsLoad(121), 3);
+});
+
+test('buildClientProfile: canvas pixel size, screen buckets, and ua family are carried when provided', () => {
+  const profile = buildClientProfile({
+    touchActive: true,
+    viewportWidth: 390,
+    viewportHeight: 844,
+    buildSha: null,
+    canvasWidthPx: 1080,
+    canvasHeightPx: 2340,
+    screenWidth: 390,
+    screenHeight: 844,
+    userAgent: 'Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15',
+  });
+  assert.equal(profile.canvasWidthPx, 1080);
+  assert.equal(profile.canvasHeightPx, 2340);
+  assert.equal(profile.screenWidthBucket, 480);
+  assert.equal(profile.screenHeightBucket, 1024);
+  assert.equal(profile.uaFamily, 'safari');
+});
+
+test('buildClientProfile: omits canvas/screen/ua fields when not provided (backward compatible)', () => {
+  const profile = buildClientProfile({ touchActive: false, viewportWidth: 100, viewportHeight: 100, buildSha: null });
+  assert.equal('canvasWidthPx' in profile, false);
+  assert.equal('screenWidthBucket' in profile, false);
+  assert.equal('uaFamily' in profile, false);
+});
+
+test('NetworkHitchTracker: getLastHitchAtMs is null until a hitch is recorded, then latches to the atMs given', () => {
+  const tracker = new NetworkHitchTracker();
+  assert.equal(tracker.getLastHitchAtMs(), null);
+  tracker.record(100, 5000); // below threshold, ignored
+  assert.equal(tracker.getLastHitchAtMs(), null);
+  tracker.record(400, 6000); // above threshold, recorded
+  assert.equal(tracker.getLastHitchAtMs(), 6000);
+  tracker.record(50, 7000); // below threshold again, does not overwrite
+  assert.equal(tracker.getLastHitchAtMs(), 6000);
+});
+
+test('SlowFrameTracker: ignores frames below the threshold entirely', () => {
+  const tracker = new SlowFrameTracker();
+  tracker.record(SLOW_FRAME_THRESHOLD_MS - 1, { fightersAlive: 20, fightersOnScreen: 20, effectsLoad: 200, hitchRecent: true, transitionRecent: true });
+  assert.equal(tracker.getCount(), 0);
+  assert.deepEqual(tracker.getFightersAliveBuckets(), [0, 0, 0, 0]);
+  assert.equal(tracker.getHitchCoincidentCount(), 0);
+});
+
+test('SlowFrameTracker: buckets a qualifying frame by fighters alive/on-screen and effects load, and counts hitch/transition coincidence', () => {
+  const tracker = new SlowFrameTracker();
+  tracker.record(50, { fightersAlive: 18, fightersOnScreen: 12, effectsLoad: 130, hitchRecent: true, transitionRecent: false });
+  tracker.record(60, { fightersAlive: 3, fightersOnScreen: 3, effectsLoad: 5, hitchRecent: false, transitionRecent: true });
+  assert.equal(tracker.getCount(), 2);
+  assert.deepEqual(tracker.getFightersAliveBuckets(), [1, 0, 0, 1]); // 3 -> bucket 0, 18 -> bucket 3
+  assert.deepEqual(tracker.getFightersOnScreenBuckets(), [1, 0, 1, 0]); // 3 -> bucket 0, 12 -> bucket 2
+  assert.deepEqual(tracker.getEffectsLoadBuckets(), [1, 0, 0, 1]); // 5 -> bucket 0, 130 -> bucket 3
+  assert.equal(tracker.getHitchCoincidentCount(), 1);
+  assert.equal(tracker.getTransitionCoincidentCount(), 1);
+});
+
+test('buildSessionReportMessage: slowFrame* fields omitted when absent, carried when provided', () => {
+  const omitted = buildSessionReportMessage({ firstInputMs: null, inputTicks: 0, frameMedianMs: 16, frameP95Ms: 20 });
+  assert.equal('slowFrameCount' in omitted, false);
+  assert.equal('slowFrameFightersAliveBuckets' in omitted, false);
+
+  const carried = buildSessionReportMessage({
+    firstInputMs: null,
+    inputTicks: 0,
+    frameMedianMs: 16,
+    frameP95Ms: 20,
+    slowFrameCount: 4,
+    slowFrameFightersAliveBuckets: [0, 1, 1, 2],
+    slowFrameFightersOnScreenBuckets: [0, 1, 1, 2],
+    slowFrameEffectsLoadBuckets: [1, 1, 1, 1],
+    slowFrameHitchCoincidentCount: 2,
+    slowFrameTransitionCoincidentCount: 1,
+  });
+  assert.equal(carried.slowFrameCount, 4);
+  assert.deepEqual(carried.slowFrameFightersAliveBuckets, [0, 1, 1, 2]);
+  assert.equal(carried.slowFrameHitchCoincidentCount, 2);
+  assert.equal(carried.slowFrameTransitionCoincidentCount, 1);
 });

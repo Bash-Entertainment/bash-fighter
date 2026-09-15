@@ -782,11 +782,17 @@ stays exactly as terse as before).
   gained no new route, no new listener, and no new externally reachable
   code path for this feature; only `stats-store.ts` (new), `match.ts`
   (one new optional event) and `index.ts` (wiring) changed.
-- **No unique-visitor number, ever.** We do not collect IPs, user agents,
-  cookies, or device fingerprints, and this store does not start now --
-  every count here is a *session* count. A returning player and a new
-  player are indistinguishable by design, so `stats-report.mjs` never
-  prints anything claiming otherwise.
+- **No unique-visitor number, ever.** We do not collect IPs, cookies, or
+  device fingerprints, and this store does not start now -- every count
+  here is a *session* count. A returning player and a new player are
+  indistinguishable by design, so `stats-report.mjs` never prints
+  anything claiming otherwise. As of 2026-09-15, `uaFamily` is the one
+  exception to "no user agent" as literally stated above -- but it is
+  never the raw `navigator.userAgent` string, only one of four fixed
+  values (`chrome`/`firefox`/`safari`/`other`) derived from it
+  client-side before anything is sent; see "Slow-frame attribution"
+  below for why it exists and why that reduction is enough to keep it
+  out of fingerprint territory.
 - **Zero prints as zero.** No filler, no rounding up, no placeholder
   numbers -- if nothing happened, the report says `0`.
 - **Not retrospective.** The report states the timestamp of the first

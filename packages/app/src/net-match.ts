@@ -18,7 +18,7 @@ import {
 import { PLACEHOLDER_CHARACTER, createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID } from '@bash-fighter/content';
 import type { CharacterData } from '@bash-fighter/sim';
 import { InputManager, isTouchCapable } from '@bash-fighter/input';
-import { buildClientProfile, buildSessionReportMessage, InputActivityTracker, InputUsageTracker, FrameTimeTracker, NetworkHitchTracker } from './session-report.ts';
+import { buildClientProfile, buildSessionReportMessage, InputActivityTracker, InputUsageTracker, FrameTimeTracker, NetworkHitchTracker, SlowFrameTracker, SLOW_FRAME_THRESHOLD_MS } from './session-report.ts';
 import { readBuildSha } from './ui/feedback-panel.ts';
 import {
   Renderer,
@@ -278,6 +278,15 @@ export class NetMatch {
   // stall rather than render jitter, so sessionReport can tell the two
   // apart. Reset per-match alongside the other telemetry trackers.
   private networkHitchTracker = new NetworkHitchTracker();
+  // See SlowFrameTracker's doc comment (session-report.ts) -- correlates
+  // slow render frames with fighter/effects load and recent hitches/
+  // transitions (2026-09-15, see docs/MEASUREMENT.md "Slow-frame
+  // attribution").
+  private slowFrameTracker = new SlowFrameTracker();
+  // Wall-clock time an elimination/match-transition effect was last
+  // queued, for SlowFrameTracker's transitionRecent check. null means
+  // "none yet this match".
+  private lastTransitionEffectAtMs: number | null = null;
   // Count of webglcontextlost events, sent in sessionReport (see
   // docs/MEASUREMENT.md and protocol.ts's SessionReportMessage.
   // contextLostCount). Reset per-match alongside the other telemetry
@@ -356,6 +365,12 @@ export class NetMatch {
       keyboardInputTicks: this.inputUsage.getKeyboardTicks(),
       touchInputTicks: this.inputUsage.getTouchTicks(),
       gamepadInputTicks: this.inputUsage.getGamepadTicks(),
+      slowFrameCount: this.slowFrameTracker.getCount(),
+      slowFrameFightersAliveBuckets: this.slowFrameTracker.getFightersAliveBuckets(),
+      slowFrameFightersOnScreenBuckets: this.slowFrameTracker.getFightersOnScreenBuckets(),
+      slowFrameEffectsLoadBuckets: this.slowFrameTracker.getEffectsLoadBuckets(),
+      slowFrameHitchCoincidentCount: this.slowFrameTracker.getHitchCoincidentCount(),
+      slowFrameTransitionCoincidentCount: this.slowFrameTracker.getTransitionCoincidentCount(),
     });
     ws.send(JSON.stringify(report));
   }
@@ -435,6 +450,18 @@ export class NetMatch {
         hardwareConcurrency: navigator.hardwareConcurrency,
         deviceMemory: (navigator as unknown as { deviceMemory?: number }).deviceMemory,
         devicePixelRatio: window.devicePixelRatio,
+        // Slow-frame attribution (2026-09-15, see docs/MEASUREMENT.md
+        // "Slow-frame attribution"): canvas is already mounted by the
+        // time hello is sent (init() runs before connect(), see
+        // main.ts), so its real device-pixel backing-store size is
+        // available here. `screen.width`/`.height` and `userAgent` are
+        // reduced to coarse buckets/a family by buildClientProfile
+        // before anything is sent -- see its doc comments.
+        canvasWidthPx: this.renderer.getCanvasPixelSize().widthPx,
+        canvasHeightPx: this.renderer.getCanvasPixelSize().heightPx,
+        screenWidth: window.screen?.width,
+        screenHeight: window.screen?.height,
+        userAgent: navigator.userAgent,
       });
       ws.send(JSON.stringify(hello));
     });
@@ -665,6 +692,8 @@ export class NetMatch {
     this.inputUsage = new InputUsageTracker();
     this.frameTimeTracker = new FrameTimeTracker();
     this.networkHitchTracker = new NetworkHitchTracker();
+    this.slowFrameTracker = new SlowFrameTracker();
+    this.lastTransitionEffectAtMs = null;
     this.contextLostCount = 0;
     this.renderStalled = false;
     this.matchStartAtMs = performance.now();
@@ -765,7 +794,7 @@ export class NetMatch {
       // above) is the same "tab was hidden" case FrameTimeTracker
       // already excludes, not a network problem -- counting it here
       // would misattribute a background pause as a network stall.
-      if (!document.hidden) this.networkHitchTracker.record(measured);
+      if (!document.hidden) this.networkHitchTracker.record(measured, this.currSnapAt);
     }
 
     // Confirmed-state-only event detection (see field comment above): both
@@ -794,6 +823,12 @@ export class NetMatch {
         );
         this.pendingHitEffects.push(...hitEffects);
         this.pendingEliminationEffects.push(...eliminationEffects);
+        // Slow-frame attribution (2026-09-15, see docs/MEASUREMENT.md):
+        // remember when a match-transition effect was last queued, so a
+        // slow frame shortly after can be flagged as possibly caused by
+        // an elimination/stage-transition burst rather than a steady
+        // per-frame cost problem.
+        if (eliminationEffects.length > 0) this.lastTransitionEffectAtMs = performance.now();
       }
       // Ring pressure (2026-09-10): alarm for the local player actually taking accumulating
       // out-of-bounds damage. Throttled the same way as the local-match adapter so it reads as
@@ -958,7 +993,8 @@ export class NetMatch {
     // time between rAF-driven render() calls. Presentation/reporting
     // only; never read by tick()'s sim advance.
     const nowMs = performance.now();
-    if (this.lastRenderAtMs !== null) this.frameTimeTracker.record(nowMs - this.lastRenderAtMs, document.hidden);
+    const frameDeltaMs = this.lastRenderAtMs !== null ? nowMs - this.lastRenderAtMs : null;
+    if (frameDeltaMs !== null) this.frameTimeTracker.record(frameDeltaMs, document.hidden);
     this.lastRenderAtMs = nowMs;
     this.checkSnapshotStall();
     const fighters: RenderFighterState[] = new Array(this.numFighters);
@@ -1071,5 +1107,23 @@ export class NetMatch {
     this.pendingHitEffects = [];
     this.pendingEliminationEffects = [];
     this.renderer.render(frame);
+    // Slow-frame attribution (2026-09-15, see docs/MEASUREMENT.md
+    // "Slow-frame attribution"): a single comparison on the hot path --
+    // the more expensive counter reads below only ever run on frames
+    // that are already slow, never on the 60fps common case.
+    if (frameDeltaMs !== null && frameDeltaMs >= SLOW_FRAME_THRESHOLD_MS && !document.hidden) {
+      const { alive, onScreen } = this.renderer.getLastFrameFighterCounts();
+      const effectsLoad = this.renderer.getLiveEffectsLoad();
+      const hitchAtMs = this.networkHitchTracker.getLastHitchAtMs();
+      const hitchRecent = hitchAtMs !== null && nowMs - hitchAtMs < 1000;
+      const transitionRecent = this.lastTransitionEffectAtMs !== null && nowMs - this.lastTransitionEffectAtMs < 1000;
+      this.slowFrameTracker.record(frameDeltaMs, {
+        fightersAlive: alive,
+        fightersOnScreen: onScreen,
+        effectsLoad,
+        hitchRecent,
+        transitionRecent,
+      });
+    }
   }
 }

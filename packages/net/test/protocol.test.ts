@@ -420,3 +420,83 @@ describe('client telemetry: device-capability buckets and frame/network histogra
     assert.deepEqual(msg, { t: 'sessionReport', firstInputMs: null, inputTicks: 0, frameMedianMs: 16, frameP95Ms: 20 });
   });
 });
+
+describe('client telemetry: slow-frame attribution (2026-09-15)', () => {
+  function helloWith(profileExtra: Record<string, unknown>) {
+    return JSON.stringify({ t: 'hello', protocolVersion: PROTOCOL_VERSION, name: 'Ann', profile: profileExtra });
+  }
+  function sessionReportWith(extra: Record<string, unknown>) {
+    return JSON.stringify({
+      t: 'sessionReport',
+      firstInputMs: 100,
+      inputTicks: 10,
+      frameMedianMs: 16,
+      frameP95Ms: 20,
+      ...extra,
+    });
+  }
+
+  test('hello.profile: accepts canvas pixel size, screen buckets, and a valid uaFamily', () => {
+    const msg = parseClientControl(
+      helloWith({ canvasWidthPx: 1080, canvasHeightPx: 2340, screenWidthBucket: 480, screenHeightBucket: 1024, uaFamily: 'safari' }),
+    ) as HelloMessage;
+    assert.deepEqual(msg.profile, {
+      canvasWidthPx: 1080,
+      canvasHeightPx: 2340,
+      screenWidthBucket: 480,
+      screenHeightBucket: 1024,
+      uaFamily: 'safari',
+    });
+  });
+
+  test('hello.profile: clamps an absurd canvas size and drops an unrecognised uaFamily rather than trusting the client', () => {
+    const msg = parseClientControl(helloWith({ canvasWidthPx: 1e9, uaFamily: 'ie6' })) as HelloMessage;
+    assert.equal(msg.profile!.canvasWidthPx, 20000);
+    assert.equal('uaFamily' in msg.profile!, false);
+  });
+
+  test('hello.profile: an old client sending none of these fields still parses fine (backward compatible)', () => {
+    const msg = parseClientControl(
+      JSON.stringify({ t: 'hello', protocolVersion: PROTOCOL_VERSION, name: 'Ann', profile: { touchActive: true } }),
+    ) as HelloMessage;
+    assert.deepEqual(msg.profile, { touchActive: true });
+    assert.equal('canvasWidthPx' in msg.profile!, false);
+    assert.equal('uaFamily' in msg.profile!, false);
+  });
+
+  test('sessionReport: accepts well-formed slowFrame* fields', () => {
+    const msg = parseClientControl(
+      sessionReportWith({
+        slowFrameCount: 12,
+        slowFrameFightersAliveBuckets: [1, 2, 3, 6],
+        slowFrameFightersOnScreenBuckets: [1, 2, 3, 6],
+        slowFrameEffectsLoadBuckets: [0, 4, 4, 4],
+        slowFrameHitchCoincidentCount: 3,
+        slowFrameTransitionCoincidentCount: 1,
+      }),
+    ) as SessionReportMessage;
+    assert.equal(msg.slowFrameCount, 12);
+    assert.deepEqual(msg.slowFrameFightersAliveBuckets, [1, 2, 3, 6]);
+    assert.deepEqual(msg.slowFrameFightersOnScreenBuckets, [1, 2, 3, 6]);
+    assert.deepEqual(msg.slowFrameEffectsLoadBuckets, [0, 4, 4, 4]);
+    assert.equal(msg.slowFrameHitchCoincidentCount, 3);
+    assert.equal(msg.slowFrameTransitionCoincidentCount, 1);
+  });
+
+  test('sessionReport: drops a slowFrame*Buckets array of the wrong length or with a negative element', () => {
+    const wrongLength = parseClientControl(sessionReportWith({ slowFrameFightersAliveBuckets: [1, 2, 3] })) as SessionReportMessage;
+    assert.equal('slowFrameFightersAliveBuckets' in wrongLength, false);
+
+    const negative = parseClientControl(sessionReportWith({ slowFrameEffectsLoadBuckets: [1, -1, 3, 4] })) as SessionReportMessage;
+    assert.equal('slowFrameEffectsLoadBuckets' in negative, false);
+  });
+
+  test('sessionReport: an old client sending none of the slow-frame fields leaves them absent, and still validates/stores fine (mixed-version deploy safety)', () => {
+    const msg = parseClientControl(
+      JSON.stringify({ t: 'sessionReport', firstInputMs: null, inputTicks: 0, frameMedianMs: 16, frameP95Ms: 20 }),
+    ) as SessionReportMessage;
+    assert.deepEqual(msg, { t: 'sessionReport', firstInputMs: null, inputTicks: 0, frameMedianMs: 16, frameP95Ms: 20 });
+    assert.equal('slowFrameCount' in msg, false);
+    assert.equal('slowFrameFightersAliveBuckets' in msg, false);
+  });
+});

@@ -3,8 +3,10 @@
 // without jsdom -- net-match.ts and main.ts wire these to the real
 // browser/window/performance APIs, but nothing in this file touches
 // them, which is also why it is safe to unit test at the source level.
-import { FRAME_HISTOGRAM_BOUNDARIES_MS } from '@bash-fighter/net';
+import { FRAME_HISTOGRAM_BOUNDARIES_MS, SLOW_FRAME_THRESHOLD_MS, SLOW_FRAME_BUCKET_COUNT } from '@bash-fighter/net';
 import type { ClientSessionProfile, SessionReportMessage } from '@bash-fighter/net';
+
+export { SLOW_FRAME_THRESHOLD_MS };
 
 const MAX_BUILD_SHA_LENGTH = 64;
 
@@ -26,6 +28,12 @@ function bucketCeiling(value: number | undefined, ceilings: readonly number[]): 
 const HW_CONCURRENCY_CEILINGS = [2, 4, 8, 16, 32, 64] as const;
 const DEVICE_MEMORY_CEILINGS = [0.25, 0.5, 1, 2, 4, 6, 8, 16, 32] as const;
 const DPR_CEILINGS = [1, 1.5, 2, 3, 4] as const;
+// Common physical-screen widths/heights (2026-09-15, see
+// docs/MEASUREMENT.md "Slow-frame attribution") -- coarser than the DPR
+// list above on purpose: this buckets `window.screen.*`, the *physical*
+// screen, which only needs to say "phone" vs "tablet" vs "laptop" vs
+// "desktop monitor", not distinguish specific models.
+const SCREEN_DIMENSION_CEILINGS = [480, 768, 1024, 1440, 1920, 2560, 3840, 7680] as const;
 
 /** Buckets `navigator.hardwareConcurrency` -- see
  *  `ClientSessionProfile.hwConcurrencyBucket`'s doc comment for why this
@@ -46,6 +54,52 @@ export function bucketDeviceMemory(value: number | undefined): number | undefine
  *  `ClientSessionProfile.dprBucket`. */
 export function bucketDevicePixelRatio(value: number | undefined): number | undefined {
   return bucketCeiling(value, DPR_CEILINGS);
+}
+
+/** Buckets a physical `window.screen.width`/`.height` reading -- see
+ *  `ClientSessionProfile.screenWidthBucket`/`screenHeightBucket`. */
+export function bucketScreenDimension(value: number | undefined): number | undefined {
+  return bucketCeiling(value, SCREEN_DIMENSION_CEILINGS);
+}
+
+/** Derives a coarse browser *family* from `navigator.userAgent` --
+ *  chrome/firefox/safari/other, nothing finer (2026-09-15, see
+ *  docs/MEASUREMENT.md "Slow-frame attribution"). The raw UA string
+ *  itself is never sent anywhere; this is the only thing ever derived
+ *  from it, and only these four fixed values can come out. Order
+ *  matters: Chrome/Edge/Samsung Internet UAs also contain "Safari", and
+ *  Edge/Opera/Samsung UAs also contain "Chrome", so the more specific
+ *  tokens are checked first. */
+export function detectUaFamily(userAgent: string | undefined): 'chrome' | 'firefox' | 'safari' | 'other' {
+  if (typeof userAgent !== 'string' || userAgent.length === 0) return 'other';
+  if (/Firefox\//.test(userAgent)) return 'firefox';
+  if (/Chrome\/|Chromium\/|CriOS\//.test(userAgent)) return 'chrome';
+  if (/Safari\//.test(userAgent)) return 'safari';
+  return 'other';
+}
+
+/** Buckets a live fighters-alive or fighters-on-screen count into one of
+ *  SLOW_FRAME_BUCKET_COUNT (4) fixed ranges: 0-5, 6-10, 11-15, 16-20+
+ *  (2026-09-15, see docs/MEASUREMENT.md "Slow-frame attribution"). Roster
+ *  size is capped at 20, so these four bands cover the whole game. */
+export function bucketFighterCount(count: number): number {
+  if (count <= 5) return 0;
+  if (count <= 10) return 1;
+  if (count <= 15) return 2;
+  return 3;
+}
+
+/** Buckets a live particle+pop+trail-segment count into one of
+ *  SLOW_FRAME_BUCKET_COUNT (4) fixed ranges: 0-20, 21-60, 61-120, 121+
+ *  (2026-09-15, see docs/MEASUREMENT.md "Slow-frame attribution"). The
+ *  boundaries track the effects layer's own caps (MAX_SPARK_PARTICLES
+ *  etc in effects.ts) so "121+" means "near or past what one hit's worth
+ *  of effects can produce alone -- several must have piled up". */
+export function bucketEffectsLoad(count: number): number {
+  if (count <= 20) return 0;
+  if (count <= 60) return 1;
+  if (count <= 120) return 2;
+  return 3;
 }
 
 /** Builds the small, non-identifying `hello.profile` snapshot sent once
@@ -74,6 +128,20 @@ export function buildClientProfile(input: {
   /** Raw `window.devicePixelRatio`. Bucketed here before sending -- see
    *  bucketDevicePixelRatio. */
   devicePixelRatio?: number;
+  /** Real device-pixel canvas backing-store size, from
+   *  Renderer.getCanvasPixelSize() (2026-09-15, see
+   *  docs/MEASUREMENT.md "Slow-frame attribution"). Not bucketed -- see
+   *  ClientSessionProfile.canvasWidthPx's doc comment for why. */
+  canvasWidthPx?: number;
+  canvasHeightPx?: number;
+  /** Raw `window.screen.width`/`.height`. Bucketed here before sending
+   *  -- see bucketScreenDimension. */
+  screenWidth?: number;
+  screenHeight?: number;
+  /** Raw `navigator.userAgent`. Reduced to a family here before sending
+   *  -- see detectUaFamily. The raw string itself never leaves this
+   *  function. */
+  userAgent?: string;
 }): ClientSessionProfile {
   const profile: ClientSessionProfile = {
     touchActive: input.touchActive,
@@ -88,6 +156,17 @@ export function buildClientProfile(input: {
   if (deviceMemoryBucket !== undefined) profile.deviceMemoryBucket = deviceMemoryBucket;
   const dprBucket = bucketDevicePixelRatio(input.devicePixelRatio);
   if (dprBucket !== undefined) profile.dprBucket = dprBucket;
+  if (typeof input.canvasWidthPx === 'number' && input.canvasWidthPx > 0) {
+    profile.canvasWidthPx = Math.round(input.canvasWidthPx);
+  }
+  if (typeof input.canvasHeightPx === 'number' && input.canvasHeightPx > 0) {
+    profile.canvasHeightPx = Math.round(input.canvasHeightPx);
+  }
+  const screenWidthBucket = bucketScreenDimension(input.screenWidth);
+  if (screenWidthBucket !== undefined) profile.screenWidthBucket = screenWidthBucket;
+  const screenHeightBucket = bucketScreenDimension(input.screenHeight);
+  if (screenHeightBucket !== undefined) profile.screenHeightBucket = screenHeightBucket;
+  if (input.userAgent !== undefined) profile.uaFamily = detectUaFamily(input.userAgent);
   return profile;
 }
 
@@ -253,17 +332,100 @@ export const NETWORK_HITCH_THRESHOLD_MS = 250;
  *  spirit as InputActivityTracker: one counter, no allocation. */
 export class NetworkHitchTracker {
   private count = 0;
+  // (2026-09-15, see docs/MEASUREMENT.md "Slow-frame attribution") --
+  // lets a caller ask "did a hitch happen recently", to correlate slow
+  // render frames with network stalls. null means "no hitch recorded
+  // yet this match", never a fabricated 0.
+  private lastHitchAtMs: number | null = null;
 
   /** Call once per received snapshot with the elapsed ms since the
    *  previous one (skip the very first snapshot of a match/reconnect,
-   *  which has no previous one to diff against). */
-  record(gapMs: number): void {
+   *  which has no previous one to diff against).
+   *  @param atMs Wall-clock time (performance.now()) this snapshot was
+   *  received, only used to power getLastHitchAtMs()'s recency check.
+   *  Optional so existing callers/tests that don't care about recency
+   *  keep working unchanged. */
+  record(gapMs: number, atMs?: number): void {
     if (!Number.isFinite(gapMs) || gapMs <= NETWORK_HITCH_THRESHOLD_MS) return;
     this.count += 1;
+    if (typeof atMs === 'number' && Number.isFinite(atMs)) this.lastHitchAtMs = atMs;
   }
 
   getCount(): number {
     return this.count;
+  }
+
+  /** Wall-clock time of the most recent recorded hitch, or null if none
+   *  yet. See NetworkHitchTracker's `atMs` param above. */
+  getLastHitchAtMs(): number | null {
+    return this.lastHitchAtMs;
+  }
+}
+
+/** For a frame whose delta already met SLOW_FRAME_THRESHOLD_MS, tracks
+ *  which conditions it happened under -- fighter-count and effects-load
+ *  buckets, and whether a network hitch or a match-transition effect
+ *  (elimination/stage change) happened within the last second
+ *  (2026-09-15, see docs/MEASUREMENT.md "Slow-frame attribution").
+ *
+ *  Deliberately conditional histograms, not per-frame samples: `record`
+ *  is only ever called by net-match.ts after it has already checked the
+ *  frame is slow (a single comparison on the hot path), so the cost of
+ *  this class is a handful of array-index increments only on the frames
+ *  that already are the problem, never on the 60fps common case. */
+export class SlowFrameTracker {
+  private count = 0;
+  private fightersAliveBuckets: number[] = new Array(SLOW_FRAME_BUCKET_COUNT).fill(0);
+  private fightersOnScreenBuckets: number[] = new Array(SLOW_FRAME_BUCKET_COUNT).fill(0);
+  private effectsLoadBuckets: number[] = new Array(SLOW_FRAME_BUCKET_COUNT).fill(0);
+  private hitchCoincidentCount = 0;
+  private transitionCoincidentCount = 0;
+
+  /** @param deltaMs The already-measured frame delta; only recorded if
+   *  it in fact meets SLOW_FRAME_THRESHOLD_MS (belt-and-suspenders --
+   *  callers are expected to have checked already, but this can never
+   *  silently over-count if one doesn't). */
+  record(
+    deltaMs: number,
+    ctx: {
+      fightersAlive: number;
+      fightersOnScreen: number;
+      effectsLoad: number;
+      hitchRecent: boolean;
+      transitionRecent: boolean;
+    },
+  ): void {
+    if (!Number.isFinite(deltaMs) || deltaMs < SLOW_FRAME_THRESHOLD_MS) return;
+    this.count += 1;
+    this.fightersAliveBuckets[bucketFighterCount(ctx.fightersAlive)]! += 1;
+    this.fightersOnScreenBuckets[bucketFighterCount(ctx.fightersOnScreen)]! += 1;
+    this.effectsLoadBuckets[bucketEffectsLoad(ctx.effectsLoad)]! += 1;
+    if (ctx.hitchRecent) this.hitchCoincidentCount += 1;
+    if (ctx.transitionRecent) this.transitionCoincidentCount += 1;
+  }
+
+  getCount(): number {
+    return this.count;
+  }
+
+  getFightersAliveBuckets(): number[] {
+    return [...this.fightersAliveBuckets];
+  }
+
+  getFightersOnScreenBuckets(): number[] {
+    return [...this.fightersOnScreenBuckets];
+  }
+
+  getEffectsLoadBuckets(): number[] {
+    return [...this.effectsLoadBuckets];
+  }
+
+  getHitchCoincidentCount(): number {
+    return this.hitchCoincidentCount;
+  }
+
+  getTransitionCoincidentCount(): number {
+    return this.transitionCoincidentCount;
   }
 }
 
@@ -294,6 +456,18 @@ export function buildSessionReportMessage(input: {
   touchInputTicks?: number;
   /** See SessionReportMessage.gamepadInputTicks. Same convention. */
   gamepadInputTicks?: number;
+  /** See SessionReportMessage.slowFrameCount. Same convention. */
+  slowFrameCount?: number;
+  /** See SessionReportMessage.slowFrameFightersAliveBuckets. Same convention. */
+  slowFrameFightersAliveBuckets?: number[];
+  /** See SessionReportMessage.slowFrameFightersOnScreenBuckets. Same convention. */
+  slowFrameFightersOnScreenBuckets?: number[];
+  /** See SessionReportMessage.slowFrameEffectsLoadBuckets. Same convention. */
+  slowFrameEffectsLoadBuckets?: number[];
+  /** See SessionReportMessage.slowFrameHitchCoincidentCount. Same convention. */
+  slowFrameHitchCoincidentCount?: number;
+  /** See SessionReportMessage.slowFrameTransitionCoincidentCount. Same convention. */
+  slowFrameTransitionCoincidentCount?: number;
 }): SessionReportMessage {
   const msg: SessionReportMessage = {
     t: 'sessionReport',
@@ -310,5 +484,11 @@ export function buildSessionReportMessage(input: {
   if (input.keyboardInputTicks !== undefined) msg.keyboardInputTicks = input.keyboardInputTicks;
   if (input.touchInputTicks !== undefined) msg.touchInputTicks = input.touchInputTicks;
   if (input.gamepadInputTicks !== undefined) msg.gamepadInputTicks = input.gamepadInputTicks;
+  if (input.slowFrameCount !== undefined) msg.slowFrameCount = input.slowFrameCount;
+  if (input.slowFrameFightersAliveBuckets !== undefined) msg.slowFrameFightersAliveBuckets = input.slowFrameFightersAliveBuckets;
+  if (input.slowFrameFightersOnScreenBuckets !== undefined) msg.slowFrameFightersOnScreenBuckets = input.slowFrameFightersOnScreenBuckets;
+  if (input.slowFrameEffectsLoadBuckets !== undefined) msg.slowFrameEffectsLoadBuckets = input.slowFrameEffectsLoadBuckets;
+  if (input.slowFrameHitchCoincidentCount !== undefined) msg.slowFrameHitchCoincidentCount = input.slowFrameHitchCoincidentCount;
+  if (input.slowFrameTransitionCoincidentCount !== undefined) msg.slowFrameTransitionCoincidentCount = input.slowFrameTransitionCoincidentCount;
   return msg;
 }

@@ -164,6 +164,13 @@ function pct(n, total) {
 // it is documented here so the number can be recomputed differently
 // later without ambiguity.
 const OPENING_SECONDS_THRESHOLD = 15;
+// Below this many total slow frames in a group, any per-bucket fraction
+// is noise, not a finding -- printed but explicitly flagged (2026-09-15,
+// see docs/MEASUREMENT.md "Slow-frame attribution"). Chosen as a plain,
+// low bar (not a statistical test) given how few real sessions we have;
+// the report says so honestly rather than implying more confidence than
+// the sample supports.
+const MIN_SLOW_FRAMES_FOR_CLUSTERING = 30;
 
 function buildReport({ storeLines, extraLines, feedbackCount, since }) {
   const sinceDate = since ? new Date(since) : null;
@@ -267,6 +274,22 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
     const hwConcurrency = bucketCounts('hwConcurrencyBucket');
     const deviceMemory = bucketCounts('deviceMemoryBucket');
     const dpr = bucketCounts('dprBucket');
+    const screenWidth = bucketCounts('screenWidthBucket');
+    const screenHeight = bucketCounts('screenHeightBucket');
+    // uaFamily is a fixed string enum, not a number -- same counting
+    // idea as bucketCounts but keyed on the string value directly.
+    function stringCounts(field) {
+      const counts = {};
+      let known = 0;
+      for (const s of group) {
+        const v = s[field];
+        if (typeof v !== 'string') continue;
+        known += 1;
+        counts[v] = (counts[v] ?? 0) + 1;
+      }
+      return { counts, known };
+    }
+    const uaFamily = stringCounts('uaFamily');
 
     // Frame-time histogram (2026-09-14): summed across every session in
     // this group, bucket-by-bucket, in the same fixed order as
@@ -296,6 +319,34 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
     const hitchesKnown = group.filter((s) => typeof s.networkHitchCount === 'number');
     const sessionsWithNetworkHitches = hitchesKnown.filter((s) => s.networkHitchCount > 0).length;
     const totalNetworkHitches = hitchesKnown.reduce((sum, s) => sum + s.networkHitchCount, 0);
+
+    // Slow-frame attribution (2026-09-15, see docs/MEASUREMENT.md
+    // "Slow-frame attribution"): for every session that reported
+    // slowFrameCount, sum its conditional histograms so this group's
+    // slow frames can be split by which fighter-count/effects-load
+    // bucket they happened in, and by how many coincided with a
+    // network hitch or a match-transition effect. `known` here is
+    // "sessions that had this field at all", not "sessions with a slow
+    // frame" -- a session with slowFrameCount: 0 is real, useful
+    // signal (a smooth session), not a hole in the data.
+    const slowFrameKnown = group.filter((s) => typeof s.slowFrameCount === 'number');
+    const totalSlowFrames = slowFrameKnown.reduce((sum, s) => sum + s.slowFrameCount, 0);
+    const sessionsWithAnySlowFrame = slowFrameKnown.filter((s) => s.slowFrameCount > 0).length;
+    function sumBuckets(field) {
+      const sum = [0, 0, 0, 0];
+      let sessionsReported = 0;
+      for (const s of group) {
+        const b = s[field];
+        if (!Array.isArray(b) || b.length !== 4) continue;
+        sessionsReported += 1;
+        for (let i = 0; i < 4; i += 1) if (typeof b[i] === 'number') sum[i] += b[i];
+      }
+      return { buckets: sum, total: sum.reduce((a, b2) => a + b2, 0), sessionsReported };
+    }
+    const slowFrameHitchCoincidentKnown = group.filter((s) => typeof s.slowFrameHitchCoincidentCount === 'number');
+    const slowFrameHitchCoincidentTotal = slowFrameHitchCoincidentKnown.reduce((sum, s) => sum + s.slowFrameHitchCoincidentCount, 0);
+    const slowFrameTransitionCoincidentKnown = group.filter((s) => typeof s.slowFrameTransitionCoincidentCount === 'number');
+    const slowFrameTransitionCoincidentTotal = slowFrameTransitionCoincidentKnown.reduce((sum, s) => sum + s.slowFrameTransitionCoincidentCount, 0);
 
     return {
       total: group.length,
@@ -331,6 +382,9 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
         hwConcurrencyBucket: hwConcurrency,
         deviceMemoryBucket: deviceMemory,
         dprBucket: dpr,
+        screenWidthBucket: screenWidth,
+        screenHeightBucket: screenHeight,
+        uaFamily,
       },
       frameHistogram: {
         buckets: frameHistogramSum,
@@ -346,6 +400,18 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
         sessionsWithAny: sessionsWithNetworkHitches,
         knownDenominator: hitchesKnown.length,
         total: totalNetworkHitches,
+      },
+      slowFrames: {
+        // "sessions with the field at all" -- includes sessions that
+        // reported 0 slow frames, which is real signal, not a gap.
+        knownDenominator: slowFrameKnown.length,
+        sessionsWithAny: sessionsWithAnySlowFrame,
+        total: totalSlowFrames,
+        fightersAliveBuckets: sumBuckets('slowFrameFightersAliveBuckets'),
+        fightersOnScreenBuckets: sumBuckets('slowFrameFightersOnScreenBuckets'),
+        effectsLoadBuckets: sumBuckets('slowFrameEffectsLoadBuckets'),
+        hitchCoincident: { total: slowFrameHitchCoincidentTotal, knownDenominator: slowFrameHitchCoincidentKnown.length },
+        transitionCoincident: { total: slowFrameTransitionCoincidentTotal, knownDenominator: slowFrameTransitionCoincidentKnown.length },
       },
     };
   }
@@ -472,9 +538,58 @@ function printReport(report) {
       const parts = entries.map((k) => `${k}: ${b.counts[k]}`);
       return `  ${name} (n=${b.known} known): ${parts.join(', ')}`;
     };
-    for (const [name, b] of [['hardwareConcurrency bucket', dc.hwConcurrencyBucket], ['deviceMemory bucket (GB)', dc.deviceMemoryBucket], ['devicePixelRatio bucket', dc.dprBucket]]) {
+    for (const [name, b] of [['hardwareConcurrency bucket', dc.hwConcurrencyBucket], ['deviceMemory bucket (GB)', dc.deviceMemoryBucket], ['devicePixelRatio bucket', dc.dprBucket], ['screen width bucket (px)', dc.screenWidthBucket], ['screen height bucket (px)', dc.screenHeightBucket]]) {
       const line = bucketLine(name, b);
       if (line) w(line);
+    }
+    if (dc.uaFamily.known > 0) {
+      const parts = Object.entries(dc.uaFamily.counts).map(([k, v]) => `${k}: ${v}`);
+      w(`  browser family (n=${dc.uaFamily.known} known): ${parts.join(', ')}`);
+    }
+
+    // Slow-frame attribution (2026-09-15, see docs/MEASUREMENT.md
+    // "Slow-frame attribution") -- this is the section that answers the
+    // actual question the instrumentation exists for: which conditions
+    // do slow frames cluster under. Printed as a plain "fraction of
+    // known slow frames in each bucket" -- NOT a p95, because the
+    // headline p95 above already exists and answers a different
+    // question ("how bad is the worst frame"), not "what did it happen
+    // during".
+    const sf = hs.slowFrames;
+    if (sf.knownDenominator === 0) {
+      w('  slow-frame attribution: no sessions with this field yet (older client build)');
+    } else {
+      w(`  slow-frame attribution (${sf.knownDenominator} session(s) reporting, ${sf.sessionsWithAny} had >=1 slow frame, ${sf.total} slow frames total):`);
+      if (sf.total < MIN_SLOW_FRAMES_FOR_CLUSTERING) {
+        w(`    too few slow frames (${sf.total} < ${MIN_SLOW_FRAMES_FOR_CLUSTERING}) to say anything about clustering -- printing raw counts only, do not read fractions below as a finding.`);
+      }
+      const bucketLabels = ['0-5', '6-10', '11-15', '16-20'];
+      const printBucketDist = (name, b) => {
+        if (b.total === 0) {
+          w(`    ${name}: no slow frames reported in this group's ${b.sessionsReported} reporting session(s)`);
+          return;
+        }
+        const parts = b.buckets.map((v, i) => `${bucketLabels[i]} fighters: ${v} (${pct(v, b.total)})`);
+        w(`    ${name} (${b.sessionsReported} session(s), ${b.total} frames): ${parts.join('  ')}`);
+      };
+      printBucketDist('by fighters alive', sf.fightersAliveBuckets);
+      printBucketDist('by fighters on screen', sf.fightersOnScreenBuckets);
+      const effectsLabels = ['0-20', '21-60', '61-120', '121+'];
+      const el = sf.effectsLoadBuckets;
+      if (el.total > 0) {
+        const parts = el.buckets.map((v, i) => `${effectsLabels[i]} effects: ${v} (${pct(v, el.total)})`);
+        w(`    by live effects load (${el.sessionsReported} session(s), ${el.total} frames): ${parts.join('  ')}`);
+      } else if (el.sessionsReported > 0) {
+        w(`    by live effects load: no slow frames reported in this group's ${el.sessionsReported} reporting session(s)`);
+      }
+      const hc = sf.hitchCoincident;
+      if (hc.knownDenominator > 0 && sf.total > 0) {
+        w(`    coincided with a network hitch (<1s before): ${hc.total}/${sf.total} of slow frames (${pct(hc.total, sf.total)})`);
+      }
+      const tc = sf.transitionCoincident;
+      if (tc.knownDenominator > 0 && sf.total > 0) {
+        w(`    coincided with a match-transition effect (<1s before): ${tc.total}/${sf.total} of slow frames (${pct(tc.total, sf.total)})`);
+      }
     }
   }
 

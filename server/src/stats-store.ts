@@ -85,6 +85,25 @@ export interface StoredSessionEndRecord {
   keyboardInputTicks: number | null;
   touchInputTicks: number | null;
   gamepadInputTicks: number | null;
+  /** Slow-frame attribution (2026-09-15, see docs/MEASUREMENT.md
+   *  "Slow-frame attribution"). Device/canvas context is a once-per-
+   *  connection snapshot from hello.profile; the slowFrame* fields are
+   *  per-match histograms conditioned on frames whose delta met
+   *  SLOW_FRAME_THRESHOLD_MS (33ms), from the periodic sessionReport.
+   *  Null on every field means "this client build didn't report it",
+   *  same convention as every field above -- never a fabricated zero or
+   *  empty histogram. */
+  canvasWidthPx: number | null;
+  canvasHeightPx: number | null;
+  screenWidthBucket: number | null;
+  screenHeightBucket: number | null;
+  uaFamily: string | null;
+  slowFrameCount: number | null;
+  slowFrameFightersAliveBuckets: number[] | null;
+  slowFrameFightersOnScreenBuckets: number[] | null;
+  slowFrameEffectsLoadBuckets: number[] | null;
+  slowFrameHitchCoincidentCount: number | null;
+  slowFrameTransitionCoincidentCount: number | null;
 }
 
 export type StatsRecord = StoredMatchEndRecord | StoredSessionEndRecord;
@@ -190,6 +209,17 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       keyboardInputTicks: report?.keyboardInputTicks ?? null,
       touchInputTicks: report?.touchInputTicks ?? null,
       gamepadInputTicks: report?.gamepadInputTicks ?? null,
+      canvasWidthPx: profile?.canvasWidthPx ?? null,
+      canvasHeightPx: profile?.canvasHeightPx ?? null,
+      screenWidthBucket: profile?.screenWidthBucket ?? null,
+      screenHeightBucket: profile?.screenHeightBucket ?? null,
+      uaFamily: profile?.uaFamily ?? null,
+      slowFrameCount: report?.slowFrameCount ?? null,
+      slowFrameFightersAliveBuckets: report?.slowFrameFightersAliveBuckets ?? null,
+      slowFrameFightersOnScreenBuckets: report?.slowFrameFightersOnScreenBuckets ?? null,
+      slowFrameEffectsLoadBuckets: report?.slowFrameEffectsLoadBuckets ?? null,
+      slowFrameHitchCoincidentCount: report?.slowFrameHitchCoincidentCount ?? null,
+      slowFrameTransitionCoincidentCount: report?.slowFrameTransitionCoincidentCount ?? null,
     };
     appendStatsLine(logPath, record);
   }
