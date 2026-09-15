@@ -86,7 +86,18 @@ const STANDING_MARGIN: Fixed = fx.fromInt(20);
  * cross that in under a second even heavily dampened by
  * EARLY_MATCH_KB_DAMPENER. Fix: size the margin as a fraction of the
  * ground box's own half-extent (proportional to stage size, not a fixed
- * number), floored at the old 20 so small/narrow stages don't regress. */
+ * number), floored at the old 20 so small/narrow stages don't regress.
+ *
+ * REVISED-AND-REVERTED 2026-09-15 (match-pacing pass): tried 0.08 -> 0.03
+ * to shave median battle-royale-20 length toward the ~100s target. Reverted:
+ * packages/content/test/spawn-clearance.test.ts caught it immediately --
+ * the-foundry's spawn slots dropped below the required 1.15x horizontal-arc
+ * clearance factor, i.e. this margin *is* load-bearing for the
+ * low-percent-knockout fix (wiki "Low-Percent Knockouts and Stage Blast
+ * Zones 2026-09-11") and shrinking it reintroduces that exact bug on at
+ * least one stage. Left at the original 0.08; match length was brought
+ * down via SPACE_PER_FIGHTER/FINAL_RING_FIGHTERS below instead, which
+ * only affect the late-match endgame ring, not spawn-time clearance. */
 const STANDING_MARGIN_FRACTION: Fixed = fx.fromFloat(0.08);
 
 function proportionalMargin(halfExtent: Fixed): Fixed {
@@ -97,15 +108,29 @@ function proportionalMargin(halfExtent: Fixed): Fixed {
 /** How much horizontal room one standing fighter needs, used only to
  * size the *final* ring floor from roster size — never hand-picked per
  * stage. Roughly a fighter's hurtbox width (16) plus enough gap either
- * side to swing (~2x hurtbox), rounded. */
-const SPACE_PER_FIGHTER: Fixed = fx.fromInt(40);
+ * side to swing (~2x hurtbox), rounded.
+ *
+ * REVISED 2026-09-15 (match-pacing pass): 40 -> 30. Smaller final-ring
+ * floor per fighter converges the endgame a little faster, trimming the
+ * long tail of matches that lasted into the 150-200s range. */
+const SPACE_PER_FIGHTER: Fixed = fx.fromInt(30);
 
 /** How many fighters the fully-closed ring must comfortably fit. Chosen
  * so the last handful of a 20-player match still has room to maneuver
  * around each other and the arena's own hazards, rather than being
  * pinned to a point. This is a fighter-count constant, not a stage
- * constant -- it applies identically to every arena. */
-const FINAL_RING_FIGHTERS = 6;
+ * constant -- it applies identically to every arena.
+ *
+ * REVISED 2026-09-15 (match-pacing pass): 6 -> 4. The population-driven
+ * relax curve (frac^(1/4) below) starts relaxing ground protection once
+ * alive count drops below this many fighters; a smaller value means the
+ * field is forced toward the final convergence platform a bit sooner as
+ * it thins, which is what actually shortened matches here -- adjusting
+ * this constant moved the median far more than shrinkFullyClosedTick or
+ * the relax exponent did, both tried and reverted (see wiki addendum).
+ * Still always < fighterCount-1 via finalRingFighterCount() below, so
+ * the small-lobby "whole roster permanently safe" bug stays fixed. */
+const FINAL_RING_FIGHTERS = 4;
 
 function lerp(a: Fixed, b: Fixed, t: Fixed): Fixed {
   return fx.add(a, fx.mul(fx.sub(b, a), t));
