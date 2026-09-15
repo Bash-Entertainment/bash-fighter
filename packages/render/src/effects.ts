@@ -16,6 +16,15 @@ export interface HitEffectInput {
   dirY: number;
   /** 0..1 normalized hit strength, used to scale every visual. */
   strength: number;
+  /** 0..1 how much screen shake this specific hit should contribute,
+   * decided by the caller from world-space distance between the hit and
+   * the local player's own fighter (1 = local player is the victim or
+   * right next to it, 0 = far side of a big arena). Flashes/sparks/pops
+   * are unaffected -- shake is the one effect that moves the camera for
+   * every fighter on screen, so it's the one that needs to care whether
+   * the local player was actually involved. Omit (or pass 1) when there
+   * is no local player to compare against, e.g. while spectating. */
+  shakeAttenuation?: number;
 }
 
 interface Particle {
@@ -177,7 +186,7 @@ export class EffectsLayer {
     this.popLayer.addChild(pop);
     this.pops.push({ g: pop, ageMs: 0, lifeMs: 120 + strength * 80, baseScale: 1 });
 
-    this.addShake(strength);
+    this.addShake(strength, 1, input.shakeAttenuation ?? 1);
   }
 
   /** Called once per fighter per render frame with its current screen
@@ -225,27 +234,52 @@ export class EffectsLayer {
   /** A bigger, screen-anchored moment for an elimination: a bright ring
    * pop at the fighter's last position and a stronger shake. Kept flat
    * and geometric -- no glow/bloom -- per the project's visual language. */
-  spawnElimination(x: number, y: number): void {
+  spawnElimination(x: number, y: number, shakeAttenuation = 1): void {
     const ring = new Graphics();
     ring.circle(0, 0, 6);
     ring.stroke({ color: PALETTE.danger, width: 4 });
     ring.position.set(x, y);
     this.popLayer.addChild(ring);
     this.pops.push({ g: ring, ageMs: 0, lifeMs: 380, baseScale: 1 });
-    this.addShake(1, /* eliminationBoost */ 1.5);
+    this.addShake(1, /* eliminationBoost */ 1.5, shakeAttenuation);
   }
 
   /** Quadrature-ish combine so simultaneous hits (common with 20
-   * fighters) approach a cap instead of summing linearly into nausea. */
-  private addShake(strength: number, boost = 1): void {
+   * fighters) approach a cap instead of summing linearly into nausea.
+   * `distanceAttenuation` (0..1) is decided by the caller from how far
+   * the hit was from the local player's own fighter -- a hit on the far
+   * side of a 20-fighter arena that the local player had nothing to do
+   * with should not shake their whole screen, so it scales the
+   * contribution down to (and including) zero rather than being an
+   * all-or-nothing cutoff, which reads more like natural falloff than a
+   * hard pop in/out. */
+  private addShake(strength: number, boost = 1, distanceAttenuation = 1): void {
     if (shakeScale === 0) return;
-    const add = (3 + strength * 10) * boost * shakeScale;
+    const atten = Math.max(0, Math.min(1, distanceAttenuation));
+    if (atten <= 0) return;
+    const add = (3 + strength * 10) * boost * shakeScale * atten;
     this.shakeMagnitude = Math.min(22, Math.sqrt(this.shakeMagnitude * this.shakeMagnitude + add * add));
   }
 
   /** Advance all timers/particles by `dtMs` of wall-clock render time.
-   * Returns the current shake offset to apply to the world container. */
+   * Returns the current shake offset to apply to the world container.
+   *
+   * Dev-only capture aid: if `window.__debugEffectTimeScale` is set to a
+   * number, dtMs is scaled by it before anything ages (e.g. 0.02 makes a
+   * ~200ms burst take ~10s of real time to fade). Screenshot round-trips
+   * in browser automation lag the live canvas by 1-2s, longer than any
+   * of these effects live, so this is how a weak-hit and a strong-hit
+   * frame get captured side by side for review. Defaults to 1 (no
+   * change) whenever the flag isn't set, so it costs nothing in
+   * production and can't accidentally ship slow. Left behind (not
+   * deleted after use) because it is generically useful for reviewing
+   * any future impact-effect tuning the same way. */
   update(dtMs: number): { x: number; y: number } {
+    const timeScale =
+      typeof window !== 'undefined' && typeof (window as unknown as Record<string, unknown>).__debugEffectTimeScale === 'number'
+        ? ((window as unknown as Record<string, unknown>).__debugEffectTimeScale as number)
+        : 1;
+    dtMs *= timeScale;
     for (const [idx, remaining] of this.flashRemainingMs) {
       const next = remaining - dtMs;
       if (next <= 0) this.flashRemainingMs.delete(idx);

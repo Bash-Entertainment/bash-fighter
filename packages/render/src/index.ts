@@ -731,17 +731,44 @@ export class Renderer {
       win.__debugUnfreeze = false;
     }
 
+    // Screen shake should care whether the local player was actually
+    // involved in a hit, not just that a hit happened anywhere in a
+    // 20-fighter brawl -- see shakeAttenuation on HitEffectInput. Decided
+    // here (not in effects.ts) from world-space distance to the local
+    // fighter, since only the app/render layer knows which fighter (if
+    // any) is the local one this frame. No local fighter (spectating) or
+    // no world position available -> no attenuation, full shake, since
+    // there is nothing to be "far from".
+    const localFighter =
+      frame.localPlayerIndex !== undefined ? frame.fighters[frame.localPlayerIndex] : undefined;
+    const SHAKE_FULL_RADIUS = 90; // world units: melee range and closer -> full shake
+    const SHAKE_ZERO_RADIUS = 320; // world units: further than this -> no shake at all
+    const shakeAttenuationFor = (worldX: number, worldY: number): number => {
+      if (!localFighter || localFighter.eliminated) return 1;
+      const dist = Math.hypot(worldX - localFighter.x, worldY - localFighter.y);
+      if (dist <= SHAKE_FULL_RADIUS) return 1;
+      if (dist >= SHAKE_ZERO_RADIUS) return 0;
+      return 1 - (dist - SHAKE_FULL_RADIUS) / (SHAKE_ZERO_RADIUS - SHAKE_FULL_RADIUS);
+    };
+
     for (const hit of frame.hitEffects ?? []) {
       const screen = worldToScreen(hit.worldX, hit.worldY, cam, vw, vh);
       // Direction is a vector, not a point: flip Y (world Y-up -> screen
       // Y-down) without translating.
-      this.effects.spawnHit({ x: screen.x, y: screen.y, dirX: hit.dirX, dirY: -hit.dirY, strength: hit.strength });
+      this.effects.spawnHit({
+        x: screen.x,
+        y: screen.y,
+        dirX: hit.dirX,
+        dirY: -hit.dirY,
+        strength: hit.strength,
+        shakeAttenuation: shakeAttenuationFor(hit.worldX, hit.worldY),
+      });
       this.effects.flashFighter(hit.fighterIndex, hit.strong);
       if (hit.strong) this.freezeRemainingMs = Math.max(this.freezeRemainingMs, 55);
     }
     for (const elim of frame.eliminationEffects ?? []) {
       const screen = worldToScreen(elim.worldX, elim.worldY, cam, vw, vh);
-      this.effects.spawnElimination(screen.x, screen.y);
+      this.effects.spawnElimination(screen.x, screen.y, shakeAttenuationFor(elim.worldX, elim.worldY));
     }
 
     // Freeze-frame: hold the last drawn picture for a few milliseconds on
