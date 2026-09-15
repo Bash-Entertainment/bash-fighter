@@ -4,7 +4,7 @@
 // hits, and it reproduces identically across independently-stepped sims.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { Sim, FighterField } from '../src/sim.ts';
+import { Sim } from '../src/sim.ts';
 import { makeInputFrame, BUTTON_ATTACK } from '../src/types.ts';
 import * as fx from '../src/math/fixed.ts';
 import { computeHitstopTicks, MIN_HITSTOP_TICKS, MAX_HITSTOP_TICKS } from '../src/knockback.ts';
@@ -26,8 +26,8 @@ function closeDistance(sim: Sim, gap: fx.Fixed): void {
 }
 
 function makeSim(n: number, seed = 1): Sim {
-  const characters = new Array(n).fill(PLACEHOLDER_CHARACTER) as typeof PLACEHOLDER_CHARACTER[];
-  return new Sim(seed, n, characters as any, undefined, { winCondition: 'stocks', startingStocks: 3 });
+  const characters = new Array<typeof PLACEHOLDER_CHARACTER>(n).fill(PLACEHOLDER_CHARACTER);
+  return new Sim(seed, n, characters, undefined, { winCondition: 'stocks', startingStocks: 3 });
 }
 
 describe('computeHitstopTicks', () => {

@@ -33,7 +33,7 @@
 
 set -euo pipefail
 
-REPO_URL="https://github.com/BashEntertainment/bash-fighter.git"
+REPO_URL="https://github.com/Bash-Entertainment/bash-fighter.git"
 REF="${1:-main}"
 BASE="/srv/bash-fighter"
 RELEASES="$BASE/releases"

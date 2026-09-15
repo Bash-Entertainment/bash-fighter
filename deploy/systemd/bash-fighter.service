@@ -1,6 +1,6 @@
 [Unit]
 Description=Bash Fighter game server (authoritative sim + websocket)
-Documentation=https://github.com/BashEntertainment/bash-fighter
+Documentation=https://github.com/Bash-Entertainment/bash-fighter
 After=network.target
 StartLimitIntervalSec=60
 StartLimitBurst=5
