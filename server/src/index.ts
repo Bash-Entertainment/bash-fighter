@@ -610,7 +610,13 @@ function handleResume(conn: ClientConn, token: string): void {
 function handleText(conn: ClientConn, text: string): void {
   const msg = parseClientControl(text);
   if (!msg) {
-    closeWithError(conn, 'bad_message', 'malformed control message');
+    // Never end a live player's match over one unparseable control message.
+    // Control messages are advisory (telemetry, pings, lobby actions); the
+    // authoritative simulation does not depend on any of them, so the safe
+    // response is to drop the message and keep playing. We logged players out
+    // mid-match for this, which real players reported as the connection
+    // dropping constantly.
+    logConn(conn, 'control_message_ignored', { bytes: text.length });
     return;
   }
   switch (msg.t) {

@@ -736,8 +736,16 @@ export class SnapshotStreamDecoder {
 
 /** Parse a JSON text frame from a client. Returns null for anything that is
  *  not a recognised, well-formed message. Never throws. */
+/** Most control messages are tiny. `sessionReport` is not: it carries the
+ * per-session telemetry fields and legitimately runs to a couple of KB, and
+ * it grows every time we add a measurement. A single shared 512-byte cap
+ * silently rejected every real session report (and the server then closed
+ * the socket), so the cap is per-message-type. */
+export const MAX_CONTROL_MESSAGE_BYTES = 512;
+export const MAX_SESSION_REPORT_BYTES = 8192;
+
 export function parseClientControl(text: string): ClientControlMessage | null {
-  if (text.length > 512) return null;
+  if (text.length > MAX_SESSION_REPORT_BYTES) return null;
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -746,6 +754,7 @@ export function parseClientControl(text: string): ClientControlMessage | null {
   }
   if (typeof raw !== 'object' || raw === null) return null;
   const obj = raw as Record<string, unknown>;
+  if (obj.t !== 'sessionReport' && text.length > MAX_CONTROL_MESSAGE_BYTES) return null;
   switch (obj.t) {
     case 'hello': {
       if (typeof obj.protocolVersion !== 'number') return null;

@@ -159,9 +159,21 @@ test('sessionReport: a wrong-shaped/garbage payload is rejected as unparseable r
   assert.equal(msg, null);
 });
 
-test('sessionReport: an oversized control message is rejected by the general 512-byte cap, same as any other control message', () => {
-  const msg = parseClientControl(JSON.stringify({ t: 'sessionReport', firstInputMs: 1, inputTicks: 1, extra: 'x'.repeat(2000) }));
-  assert.equal(msg, null);
+// This test used to assert the opposite -- that the shared 512-byte cap
+// applied to sessionReport too -- and in doing so it pinned a real defect
+// in place: a full session report is ~740 bytes, so every real one was
+// rejected, and the server then closed the player's socket (reported by a
+// real player as "connection dropped all the time", 2026-09-15). Reports
+// now get their own generous cap; see packages/net/test/session-report-size.test.ts.
+test('sessionReport: has its own generous size cap, but is still rejected beyond it', () => {
+  const withinCap = parseClientControl(
+    JSON.stringify({ t: 'sessionReport', firstInputMs: 1, inputTicks: 1, extra: 'x'.repeat(2000) }),
+  );
+  assert.ok(withinCap, 'a report larger than the small-message cap must still be accepted');
+  const beyondCap = parseClientControl(
+    JSON.stringify({ t: 'sessionReport', firstInputMs: 1, inputTicks: 1, extra: 'x'.repeat(20_000) }),
+  );
+  assert.equal(beyondCap, null);
 });
 
 // --- [sessionEnd] log line -------------------------------------------
