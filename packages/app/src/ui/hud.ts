@@ -7,7 +7,7 @@
 // from spectator/types.ts's MatchAdapter once wired up.
 import { fixed as fx, FighterStateId, type FighterSnapshot } from '@bash-fighter/sim';
 import { PALETTE } from '@bash-fighter/render';
-import { survivorsLineText, modeLabelText, winConditionText, eliminationFeedLine } from './hud-text.ts';
+import { survivorsLineText, modeLabelText, winConditionText, eliminationFeedLine, chipDisplayName, sortFeedEntriesNewestFirst, type EliminationFeedEntry } from './hud-text.ts';
 
 export interface HudFighterExtra {
   eliminated: boolean;
@@ -56,7 +56,17 @@ export class Hud {
    * whenever a new match starts (see show()) so a rematch doesn't carry
    * over the previous match's eliminations. */
   private seenEliminated: boolean[] = [];
-  private feedLines: string[] = [];
+  /** Every elimination observed this match, kept ordered by true game
+   * time (see sortFeedEntriesNewestFirst in hud-text.ts) rather than by
+   * the order this client happened to render them in -- fixes a real
+   * production bug where a laggy frame batching two deaths, or a
+   * mid-match spectator join seeing several already-eliminated
+   * fighters at once, rendered the feed in slot order instead of
+   * elimination order. Not capped here; capped only at render time so
+   * a late-observed-but-actually-older elimination can never displace
+   * a genuinely more recent one. */
+  private feedEntries: EliminationFeedEntry[] = [];
+  private feedObservedCounter = 0;
 
   constructor(parent: HTMLElement) {
     this.root = document.createElement('div');
@@ -93,7 +103,8 @@ export class Hud {
     // rematch starts clean instead of showing stale "X eliminated"
     // lines from the last game.
     this.seenEliminated = [];
-    this.feedLines = [];
+    this.feedEntries = [];
+    this.feedObservedCounter = 0;
     this.eliminationFeed.replaceChildren();
   }
 
@@ -174,7 +185,9 @@ export class Hud {
       // NetMatch.nameFor()/Match's slot labels -- this component just
       // renders whatever it's given.
       const name = names?.[i];
-      nameEl.textContent = name && name.length > 0 ? name : '';
+      // Chip column only -- see chipDisplayName's doc comment. World-space
+      // labels and the elimination feed below keep the full name.
+      nameEl.textContent = name && name.length > 0 ? chipDisplayName(name) : '';
       nameEl.style.display = nameEl.textContent ? '' : 'none';
       const pct = Math.round(fx.toFloat(s.percent));
       pctEl.textContent = `${pct}%`;
@@ -224,14 +237,19 @@ export class Hud {
       this.seenEliminated[i] = true;
       const placement = extra?.placement ?? (s.placement > 0 ? s.placement : null);
       const name = names?.[i] && (names[i] as string).length > 0 ? (names[i] as string) : `#${i + 1}`;
-      this.feedLines.unshift(eliminationFeedLine(name, placement));
-      this.feedLines.length = Math.min(this.feedLines.length, ELIMINATION_FEED_LIMIT);
+      this.feedEntries.push({ name, placement, observedOrder: this.feedObservedCounter++ });
     }
+    // Sort by true elimination order (placement, ascending -- see
+    // sortFeedEntriesNewestFirst), not by when we happened to observe
+    // it, then keep only the N most recent for both display and
+    // storage so the array can't grow unbounded over a long match.
+    const ordered = sortFeedEntriesNewestFirst(this.feedEntries).slice(0, ELIMINATION_FEED_LIMIT);
+    this.feedEntries = ordered;
     this.eliminationFeed.replaceChildren(
-      ...this.feedLines.map((line) => {
+      ...ordered.map((entry) => {
         const row = document.createElement('div');
         row.className = 'elimination-feed-line';
-        row.textContent = line;
+        row.textContent = eliminationFeedLine(entry.name, entry.placement);
         return row;
       }),
     );

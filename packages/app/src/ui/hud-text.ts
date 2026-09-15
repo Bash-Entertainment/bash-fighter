@@ -50,6 +50,48 @@ export function eliminationFeedLine(name: string, placement: number | null): str
   return `${who} eliminated`;
 }
 
+
+/** Chip-grid display name: drops the redundant "CPU " prefix bots carry
+ * (see packages/sim/src/ai/bot.ts's nameFor, which this deliberately does
+ * not touch -- world-space labels and the elimination feed keep the full
+ * "CPU Name" text; only the 200px/128px chip column, where every
+ * character counts, shows the bare name). Human names have no prefix and
+ * pass through unchanged. */
+export function chipDisplayName(name: string): string {
+  return name.startsWith('CPU ') ? name.slice(4) : name;
+}
+
+/** True elimination order for a feed entry: in every mode with
+ * eliminations (battleRoyale, stocks) placements are handed out in
+ * strict descending order as the match runs -- the first fighter out
+ * gets the worst (highest) placement number and each later elimination
+ * gets the next-lower number, down to the winner at 1st. So placement
+ * itself *is* a chronological ordering, and sorting by it ascending
+ * always puts the most recent elimination first -- regardless of the
+ * order the client happened to observe/render them in (a laggy frame
+ * that batches two deaths, or a mid-match spectator join that sees a
+ * pile of already-eliminated fighters on its very first update(), see
+ * hud.ts). We deliberately sort by this instead of by observation
+ * order for that reason. */
+export interface EliminationFeedEntry {
+  name: string;
+  placement: number | null;
+  /** Tiebreaker only: the order this client first observed the
+   * elimination. Used when placement is missing or (should not happen)
+   * tied, so behaviour stays deterministic rather than depending on
+   * object insertion order. */
+  observedOrder: number;
+}
+
+export function sortFeedEntriesNewestFirst(entries: readonly EliminationFeedEntry[]): EliminationFeedEntry[] {
+  return [...entries].sort((a, b) => {
+    const ap = a.placement ?? Number.POSITIVE_INFINITY;
+    const bp = b.placement ?? Number.POSITIVE_INFINITY;
+    if (ap !== bp) return ap - bp;
+    return b.observedOrder - a.observedOrder;
+  });
+}
+
 function ordinal(n: number): string {
   const rem100 = n % 100;
   if (rem100 >= 11 && rem100 <= 13) return `${n}th`;

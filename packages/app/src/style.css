@@ -1190,7 +1190,11 @@ html, body {
 .match-status-mode {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-dim);
+  /* Was --ink-dim (#8a8f98): legible but flat against the panel next to
+     the bright per-fighter chip colours above it. Full --ink reads
+     clearly without competing -- it's plain text, not a warning/action,
+     so amber stays reserved as the design language requires. */
+  color: var(--ink);
   letter-spacing: 0.02em;
 }
 
@@ -1214,17 +1218,24 @@ html, body {
 .elimination-feed-line {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-dim);
+  /* Was --ink-dim for every line, which read as too faint against the
+     panel to actually notice a death happening. Full --ink by default;
+     the small hierarchy cue below dims only the older lines instead of
+     the whole feed. */
+  color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Most recent elimination reads slightly brighter than the ones scrolling
-   out of relevance below it -- a small hierarchy cue, not a colour that
-   competes with amber (warning/primary-action) or red (danger). */
-.elimination-feed-line:first-child {
-  color: var(--ink);
+/* Most recent elimination (top of the now-correctly-ordered feed, see
+   sortFeedEntriesNewestFirst in hud-text.ts) stays full brightness; each
+   older line dims slightly so the eye lands on what just happened
+   without the whole block competing with the per-fighter chip colours
+   above it. Still plain --ink-dim, not amber/red -- those stay reserved
+   for warning/action and danger. */
+.elimination-feed-line:not(:first-child) {
+  color: var(--ink-dim);
 }
 
 .hud-card.eliminated {
