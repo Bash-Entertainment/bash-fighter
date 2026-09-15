@@ -1467,6 +1467,25 @@ html, body {
   color: var(--accent);
 }
 
+/* The final 3-2-1-GO seconds before a real match starts, per real-player
+   feedback: made visually dominant (large, amber, mono) rather than one
+   text line among several -- it is the single thing worth a player's
+   full attention right before they need to find their fighter. No
+   animation beyond the text swap itself (no scale/pulse/motion), so it
+   costs nothing under the reduced-motion setting and needs no special
+   case for it: this is information, not decoration. */
+.waiting-countdown.waiting-countdown-big {
+  font-size: 64px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 480px) {
+  .waiting-countdown.waiting-countdown-big {
+    font-size: 48px;
+  }
+}
+
 .waiting-explain {
   max-width: 480px;
   font-size: 13px;

@@ -20,6 +20,11 @@
 // server hasn't told us a deadline yet, never a fake timer), the bots/
 // other-humans explanation, and Start now.
 export class WaitingScreen {
+  // 3-2-1-GO, not 5-4-3-2-1 as the player literally asked for: a casual
+  // browser match should not make someone wait out a five-second ritual
+  // every single lobby. 3 whole seconds of big digits is enough to be
+  // unmistakable without feeling slow.
+  private static readonly FINAL_COUNTDOWN_SECONDS = 3;
   readonly root: HTMLDivElement;
   private readonly modeLine: HTMLDivElement;
   private readonly countdownLine: HTMLDivElement;
@@ -141,19 +146,39 @@ export class WaitingScreen {
   private renderCountdown(): void {
     if (this.connecting) {
       this.countdownLine.textContent = 'Connecting to the match server\u2026';
-      this.countdownLine.classList.remove('waiting-countdown-active');
+      this.countdownLine.classList.remove('waiting-countdown-active', 'waiting-countdown-big');
       return;
     }
     if (this.lastServerTicks < 0) {
       this.countdownLine.textContent = 'Waiting for players\u2026';
-      this.countdownLine.classList.remove('waiting-countdown-active');
+      this.countdownLine.classList.remove('waiting-countdown-active', 'waiting-countdown-big');
       return;
     }
     const elapsedTicks = ((Date.now() - this.lastServerAt) / 1000) * 60;
     const ticksLeft = Math.max(0, this.lastServerTicks - elapsedTicks);
     const secondsLeft = Math.ceil(ticksLeft / 60);
-    this.countdownLine.textContent =
-      secondsLeft > 0 ? `Match starts in ${secondsLeft}s` : 'Match starting\u2026';
+    // 2026-09-15, prompted by two real players independently asking for
+    // a "3 2 1 GO" at match start: the last few seconds are the one
+    // moment worth making visually dominant rather than a text line
+    // among other text lines. FINAL_COUNTDOWN_SECONDS caps how long that
+    // big-digit state can show -- a five-second wait before a casual
+    // browser match reads as slow, so this is deliberately shorter than
+    // the player's own suggestion of 5-4-3-2-1. Still entirely driven by
+    // the server's real countdownTicks; ticksLeft hitting 0 here means
+    // the server is about to actually start the match, not that a
+    // client-invented timer ran out.
+    if (secondsLeft > 0 && secondsLeft <= WaitingScreen.FINAL_COUNTDOWN_SECONDS) {
+      this.countdownLine.textContent = String(secondsLeft);
+      this.countdownLine.classList.add('waiting-countdown-active', 'waiting-countdown-big');
+      return;
+    }
+    if (secondsLeft <= 0) {
+      this.countdownLine.textContent = 'GO';
+      this.countdownLine.classList.add('waiting-countdown-active', 'waiting-countdown-big');
+      return;
+    }
+    this.countdownLine.textContent = `Match starts in ${secondsLeft}s`;
+    this.countdownLine.classList.remove('waiting-countdown-big');
     this.countdownLine.classList.add('waiting-countdown-active');
   }
 }

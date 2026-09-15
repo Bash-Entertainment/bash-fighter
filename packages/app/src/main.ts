@@ -729,6 +729,12 @@ async function beginOnlineMatch(): Promise<void> {
       // Names the fighter that belongs to this player for the opening
       // couple of seconds. See ui/match-intro.ts for why.
       matchIntro.show(name, localPlayerColour(slot), joinedLate);
+      // Dims every other fighter and enlarges the local pointer for the
+      // first ~1.8s (Renderer.announceLocalPlayer), fresh join or a
+      // mid-match join alike -- both are the first moment THIS client
+      // can see the arena, so both deserve the same emphasis. Render-side
+      // only; does not touch sim state.
+      netMatch?.renderer.announceLocalPlayer();
     },
     onEliminated: (placement, totalFighters) => {
       matchIntro.hide();

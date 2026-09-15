@@ -394,6 +394,34 @@ export class Renderer {
   // designed to replace, so it was removed rather than left to double up.
   private freezeRemainingMs = 0;
 
+  // Local-fighter intro emphasis (2026-09-15): two real players
+  // independently said they could not find their own fighter in the
+  // opening seconds even with the screen-space pointer shipped
+  // 2026-09-13 -- a small persistent arrow works once you know to look
+  // for it, and is useless the first time you have never seen the game.
+  // `announceLocalPlayer()` is called once, from the app layer, at the
+  // moment a match actually begins for this client (fresh join or a
+  // mid-match join alike -- see main.ts). For INTRO_EMPHASIS_MS every
+  // OTHER fighter is dimmed and the local pointer is drawn oversized,
+  // both easing back to normal on the same wall-clock curve as the
+  // camera damping above -- never a fixed frame count, so it reads the
+  // same on a slow phone as on a fast desktop. Presentation only: reads
+  // performance.now() and this frame's already-computed isLocalPlayer
+  // flag, writes nothing back into the sim, and does not touch which
+  // frames replay-hash fixtures compare.
+  private introStartMs: number | null = null;
+  private static readonly INTRO_EMPHASIS_MS = 1800;
+  private static readonly INTRO_DIM_ALPHA = 0.28;
+
+  /** Call once when this client's match view begins (fresh match or a
+   *  mid-match join) so the next INTRO_EMPHASIS_MS of render() calls
+   *  spotlight the local fighter. Safe to call with no local player
+   *  (spectating): render() only ever dims fighters other than
+   *  frame.localPlayerIndex, so with no local player nothing dims. */
+  announceLocalPlayer(): void {
+    this.introStartMs = performance.now();
+  }
+
   constructor(stageBounds: StageBounds) {
     this.stageBounds = stageBounds;
   }
@@ -687,9 +715,16 @@ export class Renderer {
     }
     this.localPointer.visible = true;
     // Slightly larger when it is standing in for a fighter you cannot see,
-    // since then it is the only thing telling you where you are.
-    const w = pos.offScreen ? 9 : 7;
-    const h = pos.offScreen ? 11 : 8;
+    // since then it is the only thing telling you where you are. Larger
+    // still, easing back down over INTRO_EMPHASIS_MS, right after a match
+    // begins for this client -- see announceLocalPlayer(). introScale
+    // is 1 once the window has elapsed or was never started.
+    const introScale =
+      this.introStartMs !== null
+        ? 1 + 1.6 * (1 - Math.min(1, (performance.now() - this.introStartMs) / Renderer.INTRO_EMPHASIS_MS))
+        : 1;
+    const w = (pos.offScreen ? 9 : 7) * introScale;
+    const h = (pos.offScreen ? 11 : 8) * introScale;
     const sin = Math.sin(pos.angle);
     const cos = Math.cos(pos.angle);
     // Rotate about the pointer's tip, which is the point that means
@@ -870,6 +905,15 @@ export class Renderer {
       this.effects.trailFighter(i, screen.x, screen.y, f.hitstun > 0);
       const char = frame.characters[i] as CharacterData | undefined;
       const isLocalPlayer = frame.localPlayerIndex === i;
+      // Intro emphasis: dim everyone except the local fighter for the
+      // first INTRO_EMPHASIS_MS after announceLocalPlayer() was called,
+      // easing back to full opacity. See the field doc above.
+      sprite.root.alpha =
+        this.introStartMs !== null && !isLocalPlayer
+          ? Renderer.INTRO_DIM_ALPHA +
+            (1 - Renderer.INTRO_DIM_ALPHA) *
+              Math.min(1, (now - this.introStartMs) / Renderer.INTRO_EMPHASIS_MS)
+          : 1;
       sprite.draw({
         facing: f.facing,
         hitstun: f.hitstun,
