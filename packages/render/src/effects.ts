@@ -64,6 +64,18 @@ const TRAIL_SPEED_THRESHOLD_PX = 9;
 // gracefully (fewer/shorter segments), never accumulate unbounded
 // Graphics nodes.
 const MAX_TRAIL_SEGMENTS = 24;
+const MAX_SPARK_PARTICLES = 120;
+const MAX_POPS = 40;
+// Same reasoning as MAX_TRAIL_SEGMENTS, applied to impact sparks/pops:
+// a 20-fighter pile-up can land many simultaneous hits (spawnHit is
+// called once per hit, each pushing up to 9 spark particles plus one
+// pop), and each live Graphics node has a real per-frame CPU cost
+// (transform update, tessellated fill) that a phone's single weak core
+// feels far more than this desktop does. Capped so a worst-case brawl
+// degrades to fewer/shorter-lived particles instead of accumulating
+// Graphics nodes without bound -- normal play (a handful of hits at a
+// time) never gets close to these caps, so nothing visible changes there.
+
 
 // Reduced-motion accessibility switch. Screen shake is the one effect
 // here with a real vestibular-discomfort/motion-sickness risk (the
@@ -152,6 +164,15 @@ export class EffectsLayer {
     const strength = Math.max(0, Math.min(1, input.strength));
     const sparkCount = 3 + Math.round(strength * 6);
     for (let i = 0; i < sparkCount; i++) {
+      if (this.particles.length >= MAX_SPARK_PARTICLES) {
+        // Same degrade-gracefully rule as MAX_TRAIL_SEGMENTS: drop the
+        // oldest (closest to fading anyway) rather than skip the new
+        // hit's spark, so the pile-up that's actually happening right
+        // now stays visible instead of the oldest leftover from a
+        // moment ago.
+        const oldest = this.particles.shift();
+        oldest?.g.destroy();
+      }
       const g = new Graphics();
       const size = 1.5 + strength * 2.5 + Math.random() * 1.5;
       g.circle(0, 0, size);
@@ -183,6 +204,10 @@ export class EffectsLayer {
     pop.fill({ color: POP_COLOR, alpha: 0.85 });
     pop.position.set(input.x, input.y);
     pop.rotation = angle;
+    if (this.pops.length >= MAX_POPS) {
+      const oldest = this.pops.shift();
+      oldest?.g.destroy();
+    }
     this.popLayer.addChild(pop);
     this.pops.push({ g: pop, ageMs: 0, lifeMs: 120 + strength * 80, baseScale: 1 });
 
@@ -239,6 +264,10 @@ export class EffectsLayer {
     ring.circle(0, 0, 6);
     ring.stroke({ color: PALETTE.danger, width: 4 });
     ring.position.set(x, y);
+    if (this.pops.length >= MAX_POPS) {
+      const oldest = this.pops.shift();
+      oldest?.g.destroy();
+    }
     this.popLayer.addChild(ring);
     this.pops.push({ g: ring, ageMs: 0, lifeMs: 380, baseScale: 1 });
     this.addShake(1, /* eliminationBoost */ 1.5, shakeAttenuation);
