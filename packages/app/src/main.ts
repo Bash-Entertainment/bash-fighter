@@ -814,6 +814,14 @@ async function beginOnlineMatch(): Promise<void> {
         isTimedBrawl(onlineSettings) && onlineSettings
           ? { clockText: formatClock(ticksRemaining(netMatch.currentTick, onlineSettings)) }
           : undefined,
+        onlineSettings
+          ? {
+              winCondition: onlineSettings.winCondition,
+              clockText: isTimedBrawl(onlineSettings)
+                ? formatClock(ticksRemaining(netMatch.currentTick, onlineSettings))
+                : formatClock(netMatch.currentTick),
+            }
+          : undefined,
       );
     } else {
       hud.hide();
@@ -1035,6 +1043,14 @@ async function beginMatch(): Promise<void> {
         localMatch.displayNames(),
         isTimedBrawl(localSettings) && localSettings
           ? { clockText: formatClock(ticksRemaining(localMatch.currentTick, localSettings)) }
+          : undefined,
+        localSettings
+          ? {
+              winCondition: localSettings.winCondition,
+              clockText: isTimedBrawl(localSettings)
+                ? formatClock(ticksRemaining(localMatch.currentTick, localSettings))
+                : formatClock(localMatch.currentTick),
+            }
           : undefined,
       );
     }

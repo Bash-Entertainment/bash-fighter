@@ -7,7 +7,7 @@
 // from spectator/types.ts's MatchAdapter once wired up.
 import { fixed as fx, FighterStateId, type FighterSnapshot } from '@bash-fighter/sim';
 import { PALETTE } from '@bash-fighter/render';
-import { survivorsLineText } from './hud-text.ts';
+import { survivorsLineText, modeLabelText, winConditionText, eliminationFeedLine } from './hud-text.ts';
 
 export interface HudFighterExtra {
   eliminated: boolean;
@@ -22,6 +22,23 @@ export interface HudTimedBrawlInfo {
   clockText: string;
 }
 
+/** Match-status block shown below the chip grid (the space reclaimed
+ * 2026-09-14 -- previously permanently empty dead space on every match,
+ * see wiki "Camera Framing: Ground Anchor and Jump-Space Bias" era
+ * layout history for why the sidebar has full page height to give it).
+ * Everything here comes from state the client already tracks -- no new
+ * protocol fields. */
+export interface HudMatchInfo {
+  winCondition: 'battleRoyale' | 'timedKO' | 'stocks';
+  /** "0:42" elapsed since match start, or remaining for Timed Brawl --
+   * callers pass whichever is more useful for the mode. */
+  clockText: string;
+}
+
+/** Caps the elimination feed so 20 fighters dying in ~90 seconds never
+ * becomes a wall of text (see eliminationFeedLine in hud-text.ts). */
+const ELIMINATION_FEED_LIMIT = 4;
+
 const PLAYER_HEX = PALETTE.playerColors.map((c) => `#${c.toString(16).padStart(6, '0')}`);
 
 export class Hud {
@@ -31,6 +48,15 @@ export class Hud {
 
   private readonly survivorsLine: HTMLDivElement;
   private readonly clockLine: HTMLDivElement;
+  private readonly matchStatus: HTMLDivElement;
+  private readonly matchModeLine: HTMLDivElement;
+  private readonly matchClockLine: HTMLDivElement;
+  private readonly eliminationFeed: HTMLDivElement;
+  /** Tracks which slots we have already emitted a feed line for, reset
+   * whenever a new match starts (see show()) so a rematch doesn't carry
+   * over the previous match's eliminations. */
+  private seenEliminated: boolean[] = [];
+  private feedLines: string[] = [];
 
   constructor(parent: HTMLElement) {
     this.root = document.createElement('div');
@@ -43,14 +69,32 @@ export class Hud {
     this.survivorsLine.className = 'survivors-line';
     this.list = document.createElement('div');
     this.list.className = 'hud-list';
+    this.matchStatus = document.createElement('div');
+    this.matchStatus.className = 'match-status';
+    this.matchModeLine = document.createElement('div');
+    this.matchModeLine.className = 'match-status-mode';
+    this.matchClockLine = document.createElement('div');
+    this.matchClockLine.className = 'match-status-clock';
+    this.eliminationFeed = document.createElement('div');
+    this.eliminationFeed.className = 'elimination-feed';
+    this.matchStatus.appendChild(this.matchModeLine);
+    this.matchStatus.appendChild(this.matchClockLine);
+    this.matchStatus.appendChild(this.eliminationFeed);
     this.root.appendChild(this.clockLine);
     this.root.appendChild(this.survivorsLine);
     this.root.appendChild(this.list);
+    this.root.appendChild(this.matchStatus);
     parent.appendChild(this.root);
   }
 
   show(): void {
     this.root.classList.remove('hidden');
+    // New match: forget the previous match's elimination feed so a
+    // rematch starts clean instead of showing stale "X eliminated"
+    // lines from the last game.
+    this.seenEliminated = [];
+    this.feedLines = [];
+    this.eliminationFeed.replaceChildren();
   }
 
   hide(): void {
@@ -87,6 +131,11 @@ export class Hud {
     // score line and shows the countdown clock. Absent (undefined) for
     // Battle Royale and 'stocks', which keep their original HUD exactly.
     timedBrawl?: HudTimedBrawlInfo,
+    // Match-status block below the chip grid -- mode, win condition,
+    // clock, and a short elimination feed. Optional so existing/future
+    // callers that don't have match settings handy degrade to just not
+    // showing the block, rather than throwing.
+    matchInfo?: HudMatchInfo,
   ): void {
     this.ensureCards(snapshots.length);
     if (timedBrawl) {
@@ -145,6 +194,47 @@ export class Hud {
     }
     this.survivorsLine.textContent = survivorsLineText(survivors, snapshots.length, Boolean(timedBrawl));
     this.survivorsLine.style.display = this.survivorsLine.textContent ? '' : 'none';
+    this.updateMatchStatus(snapshots, extras, names, matchInfo);
+  }
+
+  /** Renders the mode/win-condition/clock line plus a capped elimination
+   * feed, and detects newly-eliminated fighters (transition from not
+   * eliminated to eliminated across successive update() calls) to add a
+   * feed line -- no separate event stream needed, this is exactly the
+   * same eliminated/placement fields the chip grid already renders. */
+  private updateMatchStatus(
+    snapshots: readonly FighterSnapshot[],
+    extras: readonly HudFighterExtra[] | undefined,
+    names: readonly string[] | undefined,
+    matchInfo: HudMatchInfo | undefined,
+  ): void {
+    if (!matchInfo) {
+      this.matchStatus.style.display = 'none';
+      return;
+    }
+    this.matchStatus.style.display = '';
+    this.matchModeLine.textContent = `${modeLabelText(matchInfo.winCondition)} · ${winConditionText(matchInfo.winCondition)}`;
+    this.matchClockLine.textContent = matchInfo.clockText;
+    for (let i = 0; i < snapshots.length; i++) {
+      const s = snapshots[i] as FighterSnapshot;
+      const extra = extras?.[i];
+      const eliminated = extra?.eliminated ?? s.eliminated;
+      if (!eliminated) continue;
+      if (this.seenEliminated[i]) continue;
+      this.seenEliminated[i] = true;
+      const placement = extra?.placement ?? (s.placement > 0 ? s.placement : null);
+      const name = names?.[i] && (names[i] as string).length > 0 ? (names[i] as string) : `#${i + 1}`;
+      this.feedLines.unshift(eliminationFeedLine(name, placement));
+      this.feedLines.length = Math.min(this.feedLines.length, ELIMINATION_FEED_LIMIT);
+    }
+    this.eliminationFeed.replaceChildren(
+      ...this.feedLines.map((line) => {
+        const row = document.createElement('div');
+        row.className = 'elimination-feed-line';
+        row.textContent = line;
+        return row;
+      }),
+    );
   }
 }
 

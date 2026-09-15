@@ -891,7 +891,17 @@ html, body {
    above for why the sidebar has real height to give it in the first
    place. */
 .hud-list.dense {
-  flex: 1;
+  /* Sized to its own content (a 2-column, 10-row grid of 20 compact
+     cards is a fixed, known height), not flex: 1 -- the chip grid used
+     to claim the sidebar's full height and then sit there mostly empty
+     below row 10, which is the dead space the match-status block below
+     now uses. flex-shrink: 0 keeps it from being squeezed if the
+     viewport is unusually short; overflow-y still catches the
+     pathological case (very long names wrapping, a future larger
+     roster) without the sidebar ever pushing the canvas over. */
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 55%;
   width: 100%;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
@@ -899,13 +909,6 @@ html, body {
   overflow-y: auto;
   gap: 4px;
   align-content: start;
-  /* The bottom-left connection chip (#net-status) is a fixed overlay
-     sitting on top of this sidebar (see #net-status in this file) --
-     without this the last row or two of a full 20-fighter list render
-     right underneath it and become unreadable. Reserving real bottom
-     padding here means those rows scroll clear of the chip instead of
-     just being covered by it. */
-  padding-bottom: 44px;
 }
 
 /* Name-and-percent-on-one-line dense card (Player Names 2026-09-11
@@ -1162,6 +1165,66 @@ html, body {
   color: var(--accent-strong);
   margin-bottom: 10px;
   letter-spacing: 0.03em;
+}
+
+/* Match-status block: the space below the chip grid, previously dead
+   (see wiki "Camera Framing" -era layout notes) -- now a compact,
+   always-derived-from-existing-state readout: mode + win condition,
+   a clock (remaining for Timed Brawl, elapsed otherwise), and a short
+   elimination feed. flex: 1 takes exactly the space the chip grid gives
+   up; bottom padding keeps it clear of the fixed #net-status chip
+   (bottom: 14px, see #net-status below), same convention the chip grid
+   already used. */
+.match-status {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+  padding-top: 10px;
+  padding-bottom: 44px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.match-status-mode {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-dim);
+  letter-spacing: 0.02em;
+}
+
+.match-status-clock {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  margin-top: 4px;
+  letter-spacing: 0.02em;
+}
+
+.elimination-feed {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.elimination-feed-line {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Most recent elimination reads slightly brighter than the ones scrolling
+   out of relevance below it -- a small hierarchy cue, not a colour that
+   competes with amber (warning/primary-action) or red (danger). */
+.elimination-feed-line:first-child {
+  color: var(--ink);
 }
 
 .hud-card.eliminated {
@@ -1696,6 +1759,31 @@ html, body {
   .match-overlay, .win-panel {
     width: min(92vw, 420px);
     padding: 20px;
+  }
+
+  /* At the 128px phone sidebar, the single-column dense list (see
+     .hud-list.dense above) runs to 20 full rows and can use most of the
+     available height itself -- give the match-status block smaller
+     type and a shorter feed so mode/clock stay legible in whatever
+     space is left, rather than clipping silently. */
+  .match-status {
+    padding-bottom: 40px;
+  }
+
+  .match-status-mode {
+    font-size: 9px;
+  }
+
+  .match-status-clock {
+    font-size: 14px;
+  }
+
+  .elimination-feed-line {
+    font-size: 9px;
+  }
+
+  .elimination-feed-line:nth-child(n+3) {
+    display: none;
   }
 }
 
