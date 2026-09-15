@@ -773,12 +773,14 @@ export class Renderer {
       const sprite = this.sprites[i] as FighterSprite;
       if (f.eliminated) {
         sprite.root.visible = false;
+        this.effects.resetTrail(i);
         continue;
       }
       sprite.root.visible = true;
       const screen = worldToScreen(f.x, f.y, cam, vw, vh);
       sprite.root.position.set(screen.x, screen.y);
       sprite.root.scale.set(cam.scale); // silhouette is drawn in world units
+      this.effects.trailFighter(i, screen.x, screen.y, f.hitstun > 0);
       const char = frame.characters[i] as CharacterData | undefined;
       const isLocalPlayer = frame.localPlayerIndex === i;
       sprite.draw({

@@ -43,4 +43,24 @@ describe('computeHitSoundParams: a hit sounds like what it was', () => {
     assert.ok(extreme.duration <= 0.35);
     assert.ok(extreme.gain <= 1);
   });
+
+  it('a weak jab gets no sub-thump, a strong hit gets a real one -- so kill power reads as heavier, not just louder', () => {
+    const weak = computeHitSoundParams({ damage: 3, strength: 0.1, weight: 100, seed: 5 });
+    const strong = computeHitSoundParams({ damage: 18, strength: 0.95, weight: 100, seed: 5 });
+    assert.equal(weak.thumpGain, 0, 'a weak jab should not add sub-thump weight');
+    assert.ok(strong.thumpGain > 0.2, `expected a strong hit to have real thump gain, got ${strong.thumpGain}`);
+    assert.ok(strong.thumpDuration > 0);
+  });
+
+  it('shield blocks never get a sub-thump (the shield absorbs the hit, not the body)', () => {
+    const block = computeHitSoundParams({ damage: 0, strength: 0.95, isShield: true, seed: 6 });
+    assert.equal(block.thumpGain, 0);
+    assert.equal(block.thumpDuration, 0);
+  });
+
+  it('thump gain never exceeds sane bounds for extreme strength', () => {
+    const extreme = computeHitSoundParams({ damage: 999, strength: 5, weight: 100, seed: 7 });
+    assert.ok(extreme.thumpGain <= 0.6);
+    assert.ok(extreme.thumpFreq > 0);
+  });
 });

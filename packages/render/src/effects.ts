@@ -34,8 +34,27 @@ interface Pop {
   baseScale: number;
 }
 
+interface TrailSegment {
+  g: Graphics;
+  ageMs: number;
+  lifeMs: number;
+}
+
 const SPARK_COLOR = PALETTE.danger;
 const POP_COLOR = PALETTE.hud;
+const TRAIL_COLOR = PALETTE.hud;
+
+// A fighter has to be moving at least this many screen pixels per
+// frame-equivalent (16.6667ms) while in hitstun before it earns a
+// launch trail -- normal walking/jumping never crosses this, only a
+// real knockback launch does, so the trail reads as "that hit was
+// violent" rather than appearing on ordinary movement.
+const TRAIL_SPEED_THRESHOLD_PX = 9;
+// Hard cap on live trail segments across all fighters -- twenty
+// fighters all being launched into a lethal blast at once must degrade
+// gracefully (fewer/shorter segments), never accumulate unbounded
+// Graphics nodes.
+const MAX_TRAIL_SEGMENTS = 24;
 
 // Reduced-motion accessibility switch. Screen shake is the one effect
 // here with a real vestibular-discomfort/motion-sickness risk (the
@@ -68,8 +87,14 @@ export class EffectsLayer {
   readonly root = new Container();
   private readonly particleLayer = new Container();
   private readonly popLayer = new Container();
+  private readonly trailLayer = new Container();
   private particles: Particle[] = [];
   private pops: Pop[] = [];
+  private trails: TrailSegment[] = [];
+  // Last known screen position per fighter index, used only to measure
+  // frame-to-frame screen-space speed for the launch trail -- never
+  // read from or fed back into sim state.
+  private lastTrailPos = new Map<number, { x: number; y: number }>();
 
   // Per-fighter-index flash timers (index -> remaining ms + total ms for
   // fraction). Cleared automatically as they decay; a fighter that never
@@ -86,6 +111,7 @@ export class EffectsLayer {
   private shakeSeed = 1;
 
   constructor() {
+    this.root.addChild(this.trailLayer);
     this.root.addChild(this.particleLayer);
     this.root.addChild(this.popLayer);
   }
@@ -154,6 +180,48 @@ export class EffectsLayer {
     this.addShake(strength);
   }
 
+  /** Called once per fighter per render frame with its current screen
+   * position and whether it's currently in hitstun. Presentation-only:
+   * reads screen coordinates the renderer already computed from sim
+   * state, never sim velocity/PRNG, and never writes anything back.
+   * When the fighter is moving fast enough while in hitstun, drops a
+   * short fading streak behind it so a big launch reads as violent
+   * motion rather than a silent teleport-slide. Capped so 20
+   * simultaneous launches degrade to fewer/shorter segments instead of
+   * piling up Graphics nodes. */
+  trailFighter(fighterIndex: number, x: number, y: number, inHitstun: boolean): void {
+    const prev = this.lastTrailPos.get(fighterIndex);
+    this.lastTrailPos.set(fighterIndex, { x, y });
+    if (!prev || !inHitstun) return;
+    const dx = x - prev.x;
+    const dy = y - prev.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < TRAIL_SPEED_THRESHOLD_PX) return;
+    if (this.trails.length >= MAX_TRAIL_SEGMENTS) {
+      // Drop the oldest segment rather than skip the new one -- under
+      // heavy load this keeps the *most recent* hits visible, which is
+      // what a player is looking at, instead of starving them in favour
+      // of older trails that are about to expire anyway.
+      const oldest = this.trails.shift();
+      oldest?.g.destroy();
+    }
+    const speedFrac = Math.min(1, (dist - TRAIL_SPEED_THRESHOLD_PX) / 40);
+    const thickness = 2 + speedFrac * 3;
+    const g = new Graphics();
+    g.moveTo(prev.x, prev.y);
+    g.lineTo(x, y);
+    g.stroke({ color: TRAIL_COLOR, width: thickness, alpha: 0.35 + speedFrac * 0.25 });
+    this.trailLayer.addChild(g);
+    this.trails.push({ g, ageMs: 0, lifeMs: 90 + speedFrac * 60 });
+  }
+
+  /** Drop tracked position state for a fighter that's no longer live
+   * (eliminated / respawned) so a stale huge jump doesn't get read as a
+   * trail-worthy "speed" on its next appearance. */
+  resetTrail(fighterIndex: number): void {
+    this.lastTrailPos.delete(fighterIndex);
+  }
+
   /** A bigger, screen-anchored moment for an elimination: a bright ring
    * pop at the fighter's last position and a stronger shake. Kept flat
    * and geometric -- no glow/bloom -- per the project's visual language. */
@@ -207,6 +275,16 @@ export class EffectsLayer {
       const t = p.ageMs / p.lifeMs;
       p.g.alpha = (1 - t) * 0.9;
       p.g.scale.set(p.baseScale * (1 + t * 1.6));
+      return true;
+    });
+
+    this.trails = this.trails.filter((seg) => {
+      seg.ageMs += dtMs;
+      if (seg.ageMs >= seg.lifeMs) {
+        seg.g.destroy();
+        return false;
+      }
+      seg.g.alpha *= 1 - dtMs / seg.lifeMs;
       return true;
     });
 

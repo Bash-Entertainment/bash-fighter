@@ -112,6 +112,18 @@ export interface HitSoundParams {
   detuneCents: number;
   /** Oscillator waveform. */
   waveform: OscillatorType;
+  /** 0..1 gain of an extra low-frequency sub-thump layered under the
+   * main tone/noise mix, giving strong hits physical "weight" without
+   * raising overall loudness much -- 0 for weak hits and shield blocks
+   * (a shield absorbing a hit shouldn't thud) so twenty fighters
+   * trading jabs doesn't turn into a bass rumble. */
+  thumpGain: number;
+  /** Sub-thump oscillator frequency in Hz. Low and roughly constant --
+   * it reads as "impact weight", not a pitched note. */
+  thumpFreq: number;
+  /** Sub-thump envelope length in seconds. Short: it's a felt punch,
+   * not a ringing tone. */
+  thumpDuration: number;
 }
 
 // Deterministic pseudo-variation from a plain number seed. NOT a PRNG
@@ -142,6 +154,9 @@ export function computeHitSoundParams(input: HitSoundInput): HitSoundParams {
       gain: 0.5 + strength * 0.3,
       detuneCents: (jitter - 0.5) * 20,
       waveform: 'triangle',
+      thumpGain: 0,
+      thumpFreq: 60,
+      thumpDuration: 0,
     };
   }
 
@@ -156,6 +171,16 @@ export function computeHitSoundParams(input: HitSoundInput): HitSoundParams {
   const gain = 0.35 + strength * 0.55;
   const waveform: OscillatorType = weightTerm > 0.6 ? 'sine' : 'sawtooth'; // heavy = duller sine, light = brighter sawtooth
 
+  // Sub-thump: only kicks in once a hit has real strength, so a light
+  // jab stays a crack/tap and only a meaningfully powerful hit gets the
+  // extra low-end weight -- this is what should make a kill-power smash
+  // unmistakably different from a weak hit by ear, not just by pitch.
+  // Quadratic so the ramp-in is gentle at low strength and pronounced
+  // near 1, rather than thumping on every third hit.
+  const thumpGain = strength > 0.25 ? Math.min(0.6, (strength - 0.25) ** 2 * 1.1) : 0;
+  const thumpFreq = 55 - weightTerm * 15; // heavier fighters thump a touch lower
+  const thumpDuration = thumpGain > 0 ? 0.05 + strength * 0.09 : 0;
+
   return {
     freq: Math.max(70, freq),
     duration: Math.min(0.35, duration),
@@ -163,6 +188,9 @@ export function computeHitSoundParams(input: HitSoundInput): HitSoundParams {
     gain: Math.min(1, gain),
     detuneCents: (jitter - 0.5) * 30,
     waveform,
+    thumpGain,
+    thumpFreq: Math.max(35, thumpFreq),
+    thumpDuration,
   };
 }
 
@@ -432,12 +460,35 @@ export class AudioManager {
     noise?.start(now);
     noise?.stop(now + attack + p.duration + 0.02);
 
+    // Sub-thump: a short, separately-gained low sine layered under the
+    // main hit voice, only for hits strong enough to warrant it
+    // (thumpGain is 0 below that threshold, so this whole block is a
+    // no-op for jabs and shield blocks -- no extra nodes, no extra
+    // voice-count pressure). Own gain node so it can decay on its own,
+    // shorter, envelope rather than riding the main one.
+    let thumpOsc: OscillatorNode | null = null;
+    if (p.thumpGain > 0 && p.thumpDuration > 0) {
+      thumpOsc = ctx.createOscillator();
+      thumpOsc.type = 'sine';
+      thumpOsc.frequency.value = p.thumpFreq;
+      const thumpOut = ctx.createGain();
+      thumpOut.gain.value = 0;
+      thumpOsc.connect(thumpOut);
+      thumpOut.connect(this.masterGain!);
+      const thumpAttack = 0.004;
+      thumpOut.gain.linearRampToValueAtTime(p.thumpGain * gainMul, now + thumpAttack);
+      thumpOut.gain.exponentialRampToValueAtTime(0.001, now + thumpAttack + p.thumpDuration);
+      thumpOsc.start(now);
+      thumpOsc.stop(now + thumpAttack + p.thumpDuration + 0.02);
+    }
+
     const endsAt = now + attack + p.duration + 0.03;
     this.activeVoices.push({
       stop: () => {
         try {
           osc.stop();
           noise?.stop();
+          thumpOsc?.stop();
         } catch {
           // already stopped
         }
