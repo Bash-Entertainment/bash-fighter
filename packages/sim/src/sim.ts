@@ -1342,8 +1342,19 @@ export class Sim {
     const percentAfter = fx.add(percentBefore, scaledDamage);
     d[dBase + FighterField.PERCENT] = percentAfter;
 
+    // Knockback magnitude is deliberately fed the *unscaled* per-move
+    // damage (hb.damage), not scaledDamage, even though percent accrual
+    // above uses scaledDamage. See knockback.ts crowdDamageScale doc and
+    // wiki "Combat Model: Knockback, Hitstun, and DI" (2026-09-14 update):
+    // crowdDamageScale exists so percent climbs at a sane rate across a
+    // full 20-player match instead of saturating in the opening seconds --
+    // it was never meant to make individual hits push people around less.
+    // percentAfter (the real, slow-climbing accumulated percent) is still
+    // passed through untouched, so a fighter already damaged still flies
+    // further per hit, exactly as in a 1v1 duel -- only the *raw damage*
+    // term of the formula is decoupled from the crowd scale.
     const magnitude = computeKnockbackMagnitude(
-      scaledDamage,
+      hb.damage,
       percentAfter,
       hb.baseKnockback,
       hb.knockbackGrowth,
