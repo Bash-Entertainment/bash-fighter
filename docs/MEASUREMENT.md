@@ -808,3 +808,92 @@ stays exactly as terse as before).
 
 See also: [[Player Feedback Channel 2026-09-13]], [[Production Traffic Reality Check 2026-09-13]].
 
+
+
+## `scripts/arena-shrink-metrics.mjs` had the same moveless-bot bug, fixed 2026-09-14
+
+This script was never migrated when the `characters: undefined` ->
+`DEFAULT_CHARACTER` (`moves: []`) bug above was found and fixed in
+`human-analog-metrics.mjs`/`full-sweep-metrics.mjs` on 2026-09-11. It kept
+calling `new Sim(seed, N, undefined, arenaEntry.arena)` for its whole
+20-bot-no-human sweep, so every bot in every run was physically unable to
+land a hit. It also classified elimination cause with the old
+"damage in the last 60 ticks" heuristic instead of reading
+`Sim.eliminationEvents[].cause` directly, which the "Resolution Guarantee
+and Harness Trust" wiki page had already shown mislabels late-ring and
+below-floor-fall deaths.
+
+**Symptom reported 2026-09-14:** on `battle-royale-20`/EASY the script read
+501-539s match durations and a 95.4%/4.6% boundary-vs-combat split --
+unreconcilable with real play (matches run ~110-125s, knockouts are the
+normal way fighters die).
+
+**Fix:** build the roster with `scripts/lib/bot-character-assignment.mjs`'s
+`assignServerCharacters` (same seeded `ALL_CHARACTERS` draw
+`server/src/rooms.ts`'s bot-fill timer performs) instead of passing
+`undefined`; added a loud `process.exit(1)` assertion if any assigned
+character ever again has an empty `moves` array, so this exact regression
+cannot silently return; switched cause classification to
+`Sim.eliminationEvents[].cause` (`knockout` = combat, `fall`/`ring`/
+`ring_lethal` = boundary), matching what production's own `[elimination]`
+log line uses.
+
+**Production ground truth** (SSH `journalctl -u bash-fighter --since '-48h'`,
+`evt:"elimination"`/`evt:"matchSummary"` lines, 142 matches, 1034
+elimination events, all arenas/difficulties mixed since production always
+runs the single EASY default): knockout 802 (77.6%), ring 192 (18.6%), fall
+40 (3.9%) -> combat 77.6% / boundary 22.4%. 44 matches resolved with a
+winner, duration 35.7-180.0s (median 115.0s). `battle-royale-20` specifically:
+4 resolved matches, 118.4-124.4s (median 118.4s).
+
+**Harness before/after, `battle-royale-20`, EASY, same seeds:**
+
+| metric | before (reported bug) | after fix (16 seeds) | production (ground truth) |
+|---|---|---|---|
+| duration | 501-539s | min 73.0, median 117.9, max 162.8s | median 118.4s (n=4 resolved), 35.7-180.0s across all arenas (n=44) |
+| boundary % | 95.4% | 9.5% (29/305 elims) | 22.4% (232/1034 elims, all arenas) |
+| combat % | 4.6% | 90.5% | 77.6% |
+| 1-survivor resolution | not stated as 100% | 16/16 | 44/142 matches ended `resolved`; rest `abandoned_by_humans` (a harness has no equivalent -- see below) |
+
+Duration now agrees closely with production (within the observed spread).
+Boundary share is now the right order of magnitude and the right side of
+50% (combat clearly dominant, matching real play), but still undershoots
+production's 22.4% by roughly half -- honestly unresolved, plausibly
+because this harness still runs zero human seats (see the human-analog
+gap discussion above) and 20 uniform EASY bots may press each other into
+the ring less erratically than a real player does. Do not read the exact
+boundary percentage as production-equivalent; do trust the qualitative
+verdict (durations ~110-165s, knockouts are the dominant cause) and the
+duration figures.
+
+**Other scripts that still share the `undefined`-characters flaw, not
+fixed in this pass** (found by grepping every `new Sim(`/`createMatchSim(`
+call site in `scripts/`): `bot-brawl-metrics.mjs`, `clustering-metrics.mjs`,
+`human-placement-metrics.mjs`, `measure-lowpct-ko.mjs`,
+`novice-survival-metrics.mjs`, `ring-pacing-experiment.mjs`,
+`stocks-metrics.mjs`. Any combat-share or damage-rate number these print
+should be treated as suspect until each is checked the same way. (Not
+shared by `damage-curve-metrics.mjs`, `regen-golden.mjs`, or the two
+already-fixed scripts above, all of which pass real `characters`.)
+
+## Which scripts to trust for which question, 2026-09-14
+
+- **Match duration, elimination-cause split, "is combat or the boundary
+  deciding matches":** trust production logs first, always
+  (`journalctl -u bash-fighter`, `evt:"elimination"`/`evt:"matchSummary"`).
+  Of the offline harnesses, `human-analog-metrics.mjs` and
+  `full-sweep-metrics.mjs` (post-2026-09-11 fix) and
+  `arena-shrink-metrics.mjs` (post-2026-09-14 fix) all build a real
+  roster and read truthful `eliminationEvents.cause`; use them for
+  relative before/after comparisons on a single change, not as a
+  standalone substitute for production's own numbers.
+- **Anything from the seven scripts listed just above
+  (`bot-brawl-metrics.mjs` etc.):** not verified against this bug. Treat
+  any combat-share, DPS, or damage-rate number they print as unconfirmed
+  until re-checked.
+- **Camera framing (`camera-framing-metrics.mjs`):** trustworthy as of its
+  own fix -- asserts damped-vs-raw scale agreement and exits non-zero on
+  mismatch; see its own history for what that closed.
+- **Bandwidth (`bandwidth-` figures in the relevant wiki pages), load
+  testing (`load-test-metrics.mjs`):** unrelated to this bug class (no
+  `Sim`/bot characters involved); not re-audited here.

@@ -19,6 +19,7 @@ import { ALL_ARENAS } from '../packages/content/src/arenas.ts';
 import * as fx from '../packages/sim/src/math/fixed.ts';
 import { DEFAULT_MATCH_SETTINGS } from '../packages/sim/src/match-settings.ts';
 import { PRODUCTION_DEFAULT_BOT_DIFFICULTY_NAME } from '../server/src/match-defaults.ts';
+import { assignServerCharacters } from './lib/bot-character-assignment.mjs';
 
 // REVISED 2026-09-09 (task #28195): this harness previously hardcoded
 // BotDifficulty.HARD for every measurement in every wiki-recorded pass
@@ -61,7 +62,6 @@ if (process.env.MATCH_SHRINK_FULLY_CLOSED_TICK) {
   console.log(`WARNING: MATCH_SHRINK_FULLY_CLOSED_TICK=${process.env.MATCH_SHRINK_FULLY_CLOSED_TICK} is set -- this run will not match production timing.`);
 }
 const N = 20;
-const COMBAT_WINDOW_TICKS = 60; // 1s: "recently hit" window for cause attribution
 console.log(`bot difficulty: ${diffArg} (production default unless overridden by 5th arg)`);
 
 const arenaEntries = arenaArg === 'all' ? ALL_ARENAS : ALL_ARENAS.filter((a) => a.id === arenaArg);
@@ -71,12 +71,33 @@ if (arenaEntries.length === 0) {
 }
 
 function runMatch(arenaEntry, seed, { passiveIndex = -1 } = {}) {
-  const sim = new Sim(seed, N, undefined, arenaEntry.arena);
+  // FIX 2026-09-14 (see docs/MEASUREMENT.md, "Root cause found and fixed,
+  // 2026-09-11"): this used to call `new Sim(seed, N, undefined, ...)`,
+  // which silently resolves every seat to packages/sim's internal
+  // DEFAULT_CHARACTER (moves: []) -- bots that can move and take ring
+  // damage but can PHYSICALLY NEVER LAND A HIT. That is the exact bug
+  // already root-caused and fixed in human-analog-metrics.mjs and
+  // full-sweep-metrics.mjs; this script was never migrated and kept
+  // reporting the same "~100% boundary, ~500s matches" artifact. Build
+  // the same production-faithful roster server/src/rooms.ts draws.
+  const humanSlots = passiveIndex >= 0 ? new Set([passiveIndex]) : new Set();
+  const characters = assignServerCharacters(seed, N, humanSlots);
+  // Anti-drift assertion: fail loudly rather than silently re-introducing
+  // the moveless-bot bug if this ever regresses (e.g. a future edit
+  // passes `undefined` again, or ALL_CHARACTERS ships a moveless entry).
+  const moveless = characters.filter((c) => !c.moves || c.moves.length === 0);
+  if (moveless.length > 0) {
+    console.error(
+      `FATAL: ${moveless.length}/${N} assigned characters have no moves -- this is the exact ` +
+      `DEFAULT_CHARACTER regression documented in docs/MEASUREMENT.md. Refusing to report a ` +
+      `measurement that would silently reproduce it.`,
+    );
+    process.exit(1);
+  }
+  const sim = new Sim(seed, N, characters, arenaEntry.arena);
   const bots = Array.from({ length: N }, (_, i) =>
     i === passiveIndex ? null : new BotController(i, DIFFICULTY, deriveBotSeed(seed, i)),
   );
-  const lastDamageTick = new Array(N).fill(-1);
-  const lastPercent = new Array(N).fill(0);
   const wasEliminated = new Array(N).fill(false);
   let boundaryElims = 0;
   let combatElims = 0;
@@ -89,15 +110,19 @@ function runMatch(arenaEntry, seed, { passiveIndex = -1 } = {}) {
     const inputs = bots.map((b, i) => (b ? b.nextInput(sim) : idleInput));
     sim.advance(inputs);
 
-    for (let i = 0; i < N; i++) {
-      const f = sim.getFighter(i);
-      const pct = fx.toFloat(f.percent);
-      if (pct > lastPercent[i] + 0.01) lastDamageTick[i] = t;
-      lastPercent[i] = pct;
-      if (f.eliminated && !wasEliminated[i]) {
-        wasEliminated[i] = true;
-        const recentlyHit = lastDamageTick[i] >= 0 && t - lastDamageTick[i] <= COMBAT_WINDOW_TICKS;
-        if (recentlyHit) combatElims++;
+    // Truthful attribution (see wiki "Opening-Seconds Eliminations: Falls
+    // Misreported as Knockouts 2026-09-10" and "Resolution Guarantee and
+    // Harness Trust 2026-09-10"): read Sim.eliminationEvents directly --
+    // the same ground truth production's own [elimination] log line
+    // uses -- instead of the old "damage in the last COMBAT_WINDOW_TICKS"
+    // heuristic, which misattributed late-match ring kills (margin decays
+    // to zero) and below-floor falls. 'knockout' is combat; 'fall',
+    // 'ring', and 'ring_lethal' are all boundary/environment for this
+    // script's two-bucket split.
+    for (const ev of sim.eliminationEvents) {
+      if (!wasEliminated[ev.fighterIndex]) {
+        wasEliminated[ev.fighterIndex] = true;
+        if (ev.cause === 'knockout') combatElims++;
         else boundaryElims++;
       }
     }
