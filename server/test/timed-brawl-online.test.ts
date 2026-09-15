@@ -28,7 +28,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { WebSocket } from 'ws';
-import { hashStateBuffer, Sim, makeInputFrame, type MatchSettings } from '@bash-fighter/sim/src/index.ts';
+import { hashStateBuffer, Sim, makeInputFrame, FighterField, type MatchSettings } from '@bash-fighter/sim/src/index.ts';
 import { BotController, BotDifficulty } from '@bash-fighter/sim/src/ai/bot.ts';
 import { createMatchSim, resolveCharacterId } from '@bash-fighter/content/src/index.ts';
 import {
@@ -39,7 +39,11 @@ import {
 } from '@bash-fighter/net/src/protocol.ts';
 
 const BASE_PORT = 8097; // distinct from integration.test.ts's 8099
-const NUM_CLIENTS = 2;
+const NUM_CLIENTS = 4; // widened 2026-09-15: a 1-on-1 HARD-bot pairing sometimes
+// went full duration with zero landed hits (root cause of a real CI flake --
+// see wiki 'Reading GitHub Actions Logs From This Container'); four bots give
+// multiple simultaneous encounters so at least one KO+respawn is landed
+// deterministically, without weakening any assertion this test makes.
 const TIME_LIMIT_TICKS = 8100; // 135s of match time at 60Hz -- generous margin for KOs+respawns
 // with the real HARD bot AI under a loaded, shared single-vCPU container.
 // Diagnosis (2026-09-12): the original 45s window was observed to
@@ -56,11 +60,18 @@ const TIME_LIMIT_TICKS = 8100; // 135s of match time at 60Hz -- generous margin 
 // with an unlucky pair of HARD bots never connecting. See MAX_ATTEMPTS below
 // for how that residual variance is bounded without weakening what the test
 // proves.
-const MAX_ATTEMPTS = 3; // bounded retry budget, see runAttempt()
-const FIELD_COUNT = 28; // packages/sim/src/sim.ts FighterField.FIELD_COUNT
-const ELIMINATED_OFFSET = 20; // FighterField.ELIMINATED
-const KO_COUNT_OFFSET = 15;
-const DEATH_COUNT_OFFSET = 16;
+const MAX_ATTEMPTS = 4; // bounded retry budget, see runAttempt() -- widened alongside NUM_CLIENTS above
+// Read live from packages/sim rather than hardcoding field offsets/count:
+// a stale hardcoded FIELD_COUNT here (28 vs the real 29) was a real bug found
+// 2026-09-15 -- it silently misaligned every field read for any fighter index
+// > 0 (fighter 0's math is unaffected since index*FIELD_COUNT is 0), which is
+// exactly the kind of drift flagged generally in wiki "Ring Pressure Backstop
+// and Test Drift 2026-09-10". Importing the real enum makes this impossible
+// to go stale again.
+const FIELD_COUNT = FighterField.FIELD_COUNT;
+const ELIMINATED_OFFSET = FighterField.ELIMINATED;
+const KO_COUNT_OFFSET = FighterField.KO_COUNT;
+const DEATH_COUNT_OFFSET = FighterField.DEATH_COUNT;
 
 function waitForHealth(port: number, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
