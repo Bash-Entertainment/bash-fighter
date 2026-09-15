@@ -6,6 +6,7 @@ import { Sim } from '../packages/sim/src/sim.ts';
 import { BotController, BotDifficulty, deriveBotSeed } from '../packages/sim/src/ai/bot.ts';
 import { ALL_ARENAS } from '../packages/content/src/arenas.ts';
 import * as fx from '../packages/sim/src/math/fixed.ts';
+import { assignServerCharacters } from './lib/bot-character-assignment.mjs';
 
 const N = 20;
 const SEEDS = parseInt(process.argv[2] || '5', 10);
@@ -51,7 +52,15 @@ for (const arenaEntry of ALL_ARENAS) {
   const t0clusters = [], t30clusters = [];
   for (let s = 0; s < SEEDS; s++) {
     const seed = 500000 + s * 331 + arenaEntry.id.length;
-    const sim = new Sim(seed, N, undefined, arenaEntry.arena);
+    // FIX (see docs/MEASUREMENT.md, wiki "Resolution Guarantee and Harness
+    // Trust"): `undefined` silently resolves to moveless DEFAULT_CHARACTER.
+    const characters = assignServerCharacters(seed, N);
+    const moveless = characters.filter((c) => !c.moves || c.moves.length === 0);
+    if (moveless.length > 0) {
+      console.error(`FATAL: ${moveless.length}/${N} assigned characters have no moves -- refusing to report a measurement that would silently reproduce the moveless-bot bug.`);
+      process.exit(1);
+    }
+    const sim = new Sim(seed, N, characters, arenaEntry.arena);
     const bots = Array.from({ length: N }, (_, i) => new BotController(i, BotDifficulty.HARD, deriveBotSeed(seed, i)));
     t0dists.push(meanPairwiseDist(sim));
     t0clusters.push(minTightCluster(sim, 60));

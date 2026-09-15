@@ -866,15 +866,26 @@ boundary percentage as production-equivalent; do trust the qualitative
 verdict (durations ~110-165s, knockouts are the dominant cause) and the
 duration figures.
 
-**Other scripts that still share the `undefined`-characters flaw, not
-fixed in this pass** (found by grepping every `new Sim(`/`createMatchSim(`
-call site in `scripts/`): `bot-brawl-metrics.mjs`, `clustering-metrics.mjs`,
+**Update 2026-09-15: the remaining seven scripts above were fixed too.**
+`bot-brawl-metrics.mjs`, `clustering-metrics.mjs`,
 `human-placement-metrics.mjs`, `measure-lowpct-ko.mjs`,
-`novice-survival-metrics.mjs`, `ring-pacing-experiment.mjs`,
-`stocks-metrics.mjs`. Any combat-share or damage-rate number these print
-should be treated as suspect until each is checked the same way. (Not
-shared by `damage-curve-metrics.mjs`, `regen-golden.mjs`, or the two
-already-fixed scripts above, all of which pass real `characters`.)
+`novice-survival-metrics.mjs`, `ring-pacing-experiment.mjs`, and
+`stocks-metrics.mjs` all called `new Sim(seed, N)` / `new Sim(seed, N,
+undefined, ...)` and have all been migrated to
+`assignServerCharacters` with the same loud `moves.length === 0`
+`process.exit(1)` guard as `arena-shrink-metrics.mjs`.
+`ring-pacing-experiment.mjs` additionally had the old damage-window
+elimination-cause heuristic, now replaced with
+`Sim.eliminationEvents[].cause`. `measure-lowpct-ko.mjs` had a second,
+independent bug in its own percent-at-death conversion (`/65536*100`,
+double-scaling by 100x versus every other script's `fx.toFloat`),
+invisible before because it never had a real `knockout` event to apply
+it to; also fixed. Full before/after numbers for all seven, and which
+previously-published figures they invalidate, are in [[Resolution
+Guarantee and Harness Trust]]'s 2026-09-15 note. (Not affected:
+`damage-curve-metrics.mjs`, `regen-golden.mjs`, `full-sweep-metrics.mjs`,
+`human-analog-metrics.mjs`, `arena-shrink-metrics.mjs` -- all already
+pass real `characters`.)
 
 ## Which scripts to trust for which question, 2026-09-14
 
@@ -887,10 +898,20 @@ already-fixed scripts above, all of which pass real `characters`.)
   roster and read truthful `eliminationEvents.cause`; use them for
   relative before/after comparisons on a single change, not as a
   standalone substitute for production's own numbers.
-- **Anything from the seven scripts listed just above
-  (`bot-brawl-metrics.mjs` etc.):** not verified against this bug. Treat
-  any combat-share, DPS, or damage-rate number they print as unconfirmed
-  until re-checked.
+- **`bot-brawl-metrics.mjs`, `clustering-metrics.mjs`,
+  `human-placement-metrics.mjs`, `measure-lowpct-ko.mjs`,
+  `novice-survival-metrics.mjs`, `ring-pacing-experiment.mjs`,
+  `stocks-metrics.mjs` (fixed 2026-09-15):** all now build a real roster
+  via `assignServerCharacters` and fail loudly if any assigned character
+  has no moves; `ring-pacing-experiment.mjs` and `measure-lowpct-ko.mjs`
+  read `eliminationEvents.cause` directly. Fine for relative
+  before/after comparisons within one script's own scope (novice
+  survival time, human placement distribution, stock-count resolution
+  time, clustering distance, ring-pacing duration/combat split). Every
+  headline number any of them published before 2026-09-15 was measured
+  with moveless bots and is now known wrong -- see the specific
+  before/after table in [[Resolution Guarantee and Harness Trust]] before
+  citing any pre-2026-09-15 figure from these scripts again.
 - **Camera framing (`camera-framing-metrics.mjs`):** trustworthy as of its
   own fix -- asserts damped-vs-raw scale agreement and exits non-zero on
   mismatch; see its own history for what that closed.

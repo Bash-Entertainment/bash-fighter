@@ -20,6 +20,7 @@ import { BotController, BotDifficulty, deriveBotSeed } from '../packages/sim/src
 import { BUTTON_ATTACK, BUTTON_JUMP, makeInputFrame } from '../packages/sim/src/types.ts';
 import { resolveArenaId, pickArenaId } from '../packages/content/src/arenas.ts';
 import * as fx from '../packages/sim/src/math/fixed.ts';
+import { assignServerCharacters } from './lib/bot-character-assignment.mjs';
 
 const diffArg = (process.argv[2] || 'easy').toUpperCase();
 const TRIALS = parseInt(process.argv[3] || '20', 10);
@@ -75,7 +76,17 @@ function humanInput(sim, rand, driftRef) {
 function runOneTrial(seed) {
   const arenaId = pickArenaId(seed);
   const arena = resolveArenaId(arenaId);
-  const sim = new Sim(seed, N, undefined, arena);
+  // FIX (see docs/MEASUREMENT.md, wiki "Resolution Guarantee and Harness
+  // Trust"): `undefined` silently resolves every seat to moveless
+  // DEFAULT_CHARACTER. Human slot gets the placeholder fallback, bot seats
+  // get the same seeded ALL_CHARACTERS draw production's rooms.ts uses.
+  const characters = assignServerCharacters(seed, N, new Set([HUMAN_SLOT]));
+  const moveless = characters.filter((c) => !c.moves || c.moves.length === 0);
+  if (moveless.length > 0) {
+    console.error(`FATAL: ${moveless.length}/${N} assigned characters have no moves -- refusing to report a measurement that would silently reproduce the moveless-bot bug.`);
+    process.exit(1);
+  }
+  const sim = new Sim(seed, N, characters, arena);
   const protectedSlots = new Set([HUMAN_SLOT]);
   const bots = [];
   for (let i = 1; i < N; i++) {

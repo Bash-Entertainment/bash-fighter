@@ -9,6 +9,7 @@ import { BotController, BotDifficulty, deriveBotSeed } from '../packages/sim/src
 import { ALL_ARENAS } from '../packages/content/src/arenas.ts';
 import * as fx from '../packages/sim/src/math/fixed.ts';
 import { PRODUCTION_DEFAULT_BOT_DIFFICULTY_NAME } from '../server/src/match-defaults.ts';
+import { assignServerCharacters } from './lib/bot-character-assignment.mjs';
 
 // Task #28195: defaults to production's real bot difficulty (see
 // server/src/match-defaults.ts) instead of the hardcoded HARD this
@@ -28,24 +29,28 @@ const VARIANTS = [
 ];
 
 function runMatch(arena, seed, shrinkFullyClosedTick) {
-  const sim = new Sim(seed, N, undefined, arena, { shrinkFullyClosedTick });
+  // FIX (see docs/MEASUREMENT.md, wiki "Resolution Guarantee and Harness
+  // Trust"): `undefined` silently resolves every seat to moveless
+  // DEFAULT_CHARACTER; the old damage-heuristic classifier below has also
+  // been replaced with the real Sim.eliminationEvents[].cause field --
+  // the same ground truth production's own [elimination] log line uses.
+  const characters = assignServerCharacters(seed, N);
+  const moveless = characters.filter((c) => !c.moves || c.moves.length === 0);
+  if (moveless.length > 0) {
+    console.error(`FATAL: ${moveless.length}/${N} assigned characters have no moves -- refusing to report a measurement that would silently reproduce the moveless-bot bug.`);
+    process.exit(1);
+  }
+  const sim = new Sim(seed, N, characters, arena, { shrinkFullyClosedTick });
   const bots = Array.from({ length: N }, (_, i) => new BotController(i, DIFFICULTY, deriveBotSeed(seed, i)));
-  const lastDamageTick = new Array(N).fill(-1);
-  const lastPercent = new Array(N).fill(0);
   const wasEliminated = new Array(N).fill(false);
   let boundaryElims = 0, combatElims = 0, endTick = CEIL, matchEnded = false;
   for (let t = 0; t < CEIL; t++) {
     const inputs = bots.map((b) => b.nextInput(sim));
     sim.advance(inputs);
-    for (let i = 0; i < N; i++) {
-      const f = sim.getFighter(i);
-      const pct = fx.toFloat(f.percent);
-      if (pct > lastPercent[i] + 0.01) lastDamageTick[i] = t;
-      lastPercent[i] = pct;
-      if (f.eliminated && !wasEliminated[i]) {
-        wasEliminated[i] = true;
-        const recentlyHit = lastDamageTick[i] >= 0 && t - lastDamageTick[i] <= 60;
-        if (recentlyHit) combatElims++; else boundaryElims++;
+    for (const ev of sim.eliminationEvents) {
+      if (!wasEliminated[ev.fighterIndex]) {
+        wasEliminated[ev.fighterIndex] = true;
+        if (ev.cause === 'knockout') combatElims++; else boundaryElims++;
       }
     }
     if (sim.isMatchOver && sim.isMatchOver()) { endTick = t; matchEnded = true; break; }

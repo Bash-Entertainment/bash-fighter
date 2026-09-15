@@ -7,6 +7,7 @@
 import { Sim } from '../packages/sim/src/sim.ts';
 import { BotController, BotDifficulty, deriveBotSeed } from '../packages/sim/src/ai/bot.ts';
 import * as fx from '../packages/sim/src/math/fixed.ts';
+import { assignServerCharacters } from './lib/bot-character-assignment.mjs';
 
 const diffArg = (process.argv[2] || 'hard').toUpperCase();
 const TICKS = parseInt(process.argv[3] || '10800', 10); // 3 min @ 60hz
@@ -14,7 +15,18 @@ const N = 20;
 const SEED = 424242;
 const difficulty = BotDifficulty[diffArg] ?? BotDifficulty.HARD;
 
-const sim = new Sim(SEED, N);
+// FIX (see docs/MEASUREMENT.md and wiki "Resolution Guarantee and Harness
+// Trust"): this used to call `new Sim(SEED, N)` with no character roster,
+// which silently resolves every seat to DEFAULT_CHARACTER (moves: []) --
+// bots that can move and take damage but can never land a hit. Build the
+// same production-faithful roster server/src/rooms.ts draws.
+const characters = assignServerCharacters(SEED, N);
+const moveless = characters.filter((c) => !c.moves || c.moves.length === 0);
+if (moveless.length > 0) {
+  console.error(`FATAL: ${moveless.length}/${N} assigned characters have no moves -- refusing to report a measurement that would silently reproduce the moveless-bot bug.`);
+  process.exit(1);
+}
+const sim = new Sim(SEED, N, characters);
 const bots = Array.from({ length: N }, (_, i) => new BotController(i, difficulty, deriveBotSeed(SEED, i)));
 
 let totalDamageDealt = 0;

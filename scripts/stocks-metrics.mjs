@@ -1,5 +1,6 @@
 import { Sim } from '../packages/sim/src/sim.ts';
 import { BotController, BotDifficulty, deriveBotSeed } from '../packages/sim/src/ai/bot.ts';
+import { assignServerCharacters } from './lib/bot-character-assignment.mjs';
 
 const N = 20;
 const TICKS_CEILING = 60 * 60 * 6;
@@ -7,7 +8,16 @@ const TRIALS = 4;
 const SHRINK_CLOSED = 60 * 60 * 3; // 3 min hard-margin full closure for this experiment
 
 function runOne(stocks, seed) {
-  const sim = new Sim(seed, N, undefined, undefined, {
+  // FIX (see docs/MEASUREMENT.md, wiki "Resolution Guarantee and Harness
+  // Trust"): `undefined` silently resolves every seat to moveless
+  // DEFAULT_CHARACTER -- bots that can never land a hit.
+  const characters = assignServerCharacters(seed, N);
+  const moveless = characters.filter((c) => !c.moves || c.moves.length === 0);
+  if (moveless.length > 0) {
+    console.error(`FATAL: ${moveless.length}/${N} assigned characters have no moves -- refusing to report a measurement that would silently reproduce the moveless-bot bug.`);
+    process.exit(1);
+  }
+  const sim = new Sim(seed, N, characters, undefined, {
     winCondition: 'stocks', startingStocks: stocks, arenaShrink: true, shrinkFullyClosedTick: SHRINK_CLOSED,
   });
   const bots = Array.from({ length: N }, (_, i) => new BotController(i, BotDifficulty.HARD, deriveBotSeed(seed, i)));

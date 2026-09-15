@@ -18,6 +18,7 @@ import { Sim } from '../packages/sim/src/sim.ts';
 import { BotController, BotDifficulty, deriveBotSeed } from '../packages/sim/src/ai/bot.ts';
 import { BUTTON_ATTACK, BUTTON_JUMP, makeInputFrame } from '../packages/sim/src/types.ts';
 import * as fx from '../packages/sim/src/math/fixed.ts';
+import { assignServerCharacters } from './lib/bot-character-assignment.mjs';
 
 const diffArg = (process.argv[2] || 'easy').toUpperCase();
 const TRIALS = parseInt(process.argv[3] || '15', 10);
@@ -56,7 +57,18 @@ function noviceInput(rand) {
 }
 
 function runOneTrial(seed) {
-  const sim = new Sim(seed, N);
+  // FIX (see docs/MEASUREMENT.md, wiki "Resolution Guarantee and Harness
+  // Trust"): `new Sim(seed, N)` with no roster silently resolves every
+  // bot to moveless DEFAULT_CHARACTER -- bots that can never land a hit,
+  // meaning this harness could never have measured "is easy actually
+  // easy" against real combat, only against the ring/falls.
+  const characters = assignServerCharacters(seed, N, new Set([NOVICE_SLOT]));
+  const moveless = characters.filter((c) => !c.moves || c.moves.length === 0);
+  if (moveless.length > 0) {
+    console.error(`FATAL: ${moveless.length}/${N} assigned characters have no moves -- refusing to report a measurement that would silently reproduce the moveless-bot bug.`);
+    process.exit(1);
+  }
+  const sim = new Sim(seed, N, characters);
   const protectedSlots = new Set([NOVICE_SLOT]);
   const bots = [];
   for (let i = 1; i < N; i++) {
