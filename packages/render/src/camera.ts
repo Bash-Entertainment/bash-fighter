@@ -274,8 +274,39 @@ export function computeRawCamera(
   // in an arena" rather than a tight, disorienting zoom. This is a size
   // floor only — it does not pull the center toward the arena's own
   // midpoint.
-  const spanX = Math.max(fSpanX, arenaSpanX);
-  const spanY = Math.max(fSpanY, arenaSpanY);
+  //
+  // ARENA-FLOOR OVERREACH CAP (empty-sky-at-20 pass, 2026-09-15): at a
+  // full/near-full lobby the fighters' own spread already reads as "a
+  // fight in a big arena" -- the floor exists for the *opposite* case
+  // (a couple of fighters clustered near the middle of a much bigger
+  // stage), which the population-aware shrink in framing.ts already
+  // handles by scaling the floor itself down as the count drops. On
+  // battle-royale-20 with 20 living fighters the un-shrunk floor (from
+  // the solid ground's own footprint, ~960 world units) is still ~24%
+  // wider than the actual 20-spawn spread (~774 units with padding) --
+  // dead margin nobody occupies, forced onto the *whole* screen because
+  // spanX/Y is a plain max(). That margin is a big deal specifically on
+  // a narrow phone viewport (measured: fighterPx 14.6 -> 17.6+ once
+  // removed, see scripts/camera-framing-metrics.mjs), where every extra
+  // world-unit of forced span comes straight out of on-screen fighter
+  // pixels. Capping the floor's contribution to a fixed multiple of the
+  // fighters' *own* spread -- only once the lobby is large enough that
+  // the fighters' spread is itself already arena-sized -- removes that
+  // unused margin without touching the low-population "still look like
+  // an arena" behaviour at all (small lobbies/endgames are below
+  // ARENA_FLOOR_SLACK_MIN_COUNT and keep the full, unslacked floor).
+  const ARENA_FLOOR_SLACK_MIN_COUNT = 12;
+  const ARENA_FLOOR_SLACK_FACTOR = 1.05;
+  const cappedArenaSpanX =
+    positions.length >= ARENA_FLOOR_SLACK_MIN_COUNT
+      ? Math.min(arenaSpanX, fSpanX * ARENA_FLOOR_SLACK_FACTOR)
+      : arenaSpanX;
+  const cappedArenaSpanY =
+    positions.length >= ARENA_FLOOR_SLACK_MIN_COUNT
+      ? Math.min(arenaSpanY, fSpanY * ARENA_FLOOR_SLACK_FACTOR)
+      : arenaSpanY;
+  const spanX = Math.max(fSpanX, cappedArenaSpanX);
+  const spanY = Math.max(fSpanY, cappedArenaSpanY);
 
   const scaleX = cfg.viewWidth / spanX;
   const scaleY = cfg.viewHeight / spanY;

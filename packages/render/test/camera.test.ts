@@ -447,3 +447,69 @@ test('damped steady-state scale matches raw scale on a wide arena that needs to 
     `damped scale ${damped.scale} should settle to raw scale ${raw.scale}, not re-clamp to cfg.minScale ${c.minScale}`,
   );
 });
+
+// Regression (empty-sky-at-20 pass, 2026-09-15): a large, tightly-spread
+// lobby (>= ARENA_FLOOR_SLACK_MIN_COUNT fighters) must be able to zoom
+// tighter than the raw arena/platform footprint when the fighters
+// themselves occupy noticeably less width than that footprint -- the
+// floor exists for small, clustered endgames, not to permanently reserve
+// unused ground margin at full population. See
+// "Camera Framing: Ground Anchor and Jump-Space Bias" wiki history and
+// scripts/camera-framing-metrics.mjs.
+test('a large, tightly-spread lobby zooms in past the raw arena footprint, never past cfg.maxScale, and still contains everyone', () => {
+  const arena: ArenaBounds = { minX: -480, maxX: 480, minY: -100, maxY: 540 };
+  const c = cfg({
+    viewWidth: 1280,
+    viewHeight: 720,
+    minScale: 1.6,
+    maxScale: 5.5,
+    arena,
+    clampBounds: { minX: -620, maxX: 620, minY: -260, maxY: 520 },
+  });
+  // 20 fighters spread across only ~774 world units (matching
+  // battle-royale-20's real spawn spread), well inside the 960-unit
+  // arena footprint above.
+  const positions = Array.from({ length: 20 }, (_, i) => ({
+    x: -367 + (i / 19) * 734,
+    y: 0,
+  }));
+  const arenaFootprintScale = c.viewWidth / (arena.maxX - arena.minX);
+  const view = computeRawCamera(positions, c);
+  assert.ok(
+    view.scale > arenaFootprintScale,
+    `scale ${view.scale} should exceed the raw arena-footprint scale ${arenaFootprintScale} once the lobby is large but its spread is tighter than the footprint`,
+  );
+  const halfW = c.viewWidth / 2 / view.scale;
+  for (const f of positions) {
+    assert.ok(
+      f.x >= view.centerX - halfW && f.x <= view.centerX + halfW,
+      `fighter at x=${f.x} outside frame`,
+    );
+  }
+});
+
+// Regression: a small cluster (below the slack-cap population threshold)
+// keeps the full, un-slacked arena floor -- the "still looks like an
+// arena" behaviour for 2-3 fighter endgames must be unaffected.
+test('a small cluster below the slack-cap threshold still gets the full arena floor', () => {
+  const arena: ArenaBounds = { minX: -480, maxX: 480, minY: -100, maxY: 540 };
+  const c = cfg({
+    viewWidth: 1280,
+    viewHeight: 720,
+    minScale: 1.6,
+    maxScale: 5.5,
+    arena,
+    clampBounds: { minX: -620, maxX: 620, minY: -260, maxY: 520 },
+  });
+  const positions = [{ x: -10, y: 0 }, { x: 10, y: 0 }, { x: 0, y: 0 }];
+  const arenaFootprintScale = Math.min(
+    c.viewWidth / (arena.maxX - arena.minX),
+    c.viewHeight / (arena.maxY - arena.minY),
+  );
+  const view = computeRawCamera(positions, c);
+  assert.ok(
+    Math.abs(view.scale - arenaFootprintScale) < 0.01,
+    `small cluster should be framed at the raw arena-footprint scale ${arenaFootprintScale}, got ${view.scale}`,
+  );
+});
+
