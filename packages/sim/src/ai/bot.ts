@@ -259,6 +259,60 @@ const EMPTY_SET: ReadonlySet<number> = new Set();
 const EARLY_ENGAGEMENT_HESITATION_BONUS = 300;
 const EARLY_ENGAGEMENT_RAMP_TICKS = 3600; // 60s @ 60Hz
 
+// LATE-GAME FINISH FIX (task: endgame time-budget 2026-09-15): measured
+// via scripts/time-budget-metrics.mjs that once the field thins to the
+// final handful of fighters, EASY bots (production's actual default --
+// see server/src/match-defaults.ts) essentially never finish an already-
+// vulnerable opponent. EASY has pursuitEnabled=false, so even against a
+// target in hitstun, airborne with real knockback velocity, or already
+// at kill percent, it keeps rolling the full 550/1000 base hesitation on
+// every ~0.67s decision tick with no aim-lead -- by the time the roll
+// hits, the target has often recovered or drifted out of range. Result,
+// EASY 24-seed harness sample: the last elimination (alive 3->1) is
+// ring-caused 20/24 times (83%) -- the ring, not combat, decides who
+// wins almost every match, exactly the "executioner" outcome the 2026-
+// 09-10 design decision rejected. This does not touch pursuitEnabled,
+// aim-lead, or pickTarget scoring (the finishing-priority experiment
+// already reverted for double-KO risk, see pickTarget) -- only how
+// readily an EASY bot commits the finishing swing it was already about
+// to throw, and only once the lobby has thinned and only against a
+// target already vulnerable.
+const LATE_GAME_FINISH_HESITATION_PER_MILLE = 60; // matches MEDIUM's pursuitHesitationPerMille
+
+function countAlive(sim: Sim): number {
+  let n = 0;
+  for (let i = 0; i < sim.numFighters; i++) {
+    if (!sim.getFighter(i).eliminated) n++;
+  }
+  return n;
+}
+
+/** 0 at >= LATE_GAME_ALIVE_THRESHOLD alive, ramping linearly to 1 at 2
+ * alive (same shape as pickTarget's protectionScale fade) -- reuses the
+ * existing late-game threshold rather than inventing a new one. */
+function lateGameFinishScale(aliveTotal: number): number {
+  if (aliveTotal >= LATE_GAME_ALIVE_THRESHOLD) return 0;
+  return Math.min(1, Math.max(0, (LATE_GAME_ALIVE_THRESHOLD - aliveTotal) / (LATE_GAME_ALIVE_THRESHOLD - 2)));
+}
+
+/** Only ever reduces hesitation for a difficulty that does not already
+ * get pursuit's finishing treatment (i.e. EASY today), only against a
+ * target isVulnerable() already flags, and only as the lobby thins past
+ * LATE_GAME_ALIVE_THRESHOLD. Returns the hesitation value to use in
+ * place of tuning.hesitationPerMille; unchanged (returns base) whenever
+ * any of those conditions don't hold. */
+function finishHesitationPerMille(
+  tuning: DifficultyTuning,
+  aliveTotal: number,
+  targetVulnerable: boolean,
+  base: number,
+): number {
+  if (tuning.pursuitEnabled || !targetVulnerable) return base;
+  const scale = lateGameFinishScale(aliveTotal);
+  if (scale <= 0) return base;
+  return base - scale * (base - LATE_GAME_FINISH_HESITATION_PER_MILLE);
+}
+
 /** Extra per-mille hesitation added on top of a difficulty's normal
  * hesitation roll while a match is still in its opening stretch, linearly
  * decaying to 0 by EARLY_ENGAGEMENT_RAMP_TICKS. Deliberately difficulty-
@@ -394,9 +448,10 @@ export class BotController {
     if (target.eliminated) return this.cached;
     const tuning = TUNING[this.difficulty];
     const inRange = this.inAttackRange(self, target);
-    const baseHesitation =
-      tuning.pursuitEnabled && this.isVulnerable(target) ? tuning.pursuitHesitationPerMille : tuning.hesitationPerMille;
-    const hesitation = baseHesitation + earlyEngagementHesitationBonus(sim.getTick());
+    const vulnerable = this.isVulnerable(target);
+    const baseHesitation = tuning.pursuitEnabled && vulnerable ? tuning.pursuitHesitationPerMille : tuning.hesitationPerMille;
+    const lateGameHesitation = finishHesitationPerMille(tuning, countAlive(sim), vulnerable, baseHesitation);
+    const hesitation = lateGameHesitation + earlyEngagementHesitationBonus(sim.getTick());
     const shouldAttack = inRange && this.rollPerMille() >= hesitation;
     const buttons = shouldAttack ? this.cached.buttons | BUTTON_ATTACK : this.cached.buttons & ~BUTTON_ATTACK;
     if (buttons === this.cached.buttons) return this.cached;
@@ -490,7 +545,8 @@ export class BotController {
         stickX = signOf(dx);
         stickY = signOf(dy);
         const baseHesitation = pursuing ? tuning.pursuitHesitationPerMille : tuning.hesitationPerMille;
-        const hesitation = baseHesitation + earlyEngagementHesitationBonus(sim.getTick());
+        const lateGameHesitation = finishHesitationPerMille(tuning, countAlive(sim), this.isVulnerable(target), baseHesitation);
+        const hesitation = lateGameHesitation + earlyEngagementHesitationBonus(sim.getTick());
         if (this.inAttackRange(self, target) && this.rollPerMille() >= hesitation) {
           buttons |= BUTTON_ATTACK;
           // Aim: grounded jab/ftilt picked by |stickX| threshold in
