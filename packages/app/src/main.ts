@@ -82,10 +82,32 @@ window.addEventListener(
   'pointerdown',
   () => {
     audio.initOnGesture();
-    audio.startAmbient();
+    // Autoplay decision: the lobby loop starts right on this same first
+    // gesture, not behind a further explicit "play music" click. A
+    // browser already refuses to make sound before any gesture, so this
+    // satisfies that policy for free; requiring a *second*, dedicated
+    // click on top would mean most visitors -- who gesture once by
+    // clicking straight into a match -- never hear it at all, which
+    // defeats the point of the player's request. The two things that
+    // keep this honest: it only ever starts unmuted for a visitor whose
+    // own persisted mute preference is already "on" (see AudioManager's
+    // isMuted default and initOnGesture), and pauseLobbyMusic below
+    // guarantees it never survives into an actual match.
+    audio.startLobbyMusic();
   },
   { once: true },
 );
+
+// Pre-match lobby music is owned entirely by screen state, never by sim
+// state -- see the presentation-only rule in packages/audio/src/index.ts.
+// Both call sites are a single line so it is obvious nothing here reads
+// or writes anything simulation-related.
+function pauseLobbyMusic(): void {
+  audio.stopLobbyMusic();
+}
+function resumeLobbyMusic(): void {
+  audio.startLobbyMusic();
+}
 
 // Every fixed top-right overlay control (sound, and later the in-match
 // Controls/Moves buttons) lives in this one flex row instead of each
@@ -644,6 +666,10 @@ async function beginOnlineMatch(): Promise<void> {
     },
     onMatchOver: (winnerIndex, resolved, leaderboard, settings) => {
       clearSpectateStallTimer();
+      // The sim has genuinely finished in every branch below (resolved
+      // or an abandoned teardown) -- resume here once, rather than in
+      // each branch, so nothing can fall through without it.
+      resumeLobbyMusic();
       hud.hide();
       inMatchMovesButton.classList.add('hidden');
       inMatchSettingsButton.classList.add('hidden');
@@ -708,6 +734,7 @@ async function beginOnlineMatch(): Promise<void> {
       matchOverlay.hide();
       spectateChip.hide();
       audio.play('match_end');
+      resumeLobbyMusic();
       if (isTimedBrawl(settings) && leaderboard) {
         // Timed Brawl never eliminates (fighters respawn -- see
         // eliminatedThisOnlineMatch above, which this mode never sets),
@@ -803,6 +830,7 @@ async function beginOnlineMatch(): Promise<void> {
     if (netMatch && netMatch.hasStarted() && !netMatch.isOver()) {
       if (!announcedStart) {
         announcedStart = true;
+        pauseLobbyMusic();
         audio.play('match_start');
         controlsHint.maybeShow();
       }
@@ -904,6 +932,7 @@ async function beginMatch(): Promise<void> {
     canvasRoot.innerHTML = '';
   }
 
+  pauseLobbyMusic();
   audio.play('match_start');
   // Player 1 (the local slot) gets the chosen character; slot 1 stays the
   // default placeholder -- this local harness is 2 human-controlled slots,
@@ -970,6 +999,7 @@ async function beginMatch(): Promise<void> {
       inMatchFeedbackButton.classList.add('hidden');
       touchControls.hide();
       audio.play('match_end');
+      resumeLobbyMusic();
       if (isTimedBrawl(settings) && leaderboard) {
         const scores = localMatch.currentSnapshots().map((s, slot) => ({ slot, koCount: s.koCount, deathCount: s.deathCount }));
         timedBrawlEndScreen.show(winnerIndex, leaderboard, scores, 0, (slot) => localMatch.nameFor(slot));

@@ -209,24 +209,134 @@ function write(name, samples) {
   write('match_end.wav', mix(a, b));
 }
 
-// ---- ambient_loop: very quiet low drone, phase-matched at loop seam.
-// Lower sample rate than the SFX above (this is a sustained loop, not a
-// transient) to keep the total asset budget small.
+// ---- lobby_loop: short chiptune loop for the pre-match lobby (start
+// screen + waiting screen). Replaces the earlier two-tone drone after
+// real player feedback called it out by name ("sound in lobby is bad.
+// instead a funcky chiptune is good" -- Player Feedback Channel,
+// 2026-09-14 submission). Two voices only: a triangle bassline (walks
+// root/fifth/subdominant in A minor, the same austere-but-warm key as
+// the rest of the SFX) and a 25%-duty pulse lead playing a short
+// syncopated pentatonic motif, plus a very quiet noise "tick" on the
+// off-beat for rhythmic bite without turning busy. Deliberately mixed
+// quiet (peak ~0.32 after mix, well under the 0.9 peak used for SFX)
+// because this must sit under the UI, not compete with it, and the
+// caller (AudioManager.startLobbyMusic) applies its own further
+// attenuation on top.
+//
+// Loop seam: every note has its own short attack/decay envelope so
+// nothing is still sounding at the buffer boundary, and an explicit
+// 8ms fade at the very start/end of the whole buffer removes any
+// residual DC/rounding click when AudioBufferSourceNode.loop wraps it.
 {
-  const AMBIENT_SR = 11025;
-  const loopSeconds = 2; // 0.5Hz wobble => exactly one cycle per loop, seamless
-  const n = Math.round(loopSeconds * AMBIENT_SR);
-  const out = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const t = i / AMBIENT_SR;
-    const a = Math.sin(2 * Math.PI * 55 * t) * 0.05;
-    const b = Math.sin(2 * Math.PI * 82.5 * t) * 0.03; // perfect fifth, low
-    const wobble = 1 + 0.08 * Math.sin(2 * Math.PI * 0.5 * t);
-    out[i] = (a + b) * wobble;
+  const LOOP_SR = 16000;
+  const bpm = 108;
+  const stepSec = 60 / bpm / 2; // 8th notes
+  const stepsPerBar = 8;
+  const bars = 4;
+  const totalSteps = stepsPerBar * bars;
+  const stepN = Math.round(stepSec * LOOP_SR);
+  const totalN = stepN * totalSteps;
+
+  const REST = 0;
+  // A-minor pentatonic-ish bassline, 8 steps, repeated every bar with the
+  // 4th bar dipping to the subdominant for a touch of movement instead of
+  // static repetition.
+  const A2 = 110, C3 = 130.81, D3 = 146.83, E3 = 164.81, F3 = 174.61, G3 = 196.0;
+  const bassBars = [
+    [A2, REST, A2, C3, REST, A2, E3, REST],
+    [A2, REST, A2, C3, REST, A2, E3, REST],
+    [F3, REST, F3, A2, REST, F3, D3, REST],
+    [G3, REST, G3, A2, REST, F3, E3, REST],
+  ];
+  // Lead motif: syncopated, deliberately not a straight ascending/
+  // descending arpeggio -- it hits off the beat (rest on strong beat 0
+  // of bars 2/4) which is what makes a chiptune loop read as "funky"
+  // rather than decorative.
+  const A3 = 220, C4 = 261.63, D4 = 293.66, E4 = 329.63, G4 = 392.0, A4 = 440.0;
+  const leadBars = [
+    [REST, C4, D4, REST, C4, A3, REST, E4],
+    [REST, C4, D4, REST, A4, G4, E4, REST],
+    [REST, C4, D4, REST, C4, A3, REST, D4],
+    [REST, D4, C4, A3, REST, G4, E4, REST],
+  ];
+
+  function pulse(n, freq, duty) {
+    const out = new Float32Array(n);
+    let phase = 0;
+    for (let i = 0; i < n; i++) {
+      phase += freq / LOOP_SR;
+      phase -= Math.floor(phase);
+      out[i] = phase < duty ? 1 : -1;
+    }
+    return out;
   }
-  const bytes = samplesToWavBytes(normalize(out), AMBIENT_SR);
-  writeFileSync(join(OUT_DIR, 'ambient_loop.wav'), bytes);
-  console.log(`ambient_loop.wav: ${(bytes.length / 1024).toFixed(1)} KB`);
+
+  function triangleWave(n, freq) {
+    const out = new Float32Array(n);
+    let phase = 0;
+    for (let i = 0; i < n; i++) {
+      phase += freq / LOOP_SR;
+      phase -= Math.floor(phase);
+      out[i] = 1 - 4 * Math.abs(Math.round(phase - 0.25) - (phase - 0.25));
+    }
+    return out;
+  }
+
+  function noteEnvelope(n, sustain = 0.55) {
+    const out = new Float32Array(n);
+    const attackN = Math.max(1, Math.round(n * 0.03));
+    for (let i = 0; i < n; i++) {
+      if (i < attackN) out[i] = i / attackN;
+      else out[i] = sustain ** ((i - attackN) / Math.max(1, n - attackN));
+    }
+    return out;
+  }
+
+  const out = new Float32Array(totalN);
+  const bassRng = makeRng(7);
+  for (let bar = 0; bar < bars; bar++) {
+    for (let step = 0; step < stepsPerBar; step++) {
+      const idx = bar * stepsPerBar + step;
+      const base = idx * stepN;
+
+      const bassFreq = bassBars[bar][step];
+      if (bassFreq > 0) {
+        const wave = triangleWave(stepN, bassFreq);
+        const env = noteEnvelope(stepN, 0.7);
+        for (let i = 0; i < stepN; i++) out[base + i] += wave[i] * env[i] * 0.22;
+      }
+
+      const leadFreq = leadBars[bar][step];
+      if (leadFreq > 0) {
+        const wave = pulse(stepN, leadFreq, 0.25);
+        const env = noteEnvelope(stepN, 0.35);
+        for (let i = 0; i < stepN; i++) out[base + i] += wave[i] * env[i] * 0.16;
+      } else {
+        // Quiet off-beat tick: a couple milliseconds of filtered noise,
+        // barely audible, giving the rest its own rhythmic texture
+        // rather than a dead gap.
+        const tickN = Math.min(stepN, Math.round(LOOP_SR * 0.012));
+        let prev = 0;
+        for (let i = 0; i < tickN; i++) {
+          const white = bassRng() * 2 - 1;
+          prev = prev + 0.4 * (white - prev);
+          out[base + i] += prev * expDecay(i, tickN, 10) * 0.05;
+        }
+      }
+    }
+  }
+
+  // Explicit declick fade at the loop boundary -- belt-and-braces on top
+  // of the per-note envelopes above.
+  const fadeN = Math.round(LOOP_SR * 0.008);
+  for (let i = 0; i < fadeN; i++) {
+    out[i] *= i / fadeN;
+    out[totalN - 1 - i] *= i / fadeN;
+  }
+
+  const bytes = samplesToWavBytes(out, LOOP_SR);
+  writeFileSync(join(OUT_DIR, 'lobby_loop.wav'), bytes);
+  console.log(`lobby_loop.wav: ${(bytes.length / 1024).toFixed(1)} KB, ${(totalN / LOOP_SR).toFixed(2)}s`);
 }
 
 console.log('Done.');

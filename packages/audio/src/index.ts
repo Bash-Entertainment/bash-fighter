@@ -9,10 +9,14 @@
 //    data (damage, knockback, weight, own-vs-other) so a heavy hit
 //    genuinely sounds different from a light one, with small
 //    deterministic per-event variation so repetition doesn't grate.
-//  - The pre-baked match_start/match_end/ambient beds, which are long
-//    or textured enough that a decoded WAV (generated offline by
+//  - The pre-baked match_start/match_end/lobby-music beds, which are
+//    long or textured enough that a decoded WAV (generated offline by
 //    scripts/generate-sounds.mjs, never downloaded/licensed audio) is
-//    simpler and cheaper than a live equivalent.
+//    simpler and cheaper than a live equivalent. The lobby loop
+//    (lobby_loop.wav, a short chiptune bed for the start/waiting
+//    screens) is presentation-only exactly like everything else here:
+//    packages/app owns starting/stopping it from screen-state alone,
+//    never from sim state.
 //
 // Zero knowledge of the sim: callers (packages/app) decide *when* to
 // play a sound by observing sim state, never the other way round. Every
@@ -30,7 +34,10 @@ const SOUND_FILES: Record<SoundName, string> = {
   match_end: 'match_end.wav',
 };
 
-const AMBIENT_FILE = 'ambient_loop.wav';
+const LOBBY_LOOP_FILE = 'lobby_loop.wav';
+// Lobby music sits well under the SFX/UI, and quieter still than the old
+// ambient drone it replaces -- see startLobbyMusic's doc comment.
+const LOBBY_MUSIC_GAIN = 0.28;
 
 const MUTE_STORAGE_KEY = 'bashfighter.audio.muted';
 // Independent from MUTE_STORAGE_KEY on purpose (issue #14): volume at 0
@@ -219,8 +226,9 @@ export class AudioManager {
   private activeVoices: ActiveVoice[] = [];
   private muted: boolean;
   private volume: number;
-  private ambientSource: AudioBufferSourceNode | null = null;
-  private ambientGain: GainNode | null = null;
+  private lobbyMusicSource: AudioBufferSourceNode | null = null;
+  private lobbyMusicGain: GainNode | null = null;
+  private lobbyMusicBuffer: AudioBuffer | null = null;
   private readonly assetBase: string;
   private initialized = false;
   // Shared, short-lived noise buffer reused by every noise-mixed hit
@@ -667,28 +675,53 @@ export class AudioManager {
     this.activeVoices.push({ stop: () => { try { src.stop(); } catch { /* noop */ } }, endsAt });
   }
 
-  startAmbient(): void {
-    if (!this.ctx || !this.masterGain || this.ambientSource) return;
+  /** Starts the pre-match lobby loop (start screen + waiting screen).
+   * Presentation-only, like every other sound here: it is never started
+   * or stopped by anything the sim reports, only by the app's own
+   * screen-state transitions (see packages/app/src/main.ts's
+   * pauseLobbyMusic/resumeLobbyMusic). Safe to call more than once --
+   * a second call while already playing is a no-op, matching
+   * initOnGesture's "safe to call repeatedly" contract so callers never
+   * need to track whether they already asked for it. Runs through the
+   * same masterGain node as everything else, so the existing mute
+   * control and volume slider apply to it with no special-casing, and
+   * "Reset to defaults" needs no lobby-music-specific code at all. */
+  startLobbyMusic(): void {
+    if (!this.ctx || !this.masterGain || this.lobbyMusicSource) return;
     void (async () => {
-      if (!this.ctx || this.ambientSource) return;
-      const buf = await this.fetchAndDecode(AMBIENT_FILE);
-      if (!buf || !this.ctx || !this.masterGain || this.ambientSource) return;
+      if (!this.ctx || this.lobbyMusicSource) return;
+      const buf = this.lobbyMusicBuffer ?? (await this.fetchAndDecode(LOBBY_LOOP_FILE));
+      if (!buf || !this.ctx || !this.masterGain || this.lobbyMusicSource) return;
+      this.lobbyMusicBuffer = buf;
       const src = this.ctx.createBufferSource();
       src.buffer = buf;
       src.loop = true;
       const gain = this.ctx.createGain();
-      gain.gain.value = 0.35;
+      gain.gain.value = LOBBY_MUSIC_GAIN;
       src.connect(gain);
       gain.connect(this.masterGain);
       src.start();
-      this.ambientSource = src;
-      this.ambientGain = gain;
+      this.lobbyMusicSource = src;
+      this.lobbyMusicGain = gain;
     })();
   }
 
-  stopAmbient(): void {
-    this.ambientSource?.stop();
-    this.ambientSource = null;
-    this.ambientGain = null;
+  /** Stops the lobby loop immediately (no fade) the instant a match
+   * actually starts, so it never fights the match's own sound design --
+   * see the binding rule in packages/audio's file header and the wiki
+   * page "Game Feel, Audio, and Reconnection". Safe to call when it
+   * isn't playing. */
+  stopLobbyMusic(): void {
+    this.lobbyMusicSource?.stop();
+    this.lobbyMusicSource = null;
+    this.lobbyMusicGain = null;
+  }
+
+  /** Test/dev-only: whether the lobby loop is currently the thing
+   * generating sound, so a regression test can assert the match-start
+   * transition actually silenced it rather than just calling the method
+   * and hoping. */
+  get isLobbyMusicPlaying(): boolean {
+    return this.lobbyMusicSource !== null;
   }
 }
