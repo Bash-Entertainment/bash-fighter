@@ -348,6 +348,62 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
     const slowFrameTransitionCoincidentKnown = group.filter((s) => typeof s.slowFrameTransitionCoincidentCount === 'number');
     const slowFrameTransitionCoincidentTotal = slowFrameTransitionCoincidentKnown.reduce((sum, s) => sum + s.slowFrameTransitionCoincidentCount, 0);
 
+    // "Actually playing" duration (2026-09-15, see docs/MEASUREMENT.md
+    // "Actually-playing session duration") -- server-derived activePlayMs
+    // (time as a live fighter, tick-based, cannot be spoofed by a client)
+    // alongside raw tab-open sessionDurationSec above. Never replaces the
+    // raw figure -- the owner's North Star wants both, since the gap
+    // between them is itself the finding (an idle tab vs real play).
+    const activePlaySec = group
+      .map((s) => (typeof s.activePlayMs === 'number' ? s.activePlayMs / 1000 : null))
+      .filter((v) => typeof v === 'number')
+      .sort((a, b) => a - b);
+    const spectatingSec = group
+      .map((s) => (typeof s.spectatingMs === 'number' ? s.spectatingMs / 1000 : null))
+      .filter((v) => typeof v === 'number');
+    const visibleSecKnown = group
+      .map((s) => (typeof s.visibleMs === 'number' ? s.visibleMs / 1000 : null))
+      .filter((v) => typeof v === 'number')
+      .sort((a, b) => a - b);
+    const hiddenSecKnown = group
+      .map((s) => (typeof s.hiddenMs === 'number' ? s.hiddenMs / 1000 : null))
+      .filter((v) => typeof v === 'number');
+    const matchAgeKnown = group
+      .map((s) => (typeof s.matchAgeAtLeaveSec === 'number' ? s.matchAgeAtLeaveSec : null))
+      .filter((v) => typeof v === 'number')
+      .sort((a, b) => a - b);
+
+    // Drop-off shape: where in a session's life it ended, one bucket
+    // each, every session in the group falls into exactly one.
+    let dropoffNeverStarted = 0; // left before the match ever reached 'playing' (lobby/countdown)
+    let dropoffFirstTenSeconds = 0; // left within the first 10s of match time
+    let dropoffDuringFirstMatchBeforeElim = 0; // left later than 10s in, still alive, before anyone was eliminated
+    let dropoffAfterOwnElimination = 0; // this seat itself was eliminated, then the session ended (spectating or left)
+    let dropoffStayedToEnd = 0; // matchEnded, not eliminated -- watched/played it out
+    let dropoffUnknown = 0; // no matchAgeAtLeaveSec at all (predates this field)
+    for (const s of group) {
+      if (typeof s.matchAgeAtLeaveSec !== 'number') {
+        // Distinguish "field present but null" (modern record, left
+        // during lobby/countdown before the match started) from "field
+        // absent" (record predates this feature, genuinely unknown).
+        if (Object.hasOwn(s, 'matchAgeAtLeaveSec')) dropoffNeverStarted += 1;
+        else dropoffUnknown += 1;
+        continue;
+      }
+      if (s.eliminated === true) {
+        dropoffAfterOwnElimination += 1;
+      } else if (s.endReason === 'matchEnded') {
+        dropoffStayedToEnd += 1;
+      } else if (s.matchAgeAtLeaveSec < 10) {
+        dropoffFirstTenSeconds += 1;
+      } else if (s.leftBeforeFirstElimination === true) {
+        dropoffDuringFirstMatchBeforeElim += 1;
+      } else {
+        // left alive, after the match's first elimination, but not their own
+        dropoffDuringFirstMatchBeforeElim += 1;
+      }
+    }
+
     return {
       total: group.length,
       fromStore: group.filter((s) => s.__source === 'store').length,
@@ -412,6 +468,40 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
         effectsLoadBuckets: sumBuckets('slowFrameEffectsLoadBuckets'),
         hitchCoincident: { total: slowFrameHitchCoincidentTotal, knownDenominator: slowFrameHitchCoincidentKnown.length },
         transitionCoincident: { total: slowFrameTransitionCoincidentTotal, knownDenominator: slowFrameTransitionCoincidentKnown.length },
+      },
+      actuallyPlaying: {
+        activePlaySec: {
+          min: activePlaySec[0] ?? null,
+          median: percentile(activePlaySec, 50),
+          p95: percentile(activePlaySec, 95),
+          max: activePlaySec[activePlaySec.length - 1] ?? null,
+          n: activePlaySec.length,
+        },
+        spectatingSec: {
+          avg: spectatingSec.length ? spectatingSec.reduce((a, b2) => a + b2, 0) / spectatingSec.length : null,
+          n: spectatingSec.length,
+        },
+        visibleSec: {
+          median: percentile(visibleSecKnown, 50),
+          n: visibleSecKnown.length,
+        },
+        hiddenSec: {
+          avg: hiddenSecKnown.length ? hiddenSecKnown.reduce((a, b2) => a + b2, 0) / hiddenSecKnown.length : null,
+          n: hiddenSecKnown.length,
+        },
+        matchAgeAtLeaveSec: {
+          median: percentile(matchAgeKnown, 50),
+          n: matchAgeKnown.length,
+        },
+        dropoff: {
+          neverStarted: dropoffNeverStarted,
+          firstTenSeconds: dropoffFirstTenSeconds,
+          duringFirstMatchBeforeElimination: dropoffDuringFirstMatchBeforeElim,
+          afterOwnElimination: dropoffAfterOwnElimination,
+          stayedToEnd: dropoffStayedToEnd,
+          unknown: dropoffUnknown,
+          knownDenominator: group.length - dropoffUnknown,
+        },
       },
     };
   }
@@ -508,7 +598,44 @@ function printReport(report) {
     w(`  past the opening ${hs.pastOpeningSecondsThresholdSec}s: ${hs.pastOpeningSeconds}/${hs.total} (${pct(hs.pastOpeningSeconds, hs.total)})`);
     w(`  pressed a control at all: ${hs.pressedControl}/${hs.pressedControlKnownDenominator || hs.total} known (${pct(hs.pressedControl, hs.pressedControlKnownDenominator || hs.total)})`);
     w(`  eliminated: ${hs.eliminated} (${pct(hs.eliminated, hs.total)})  left while still alive: ${hs.leftWhileAlive} (${pct(hs.leftWhileAlive, hs.total)})`);
-    w(`  session duration (s): min ${fmt(hs.durationSec.min)}  median ${fmt(hs.durationSec.median)}  p95 ${fmt(hs.durationSec.p95)}  max ${fmt(hs.durationSec.max)}  (n=${hs.durationSec.n})`);
+    w(`  session duration (s), TAB-OPEN wall clock: min ${fmt(hs.durationSec.min)}  median ${fmt(hs.durationSec.median)}  p95 ${fmt(hs.durationSec.p95)}  max ${fmt(hs.durationSec.max)}  (n=${hs.durationSec.n})`);
+    // "Actually playing" duration (2026-09-15) -- see docs/MEASUREMENT.md
+    // "Actually-playing session duration". Server-derived, alongside the
+    // tab-open figure above, never instead of it: the gap between the
+    // two IS the finding (a tab left open vs someone really playing).
+    const ap = hs.actuallyPlaying;
+    const MIN_N_FOR_DURATION = 5;
+    if (ap.activePlaySec.n === 0) {
+      w('  session duration, ACTUALLY PLAYING (as a live fighter): no sessions with this field yet (older client/server build)');
+    } else if (ap.activePlaySec.n < MIN_N_FOR_DURATION) {
+      w(`  session duration, ACTUALLY PLAYING (as a live fighter): only n=${ap.activePlaySec.n} known -- too few to report a percentile, values were [${fmt(ap.activePlaySec.min)}s .. ${fmt(ap.activePlaySec.max)}s]`);
+    } else {
+      w(`  session duration, ACTUALLY PLAYING (as a live fighter, s): min ${fmt(ap.activePlaySec.min)}  median ${fmt(ap.activePlaySec.median)}  p95 ${fmt(ap.activePlaySec.p95)}  max ${fmt(ap.activePlaySec.max)}  (n=${ap.activePlaySec.n})`);
+    }
+    if (ap.spectatingSec.n > 0) {
+      w(`  time spent spectating after own elimination (s): avg ${fmt(ap.spectatingSec.avg)}  (n=${ap.spectatingSec.n})`);
+    }
+    if (ap.visibleSec.n > 0 || ap.hiddenSec.n > 0) {
+      w(`  tab focus this match: visible median ${fmt(ap.visibleSec.median)}s (n=${ap.visibleSec.n})  backgrounded avg ${fmt(ap.hiddenSec.avg)}s (n=${ap.hiddenSec.n})`);
+    } else {
+      w('  tab focus this match: no sessions with visibleMs/hiddenMs yet (older client build)');
+    }
+    if (ap.matchAgeAtLeaveSec.n > 0) {
+      w(`  how far into the match a session lasted, median (s): ${fmt(ap.matchAgeAtLeaveSec.median)}  (n=${ap.matchAgeAtLeaveSec.n})`);
+    }
+    const dr = ap.dropoff;
+    if (dr.knownDenominator === 0) {
+      w('  drop-off shape: no sessions with this field yet (older client/server build)');
+    } else if (dr.knownDenominator < MIN_N_FOR_DURATION) {
+      w(`  drop-off shape: only n=${dr.knownDenominator} known -- too few to report a breakdown as a finding, raw counts only: never-started(lobby) ${dr.neverStarted}, first 10s ${dr.firstTenSeconds}, during first match before their own elimination ${dr.duringFirstMatchBeforeElimination}, after own elimination ${dr.afterOwnElimination}, stayed to match end ${dr.stayedToEnd}`);
+    } else {
+      w(`  drop-off shape (of ${dr.knownDenominator} known, ${dr.unknown} unknown/predate field):`);
+      w(`    left before match started (lobby/countdown): ${dr.neverStarted} (${pct(dr.neverStarted, dr.knownDenominator)})`);
+      w(`    left within first 10s of match: ${dr.firstTenSeconds} (${pct(dr.firstTenSeconds, dr.knownDenominator)})`);
+      w(`    left later, still alive, before own elimination: ${dr.duringFirstMatchBeforeElimination} (${pct(dr.duringFirstMatchBeforeElimination, dr.knownDenominator)})`);
+      w(`    left/disconnected after own elimination: ${dr.afterOwnElimination} (${pct(dr.afterOwnElimination, dr.knownDenominator)})`);
+      w(`    stayed until the match ended: ${dr.stayedToEnd} (${pct(dr.stayedToEnd, dr.knownDenominator)})`);
+    }
     const iu = hs.inputUsage;
     if (iu.knownDenominator > 0) {
       w(`  input device BY OBSERVED USAGE (headline; of ${iu.knownDenominator} known): keyboard ${iu.keyboard} (${pct(iu.keyboard, iu.knownDenominator)}), touch ${iu.touch} (${pct(iu.touch, iu.knownDenominator)}), gamepad ${iu.gamepad} (${pct(iu.gamepad, iu.knownDenominator)})  [${iu.mixed} session(s) used more than one source]`);

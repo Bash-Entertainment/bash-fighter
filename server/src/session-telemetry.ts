@@ -14,6 +14,65 @@ export interface SessionEndConnLike {
   lastReport: SessionReportMessage | null;
 }
 
+/** Server-derived "actually playing" figures for one ending session --
+ *  shared by the console `[sessionEnd]` line and the durable stats
+ *  store (server/src/stats-store.ts) so the two can never drift apart
+ *  (2026-09-15, "actually playing" session-duration work; see wiki
+ *  'Private Stats and QA Traffic Tagging 2026-09-14').
+ *
+ *  Deliberately computed from server-authoritative tick state
+ *  (`match.tick`, `Seat.eliminatedAtTick`, `match.getMatchStartedAtTick()`,
+ *  `match.firstEliminationTick`) rather than trusted client-reported
+ *  wall-clock timestamps: a client cannot spoof how far into a match it
+ *  got, only a browser tab's raw open time (`sessionDurationSec`, kept
+ *  unchanged alongside this).
+ *
+ *  - `matchAgeAtLeaveSec`: ticks from match start to now, i.e. how far
+ *    into the match this session lasted -- null while the match never
+ *    left the lobby (`matchStartedAtTick` never advances there, so the
+ *    figure would be meaningless).
+ *  - `activePlayMs`: time this seat spent as a live, controllable
+ *    fighter (match start to elimination, or to now if never
+ *    eliminated) -- the "actually playing" figure the North Star metric
+ *    means, as distinct from time spent spectating after elimination.
+ *  - `spectatingMs`: time this seat spent connected but already
+ *    eliminated (elimination to now) -- 0 for a seat that was never
+ *    eliminated or disconnected the instant it was.
+ *  - `leftBeforeFirstElimination`: true if this session ended before
+ *    *any* seat in the match (bot or human) had been eliminated yet --
+ *    the number the owner asked for: did we lose this player in the
+ *    dead-quiet opening seconds, or after the match's action had
+ *    already started. Null when the match never reached 'playing'. */
+export interface DerivedPlayMetrics {
+  matchAgeAtLeaveSec: number | null;
+  activePlayMs: number | null;
+  spectatingMs: number | null;
+  leftBeforeFirstElimination: boolean | null;
+}
+
+export function computeDerivedPlayMetrics(conn: SessionEndConnLike, match: Match): DerivedPlayMetrics {
+  const seat = match.seats[conn.slot];
+  // Use match.phase, not "matchStartedAtTick === 0", to detect "never
+  // left the lobby": a match whose bot-fill/countdown is very short (or
+  // configured to 0 for local testing) can call start() while tick is
+  // still exactly 0, which the tick-based sentinel would misreport as
+  // "never started". phase is the real state machine and cannot be off
+  // by a race like that.
+  if (!seat || match.phase === 'lobby') {
+    return { matchAgeAtLeaveSec: null, activePlayMs: null, spectatingMs: null, leftBeforeFirstElimination: null };
+  }
+  const matchStartedAtTick = match.getMatchStartedAtTick();
+  const endTick = seat.eliminatedAtTick ?? match.tick;
+  const nowTick = match.tick;
+  const matchAgeAtLeaveSec = Number(((nowTick - matchStartedAtTick) / 60).toFixed(1));
+  const activeTicks = Math.max(0, endTick - matchStartedAtTick);
+  const activePlayMs = Math.round((activeTicks / 60) * 1000);
+  const spectatingTicks = seat.eliminatedAtTick === null ? 0 : Math.max(0, nowTick - seat.eliminatedAtTick);
+  const spectatingMs = Math.round((spectatingTicks / 60) * 1000);
+  const leftBeforeFirstElimination = match.firstEliminationTick === null ? true : nowTick <= match.firstEliminationTick;
+  return { matchAgeAtLeaveSec, activePlayMs, spectatingMs, leftBeforeFirstElimination };
+}
+
 const LOG_LEVEL = (process.env.LOG_LEVEL ?? 'info').toLowerCase();
 const LOGGING_ENABLED = LOG_LEVEL !== 'silent';
 
@@ -41,6 +100,7 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
       : match.phase === 'ended'
         ? 'matchEnded'
         : 'disconnected';
+    const derived = computeDerivedPlayMetrics(conn, match);
     const line = {
       ts: new Date().toISOString(),
       matchId: match.id,
@@ -95,6 +155,17 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
       slowFrameEffectsLoadBuckets: report?.slowFrameEffectsLoadBuckets ?? null,
       slowFrameHitchCoincidentCount: report?.slowFrameHitchCoincidentCount ?? null,
       slowFrameTransitionCoincidentCount: report?.slowFrameTransitionCoincidentCount ?? null,
+      // "Actually playing" figures (2026-09-15, see docs/MEASUREMENT.md
+      // "Actually-playing session duration") -- visibleMs/hiddenMs are
+      // client-reported (same "?? null means not tracked" convention as
+      // every field above); the match* figures are server-derived, see
+      // computeDerivedPlayMetrics's doc comment.
+      visibleMs: report?.visibleMs ?? null,
+      hiddenMs: report?.hiddenMs ?? null,
+      matchAgeAtLeaveSec: derived.matchAgeAtLeaveSec,
+      activePlayMs: derived.activePlayMs,
+      spectatingMs: derived.spectatingMs,
+      leftBeforeFirstElimination: derived.leftBeforeFirstElimination,
     };
     console.log(`[sessionEnd] ${JSON.stringify(line)}`);
   } catch (err) {

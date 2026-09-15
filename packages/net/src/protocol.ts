@@ -314,6 +314,25 @@ export interface SessionReportMessage {
    *  identical to a steady per-frame cost problem. Optional/absent means
    *  "not tracked". */
   slowFrameTransitionCoincidentCount?: number;
+  /** Cumulative real ms of rendered-frame deltas this seat's client has
+   *  observed with the tab visible (`document.visibilityState ===
+   *  'visible'`) so far this match -- see `FrameTimeTracker.getVisibleMs`
+   *  in `packages/app/src/session-report.ts` (2026-09-15, "actually
+   *  playing" session-duration work, see wiki 'Private Stats and QA
+   *  Traffic Tagging 2026-09-14'). This is the numerator for time spent
+   *  actually looking at the game, as opposed to a tab left open in a
+   *  background window: `hiddenFrames` above counts *frames*, which a
+   *  throttled background tab makes a poor proxy for wall-clock time,
+   *  since a single hidden rAF can carry a multi-second coalesced delta
+   *  or never fire at all. Optional/absent means "not tracked" (older
+   *  client), never a fabricated zero. */
+  visibleMs?: number;
+  /** Same as `visibleMs` but summed while the tab was hidden --
+   *  companion figure, not a duplicate of `hiddenFrames`. A session
+   *  whose `hiddenMs` is large relative to its total duration was a tab
+   *  left open, not a player who stepped away for a few seconds mid-
+   *  match. Optional/absent means "not tracked". */
+  hiddenMs?: number;
 }
 
 /** Frame-delta threshold (ms) at which a rendered frame counts toward
@@ -891,7 +910,11 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   const slowFrameEffectsLoadBuckets = sanitiseFixedNumberArray(obj.slowFrameEffectsLoadBuckets, SLOW_FRAME_BUCKET_COUNT);
   const slowFrameHitchCoincidentCount = clampFiniteNumber(obj.slowFrameHitchCoincidentCount, 0, 10_000_000);
   const slowFrameTransitionCoincidentCount = clampFiniteNumber(obj.slowFrameTransitionCoincidentCount, 0, 10_000_000);
-  if ([firstInputMs, inputTicks, frameMedianMs, frameP95Ms, contextLostCount, renderStalled, frameHistogram, hiddenFrames, networkHitchCount, keyboardInputTicks, touchInputTicks, gamepadInputTicks, slowFrameCount, slowFrameFightersAliveBuckets, slowFrameFightersOnScreenBuckets, slowFrameEffectsLoadBuckets, slowFrameHitchCoincidentCount, slowFrameTransitionCoincidentCount].every((v) => v === undefined)) return null;
+  // Capped at 6h in ms -- generous relative to MATCH_MAX_MATCH_TICKS,
+  // clamped rather than trusted like every other numeric field here.
+  const visibleMs = clampFiniteNumber(obj.visibleMs, 0, 21_600_000);
+  const hiddenMs = clampFiniteNumber(obj.hiddenMs, 0, 21_600_000);
+  if ([firstInputMs, inputTicks, frameMedianMs, frameP95Ms, contextLostCount, renderStalled, frameHistogram, hiddenFrames, networkHitchCount, keyboardInputTicks, touchInputTicks, gamepadInputTicks, slowFrameCount, slowFrameFightersAliveBuckets, slowFrameFightersOnScreenBuckets, slowFrameEffectsLoadBuckets, slowFrameHitchCoincidentCount, slowFrameTransitionCoincidentCount, visibleMs, hiddenMs].every((v) => v === undefined)) return null;
   const out: SessionReportMessage = {
     t: 'sessionReport',
     firstInputMs: firstInputMs === undefined ? null : firstInputMs,
@@ -913,6 +936,8 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   if (slowFrameEffectsLoadBuckets !== undefined) out.slowFrameEffectsLoadBuckets = slowFrameEffectsLoadBuckets;
   if (slowFrameHitchCoincidentCount !== undefined) out.slowFrameHitchCoincidentCount = Math.round(slowFrameHitchCoincidentCount);
   if (slowFrameTransitionCoincidentCount !== undefined) out.slowFrameTransitionCoincidentCount = Math.round(slowFrameTransitionCoincidentCount);
+  if (visibleMs !== undefined) out.visibleMs = Math.round(visibleMs);
+  if (hiddenMs !== undefined) out.hiddenMs = Math.round(hiddenMs);
   return out;
 }
 

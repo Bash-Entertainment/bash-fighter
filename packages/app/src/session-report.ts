@@ -273,6 +273,16 @@ export class FrameTimeTracker {
   private samples: number[] = [];
   private histogram: number[] = new Array(FRAME_HISTOGRAM_BUCKET_COUNT).fill(0);
   private hiddenFrames = 0;
+  // Real elapsed ms with the tab visible vs hidden, summed straight off
+  // each frame's own delta (2026-09-15, "actually playing" session-
+  // duration work -- see docs/MEASUREMENT.md). hiddenFrames above counts
+  // *frames*, which a throttled background tab makes a poor proxy for
+  // wall-clock time (a hidden rAF can fire once with a multi-second
+  // coalesced delta, or not at all); summing the deltas directly gives
+  // the actual visible/hidden duration instead. Two scalar adds per
+  // frame, no allocation -- same cost discipline as every tracker here.
+  private visibleMs = 0;
+  private hiddenMs = 0;
 
   /** @param hidden Pass true when this frame's delta was measured while
    *  `document.hidden` (or `visibilityState !== 'visible'`) was true --
@@ -281,8 +291,10 @@ export class FrameTimeTracker {
     if (!Number.isFinite(deltaMs) || deltaMs < 0) return;
     if (hidden) {
       this.hiddenFrames += 1;
+      this.hiddenMs += deltaMs;
       return;
     }
+    this.visibleMs += deltaMs;
     this.samples.push(deltaMs);
     if (this.samples.length > MAX_FRAME_SAMPLES) this.samples.shift();
     const idx = frameHistogramBucketIndex(deltaMs);
@@ -313,6 +325,21 @@ export class FrameTimeTracker {
 
   getHiddenFrames(): number {
     return this.hiddenFrames;
+  }
+
+  /** Cumulative real ms of frame deltas recorded with the tab visible --
+   *  see the class doc comment. This, not frame *count*, is the
+   *  "actually playing" numerator: time the tab was in front of the
+   *  player while a match was live. */
+  getVisibleMs(): number {
+    return Math.round(this.visibleMs);
+  }
+
+  /** Cumulative real ms of frame deltas recorded while hidden -- see
+   *  getVisibleMs(). Large relative to session length means "tab was
+   *  open but not being watched", not "device is slow". */
+  getHiddenMs(): number {
+    return Math.round(this.hiddenMs);
   }
 }
 
@@ -468,6 +495,10 @@ export function buildSessionReportMessage(input: {
   slowFrameHitchCoincidentCount?: number;
   /** See SessionReportMessage.slowFrameTransitionCoincidentCount. Same convention. */
   slowFrameTransitionCoincidentCount?: number;
+  /** See SessionReportMessage.visibleMs. Same "absent means not tracked" convention. */
+  visibleMs?: number;
+  /** See SessionReportMessage.hiddenMs. Same convention. */
+  hiddenMs?: number;
 }): SessionReportMessage {
   const msg: SessionReportMessage = {
     t: 'sessionReport',
@@ -490,5 +521,7 @@ export function buildSessionReportMessage(input: {
   if (input.slowFrameEffectsLoadBuckets !== undefined) msg.slowFrameEffectsLoadBuckets = input.slowFrameEffectsLoadBuckets;
   if (input.slowFrameHitchCoincidentCount !== undefined) msg.slowFrameHitchCoincidentCount = input.slowFrameHitchCoincidentCount;
   if (input.slowFrameTransitionCoincidentCount !== undefined) msg.slowFrameTransitionCoincidentCount = input.slowFrameTransitionCoincidentCount;
+  if (input.visibleMs !== undefined) msg.visibleMs = input.visibleMs;
+  if (input.hiddenMs !== undefined) msg.hiddenMs = input.hiddenMs;
   return msg;
 }

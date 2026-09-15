@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { MatchSummary } from './match.ts';
-import type { SessionEndConnLike } from './session-telemetry.ts';
+import { computeDerivedPlayMetrics, type SessionEndConnLike } from './session-telemetry.ts';
 import type { Match } from './match.ts';
 
 /** Default log path: next to production's other shared-state files
@@ -104,6 +104,21 @@ export interface StoredSessionEndRecord {
   slowFrameEffectsLoadBuckets: number[] | null;
   slowFrameHitchCoincidentCount: number | null;
   slowFrameTransitionCoincidentCount: number | null;
+  /** "Actually playing" session-duration figures (2026-09-15, see
+   *  docs/MEASUREMENT.md "Actually-playing session duration"). visibleMs/
+   *  hiddenMs are client-reported (SessionReportMessage.visibleMs/
+   *  hiddenMs); the match* figures are server-derived from tick state,
+   *  see session-telemetry.ts's computeDerivedPlayMetrics. Null on every
+   *  field means "not tracked / never left the lobby", never a
+   *  fabricated zero, same convention as every field above. Absent on
+   *  records written before this field existed -- the report treats
+   *  those the same way. */
+  visibleMs: number | null;
+  hiddenMs: number | null;
+  matchAgeAtLeaveSec: number | null;
+  activePlayMs: number | null;
+  spectatingMs: number | null;
+  leftBeforeFirstElimination: boolean | null;
 }
 
 export type StatsRecord = StoredMatchEndRecord | StoredSessionEndRecord;
@@ -186,6 +201,7 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       : match.phase === 'ended'
         ? 'matchEnded'
         : 'disconnected';
+    const derived = computeDerivedPlayMetrics(conn, match);
     const record: StoredSessionEndRecord = {
       type: 'sessionEnd',
       ts: new Date(now()).toISOString(),
@@ -220,6 +236,12 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       slowFrameEffectsLoadBuckets: report?.slowFrameEffectsLoadBuckets ?? null,
       slowFrameHitchCoincidentCount: report?.slowFrameHitchCoincidentCount ?? null,
       slowFrameTransitionCoincidentCount: report?.slowFrameTransitionCoincidentCount ?? null,
+      visibleMs: report?.visibleMs ?? null,
+      hiddenMs: report?.hiddenMs ?? null,
+      matchAgeAtLeaveSec: derived.matchAgeAtLeaveSec,
+      activePlayMs: derived.activePlayMs,
+      spectatingMs: derived.spectatingMs,
+      leftBeforeFirstElimination: derived.leftBeforeFirstElimination,
     };
     appendStatsLine(logPath, record);
   }

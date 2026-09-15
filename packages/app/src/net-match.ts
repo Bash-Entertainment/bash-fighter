@@ -371,6 +371,8 @@ export class NetMatch {
       slowFrameEffectsLoadBuckets: this.slowFrameTracker.getEffectsLoadBuckets(),
       slowFrameHitchCoincidentCount: this.slowFrameTracker.getHitchCoincidentCount(),
       slowFrameTransitionCoincidentCount: this.slowFrameTracker.getTransitionCoincidentCount(),
+      visibleMs: this.frameTimeTracker.getVisibleMs(),
+      hiddenMs: this.frameTimeTracker.getHiddenMs(),
     });
     ws.send(JSON.stringify(report));
   }

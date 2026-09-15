@@ -111,6 +111,15 @@ export interface Seat {
    *  connection, so a reconnect mid-match doesn't reset the clock on
    *  "how long has this player been in this match". */
   joinedAt: number;
+  /** Sim tick (Match.tick) at which this seat's fighter was marked
+   *  eliminated, or null while still alive. Set once, alongside
+   *  `seat.eliminated = true` below -- lets session telemetry report how
+   *  far into the match a player got before leaving, and whether they
+   *  left before or after their own elimination, without re-deriving it
+   *  from sim state that may already be gone by the time a session ends
+   *  (added for the actually-playing session-duration metric, 2026-09-15,
+   *  see wiki 'Private Stats and QA Traffic Tagging 2026-09-14'). */
+  eliminatedAtTick: number | null;
   /** Self-declared QA hint from this seat's `hello.profile.qa` (see
    *  packages/net/src/protocol.ts and docs/MEASUREMENT.md). False for a
    *  bot seat and for any human seat whose client didn't opt in --
@@ -289,6 +298,20 @@ export class Match {
    *  merely burned a stock and respawned left no trace at all. */
   private lastDeathCount: number[] = [];
   private matchStartedAtTick = 0;
+  /** Sim tick of the first elimination of this match (any seat, bot or
+   *  human), or null before it happens -- a whole-match milestone, not
+   *  per-seat, used only to tell session telemetry whether a session that
+   *  ended early did so before or after the match's action actually
+   *  started (2026-09-15, see wiki 'Private Stats and QA Traffic Tagging
+   *  2026-09-14'). */
+  firstEliminationTick: number | null = null;
+  /** Public accessor for matchStartedAtTick -- session telemetry needs it
+   *  to compute how far into the match a leaving seat got, but it must
+   *  stay server-derived (never client-reported) so it can't be spoofed
+   *  or drift from what the sim actually ran. */
+  getMatchStartedAtTick(): number {
+    return this.matchStartedAtTick;
+  }
   private static readonly COMBAT_WINDOW_TICKS = 60;
   countdownTicksRemaining = -1;
   /** Wall-clock deadline (ms epoch, Date.now() timebase) by which this
@@ -372,6 +395,7 @@ export class Match {
       name: dedupedName,
       connected: true,
       eliminated: false,
+      eliminatedAtTick: null,
       isBot,
       characterId,
       pendingInput: makeInputFrame(),
@@ -662,6 +686,8 @@ export class Match {
       this.lastDeathCount[seat.slot] = snap.deathCount;
       if (snap.eliminated) {
         seat.eliminated = true;
+        seat.eliminatedAtTick = this.tick;
+        if (this.firstEliminationTick === null) this.firstEliminationTick = this.tick;
         // Deliberately NOT calling releaseSeat/nulling the token here.
         // Elimination alone must not end reclaimability: a disconnected
         // seat's fighter can be eliminated by the very same shrinking-ring

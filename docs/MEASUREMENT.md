@@ -924,3 +924,71 @@ pass real `characters`.)
 - **Bandwidth (`bandwidth-` figures in the relevant wiki pages), load
   testing (`load-test-metrics.mjs`):** unrelated to this bug class (no
   `Sim`/bot characters involved); not re-audited here.
+
+## Actually-playing session duration, 2026-09-15
+
+The owner made session count and session *duration* the project's North
+Star (see wiki "Private Stats and QA Traffic Tagging 2026-09-14",
+"North Star metric" section). The problem: `sessionDurationSec` (see
+above) measures wall-clock time between a websocket opening and closing
+-- a browser tab left open in a background window inflates it exactly as
+much as someone actually playing. Today's production figures were median
+46s vs p95 894s vs max 1,858s; the max is almost certainly an abandoned
+tab, not 31 minutes of play, and it was sitting in the same number the
+owner now steers by.
+
+"Actually playing" is defined here as three genuinely different
+quantities, not one, because collapsing them loses the question the
+owner actually asked (did we lose this player in the first ten seconds,
+or after they'd been drawn in):
+
+- **In a live match**, not sitting on the start screen or a match-end
+  screen. Server-derived (`activePlayMs`/`matchAgeAtLeaveSec` below):
+  tick-based off `Match.tick` and `Match.getMatchStartedAtTick()`, so a
+  client cannot spoof it, only a tab's raw open time can be.
+- **Tab visible and focused**, not backgrounded. Client-reported
+  (`visibleMs`/`hiddenMs`, see `docs/PROTOCOL.md`): real ms of frame
+  deltas summed while `document.visibilityState === 'visible'` vs
+  hidden, not a frame *count* (the existing `hiddenFrames` field), which
+  a throttled background tab makes a poor proxy for wall-clock time --
+  a single hidden rAF can carry a multi-second coalesced delta or never
+  fire at all.
+- **An active fighter, not spectating** after elimination.
+  Server-derived (`spectatingMs`, `leftBeforeFirstElimination` below)
+  from the new `Seat.eliminatedAtTick` (server/src/match.ts) and the new
+  whole-match `Match.firstEliminationTick` milestone.
+
+New fields, all additive and optional (an older client/server build
+producing none of them still validates and stores, same convention as
+every field before them):
+
+| Field | Source | Meaning |
+|---|---|---|
+| `visibleMs` / `hiddenMs` | client, wire (`SessionReportMessage`) | See `docs/PROTOCOL.md`. |
+| `matchAgeAtLeaveSec` | server-derived | Ticks from match start to session end, i.e. how far into the match this session lasted. `null` if the match never left the lobby. |
+| `activePlayMs` | server-derived | Time this seat spent as a live, controllable fighter (match start to elimination, or to session end if never eliminated). This is the single number closest to "actually playing". |
+| `spectatingMs` | server-derived | Time this seat spent connected but already eliminated. |
+| `leftBeforeFirstElimination` | server-derived | Did this session end before *any* seat (bot or human) in the match had been eliminated -- i.e. did we lose them in the dead-quiet opening seconds, or after the action had already started. |
+
+All four server-derived fields are computed once, in
+`server/src/session-telemetry.ts`'s `computeDerivedPlayMetrics`, and
+consumed identically by the console `[sessionEnd]` log line and the
+durable stats-store record, so the two cannot drift apart.
+
+`scripts/stats-report.mjs` reports, per group: the tab-open duration
+(unchanged, kept alongside, never replaced) and the actually-playing
+duration side by side, plus a drop-off breakdown -- never-started
+(left in lobby), first 10s of match time, later but still alive and
+before the match's first elimination, after their own elimination, or
+stayed to the match's end. Every one of these follows the existing
+convention: below `MIN_N_FOR_DURATION` (5) known samples it prints raw
+counts and says plainly that there are too few to support a percentile
+or a breakdown, rather than presenting noise as a finding.
+
+**What this still cannot tell us:** whether a visible, active-fighter
+tab actually had a human paying attention to it (no keyboard/mouse
+activity in a stretch does not distinguish "reading the screen" from
+"stepped away with the tab still frontmost"); nothing about matches that
+never produced a `sessionEnd` at all (a killed server process, for
+instance); and, as always, nothing about *people* -- only sessions,
+since no identifying signal is collected.

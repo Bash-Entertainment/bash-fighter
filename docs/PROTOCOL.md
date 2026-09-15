@@ -33,7 +33,7 @@ anywhere. Any other message before `hello`, or a malformed message, gets
 | `spectate` | — | Client wants to only watch, not play (used after being assigned, or after elimination to keep watching without reconciliation). |
 | `pong` | `id` | Echo of a server `ping`, for RTT measurement. |
 | `startNow` | — | Sent by a client holding a seat in a still-filling lobby (the waiting screen's "Start now" button): fills the rest of that lobby with bots and starts immediately, instead of waiting out the countdown/bot-fill grace period. The server only honours this from a connection that actually holds a seat in that exact match (never a spectator, never a stranger); once the match has left the lobby phase, further `startNow` messages for it are a silent no-op, so a client may resend freely (e.g. a double click). |
-| `sessionReport` | `firstInputMs`, `inputTicks`, `frameMedianMs`, `frameP95Ms`, plus optional device/frame/input telemetry (see below) | Engagement telemetry only, added 2026-09-13 -- see `docs/MEASUREMENT.md`. Sent periodically (every ~5s) and once more, best-effort, when the tab is hidden. Never required for the match to function; a client that never sends one simply produces a less complete `[sessionEnd]` server log line. `firstInputMs` is milliseconds from match start to this seat's first non-neutral local input, or `null` if none yet. `inputTicks` is the cumulative count of ticks with any input. `frameMedianMs`/`frameP95Ms` are a rolling client frame-time distribution in ms. All fields are validated and clamped server-side (see `packages/net/src/protocol.ts`); a malformed payload is simply rejected like any other bad control message, never trusted partially. All fields beyond the four above are optional and may be absent from an older client build -- the server always treats absence as "not tracked", never a fabricated zero, and a report with none of them still validates and stores. As of 2026-09-15 this includes six `slowFrame*` fields (see "Slow-frame attribution" table below); an earlier 2026-09-14 change added `frameHistogram`, `hiddenFrames`, `networkHitchCount`, `keyboardInputTicks`, `touchInputTicks`, `gamepadInputTicks` (see `packages/net/src/protocol.ts` for their exact shapes -- not re-documented here). |
+| `sessionReport` | `firstInputMs`, `inputTicks`, `frameMedianMs`, `frameP95Ms`, plus optional device/frame/input telemetry (see below) | Engagement telemetry only, added 2026-09-13 -- see `docs/MEASUREMENT.md`. Sent periodically (every ~5s) and once more, best-effort, when the tab is hidden. Never required for the match to function; a client that never sends one simply produces a less complete `[sessionEnd]` server log line. `firstInputMs` is milliseconds from match start to this seat's first non-neutral local input, or `null` if none yet. `inputTicks` is the cumulative count of ticks with any input. `frameMedianMs`/`frameP95Ms` are a rolling client frame-time distribution in ms. All fields are validated and clamped server-side (see `packages/net/src/protocol.ts`); a malformed payload is simply rejected like any other bad control message, never trusted partially. All fields beyond the four above are optional and may be absent from an older client build -- the server always treats absence as "not tracked", never a fabricated zero, and a report with none of them still validates and stores. As of 2026-09-15 this includes six `slowFrame*` fields (see "Slow-frame attribution" table below); an earlier 2026-09-14 change added `frameHistogram`, `hiddenFrames`, `networkHitchCount`, `keyboardInputTicks`, `touchInputTicks`, `gamepadInputTicks` (see `packages/net/src/protocol.ts` for their exact shapes -- not re-documented here). As of 2026-09-15 it also includes `visibleMs`/`hiddenMs` -- cumulative real ms of frame deltas observed with the tab visible vs hidden this match, the numerator for the "actually playing" session-duration metric (see `docs/MEASUREMENT.md` "Actually-playing session duration"); each is clamped to 0..21,600,000ms (6h) server-side and absence means "not tracked", same convention as every other optional field here. |
 
 ### `hello.profile`
 
@@ -225,6 +225,35 @@ same convention as `frameHistogram`.
 Every `number[4]` field is rejected whole (not partially trusted) if it is
 not an array of exactly 4 finite, non-negative numbers -- see
 `sanitiseFixedNumberArray` in `packages/net/src/protocol.ts`.
+
+## Client responsibilities
+
+## `sessionReport`'s `visibleMs`/`hiddenMs`: actually-playing session duration (2026-09-15)
+
+See `docs/MEASUREMENT.md` ("Actually-playing session duration") for the why
+-- the owner's North Star session-duration metric needs to distinguish a
+browser tab left open from a player actually looking at the game. Both
+fields are cumulative real ms of rendered-frame deltas for this match,
+summed by `FrameTimeTracker` in `packages/app/src/session-report.ts`
+directly off each frame's own delta (never a frame *count*, which a
+throttled background tab makes a poor proxy for elapsed time):
+
+| Field | Type | Meaning |
+|---|---|---|
+| `visibleMs` | number | Ms of frame deltas recorded with `document.visibilityState === 'visible'`. |
+| `hiddenMs` | number | Ms of frame deltas recorded while hidden. |
+
+Each is clamped to `0..21_600_000` (6h) server-side and, like every other
+field on this page, absence means "not tracked" (older client), never a
+fabricated zero. The server pairs these with two tick-derived,
+server-authoritative figures that never touch the wire at all --
+`matchAgeAtLeaveSec` and `activePlayMs`, computed in
+`server/src/session-telemetry.ts`'s `computeDerivedPlayMetrics` from
+`Match.tick`, `Match.getMatchStartedAtTick()`, and the new
+`Seat.eliminatedAtTick` -- so "how far into the match did this session
+last, and was the player still an active fighter" cannot be spoofed by a
+compromised or buggy client, only a tab's raw open time can be
+(`sessionDurationSec`, unchanged).
 
 ## Client responsibilities
 
