@@ -5,6 +5,7 @@
 import { Application, Container, Graphics, Text } from 'pixi.js';
 import { fixed as fx, FighterStateId, findMove, windowAtFrame, type CharacterData, type FighterStateValue } from '@bash-fighter/sim';
 import { PALETTE, FONT_FAMILY } from './palette.ts';
+import { clampRenderResolution } from './resolution.ts';
 import {
   computeCamera,
   resetCameraSmoothing,
@@ -41,6 +42,7 @@ export type { ArenaBounds, CameraView, CameraConfig } from './camera.ts';
 export { computeCamera, resetCameraSmoothing, worldToScreen } from './camera.ts';
 export { computeFollowCamera, computeOverviewCamera, SmoothedCamera, type FollowConfig } from './spectator-camera.ts';
 export { PALETTE, FONT_FAMILY, UI_FONT_FAMILY } from './palette.ts';
+export { clampRenderResolution } from './resolution.ts';
 export { renderCharacterIcon } from './character-icon.ts';
 
 /** One fighter's render-ready state: world-space floats, already
@@ -434,12 +436,28 @@ export class Renderer {
     this.stageBounds = stageBounds;
   }
 
+  /** Pixi's own default for an unspecified `resolution` is the raw
+   *  `window.devicePixelRatio` -- fine on desktop (DPR 1-2) but a real
+   *  fill-rate cost on the DPR-3 phones we see in production: every
+   *  pixel shader invocation (fighters, effects, stage) runs 9x more
+   *  samples than DPR1 (3x3), not 3x, because it scales both canvas
+   *  dimensions. Camera/world math below reads `app.renderer.width/height`
+   *  (CSS-space, resolution-independent -- see getCanvasPixelSize), so
+   *  clamping this is presentation-only: it changes GPU pixel-shader work,
+   *  never a coordinate any camera/framing/sim code depends on. 2 matches
+   *  desktop's actual max useful DPR and was already production's typical
+   *  high end before 2026-09-15's zoom increase raised per-pixel cost. */
+  static readonly MAX_RESOLUTION = 2;
+
   async init(parent: HTMLElement): Promise<void> {
+    const dpr = typeof window !== 'undefined' && window.devicePixelRatio ? window.devicePixelRatio : 1;
     await this.app.init({
       resizeTo: parent,
       background: PALETTE.background,
       antialias: true,
       preference: 'webgl',
+      resolution: clampRenderResolution(dpr, Renderer.MAX_RESOLUTION),
+      autoDensity: true,
     });
     parent.appendChild(this.app.canvas);
 
