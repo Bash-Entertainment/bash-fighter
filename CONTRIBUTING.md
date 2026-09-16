@@ -24,6 +24,20 @@ away, so the check passes as soon as it runs.
 See [`README.md`](./README.md) for the package layout and
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the technical design.
 
+## Contributor standing
+
+Merged pull requests are how you earn standing here. There's no formal
+tier system yet, but the intent is simple: once you have a couple of
+merged PRs, ask (open an issue or mention it in Discussions) and we'll
+add you to the `contributors` team on GitHub, which currently carries
+triage access on this repository (labelling, commenting, closing issues —
+not write access to code). `main` is branch-protected with required
+status checks (`cla`, `build (22)`, `build (24)`, and strict up-to-date
+branches), so no access level, including maintainer write access, skips
+review or a passing CI run. We'll extend this as the project and the
+contributor base grow, but we'd rather say less than we can honour than
+promise a process that doesn't exist yet.
+
 ## Claiming an issue before you start work
 
 On 2026-09-11 two outside contributors (PR #16, PR #26) independently
