@@ -43,7 +43,17 @@ function screenBoxes(viewWidth: number, viewHeight: number) {
     minScale: 1.6,
     maxScale: 5.5,
     paddingWorld: 20,
-    arena: computePopulationAwareFramingFloor(stage, viewWidth, viewHeight, livingCount),
+    // Pass the real fighter x-span hint, exactly as index.ts's cameraConfig()
+    // does in production. Omitting it measures the un-capped arena floor and
+    // therefore a lower zoom than the game actually renders -- which would let
+    // an overlap regression at the real (higher) zoom pass unnoticed.
+    arena: computePopulationAwareFramingFloor(
+      stage,
+      viewWidth,
+      viewHeight,
+      livingCount,
+      Math.max(...positions.map((p) => p.x)) - Math.min(...positions.map((p) => p.x)),
+    ),
     clampBounds: {
       minX: stage.blastMinX,
       maxX: stage.blastMaxX,
@@ -102,7 +112,8 @@ for (const [label, vw, vh] of [
 
 test('battle-royale-20: desktop camera zoom gain was not given back by the spawn-overlap fix', () => {
   const { cam } = screenBoxes(1280, 720);
-  // Pinned against the committed pre-fix camera scale at match start
-  // (1.3333): the fix must not force the camera to zoom back out.
-  assert.ok(cam.scale >= 1.3333 - 1e-3, `camera scale regressed to ${cam.scale}, expected >= 1.3333`);
+  // Pinned against the real production camera scale at match start (2.057
+  // on this viewport, with the arena-floor slack cap applied): the fix must
+  // not force the camera to zoom back out.
+  assert.ok(cam.scale >= 2.05, `camera scale regressed to ${cam.scale}, expected >= 2.05`);
 });
