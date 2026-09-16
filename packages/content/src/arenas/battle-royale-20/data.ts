@@ -24,6 +24,20 @@ export const BATTLE_ROYALE_20_ARENA: ArenaData = {
     { minX: fx.fromInt(-360), maxX: fx.fromInt(-220), y: fx.fromInt(70), kind: 'pass-through' },
     { minX: fx.fromInt(220), maxX: fx.fromInt(360), y: fx.fromInt(70), kind: 'pass-through' },
     { minX: fx.fromInt(-70), maxX: fx.fromInt(70), y: fx.fromInt(110), kind: 'pass-through' },
+    // SPAWN-OVERLAP SHELF (2026-09-15, see wiki "Spawn Overlap Fix
+    // 2026-09-15"): a low, wide, pass-through shelf added purely so half
+    // of the 20 match-start spawns can stand one row up instead of all
+    // twenty sharing a single y=0 line -- see the spawnPoints comment
+    // below for why. y=60 is deliberately the *lowest* usable height:
+    // computeSafeExtents' fixed ceiling margin (see
+    // scripts/spawn-clearance-audit.mjs) is set by this stage's tallest
+    // platform (the y=160 perches), giving a live ceiling of y=180
+    // regardless of this shelf -- so a spawn here still clears the
+    // >=1.15x vertical safety factor (120 units clearance / 85.1-unit
+    // worst-case upward arc = 1.41x) with margin, where the existing
+    // y=110/160 platforms would not (0.82x and 0.24x respectively --
+    // verified by spawn-clearance-audit.mjs, not assumed).
+    { minX: fx.fromInt(-235), maxX: fx.fromInt(235), y: fx.fromInt(60), kind: 'pass-through' },
     // Two small high perches near center for king-of-the-hill skirmishes
     // -- also pass-through, so a camper can be forced off by an opponent
     // who takes the perch, or can bail downward on their own terms
@@ -125,9 +139,31 @@ export const BATTLE_ROYALE_20_ARENA: ArenaData = {
   // (slightly slower, not faster); nobody eliminated in the true
   // opening seconds either way.
   spawnPoints: Array.from({ length: 20 }, (_, i) => {
-    const slot = 9 - Math.floor(i / 2);
+    const pairIdx = Math.floor(i / 2);
+    const slot = 9 - pairIdx;
     const side = i % 2 === 0 ? 1 : -1;
     const x = side * fx.fromInt(22 + slot * 24);
-    return { x, y: fx.fromInt(0) };
+    // SPAWN-OVERLAP FIX (2026-09-15, owner-approved, see wiki "Spawn
+    // Overlap Fix 2026-09-15"): production play showed 6-8 fighters
+    // visibly piled into one indistinguishable clump at match start on
+    // this, the default stage. Root cause: the 2026-09-15 camera-zoom
+    // spacing tightening (22/24, see history above) put same-/cross-side
+    // neighbours closer together on the ground than a fighter's own
+    // rendered width (~36 world units, see
+    // packages/render/src/fighter-shape-placeholder.ts's BODY_WIDTH and
+    // its 1.3x legibility factor in index.ts) -- they were always going
+    // to overlap on screen laid out along one line, regardless of how
+    // much horizontal room the camera framed. Splitting the field across
+    // two rows (alternating every *pair* of indices onto the new y=60
+    // shelf above, added for exactly this) fixes it without touching a
+    // single x coordinate or the horizontal footprint the camera zoom
+    // gain depends on: this is the same 10 x-magnitudes, same span, just
+    // half of them relabelled to stand one row up. Measured (see
+    // scripts/overlap-metrics.mjs): 18 overlapping screen pairs / 20
+    // fighters involved -> 0 overlapping pairs at both 1280x720 and
+    // 390x844, all 20 still on screen, opening-milestone-metrics.mjs
+    // shows no regression at EASY (production) difficulty over 30 seeds.
+    const y = fx.fromInt(pairIdx % 2 === 0 ? 0 : 60);
+    return { x, y };
   }),
 };
