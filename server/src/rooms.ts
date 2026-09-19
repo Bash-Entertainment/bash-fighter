@@ -111,8 +111,16 @@ export class RoomManager {
 
   /** Finds or creates the match currently filling, adds a seat to it, and
    *  returns both. Starting the match (full, or countdown reaching zero) is
-   *  handled here too so callers don't need to poll. */
-  joinLobby(name: string, characterId?: string, qa = false): { match: Match; slot: number } {
+   *  handled here too so callers don't need to poll.
+   *
+   *  `arena` is the dev-only stage pin from the joiner's hello (see
+   *  HelloMessage.arena / Match.arenaRequest). The first joiner to
+   *  actually present a pin claims it for the lobby: a joiner without
+   *  one neither claims nor blocks, and a later joiner never retargets a
+   *  lobby another joiner has already pinned. Honoured only when the
+   *  server opted in via MATCH_ARENA_OVERRIDE=1 (checked in
+   *  Match.start(), not here) -- a production server ignores it. */
+  joinLobby(name: string, characterId?: string, qa = false, arena?: string): { match: Match; slot: number } {
     let freshMatch = false;
     if (!this.filling || this.filling.phase !== 'lobby') {
       const matchNumber = this.nextId;
@@ -140,6 +148,7 @@ export class RoomManager {
       freshMatch = true;
     }
     const match = this.filling;
+    if (arena !== undefined && match.arenaRequest === undefined) match.arenaRequest = arena;
     const seat = match.addSeat(name, false, characterId, qa);
     if (freshMatch) this.startBotFillTimer(match);
 

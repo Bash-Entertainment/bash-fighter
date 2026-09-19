@@ -37,6 +37,23 @@ export function winConditionText(winCondition: 'battleRoyale' | 'timedKO' | 'sto
   }
 }
 
+/** The persistent one-sentence objective line shown in the in-match HUD
+ * for the whole match, in every mode (2026-09-19, added after a real
+ * player finished a full Timed Brawl match and wrote "I don't
+ * understand how to win or what to do" -- the mode's win condition was
+ * never shown anywhere in-match). Deliberately built from
+ * modeLabelText/winConditionText -- the same two functions the
+ * match-status block already used -- rather than a fresh hardcoded
+ * string per mode, so this line can never drift from what the sidebar
+ * mode/win-condition text already says. */
+export function objectiveLineText(winCondition: 'battleRoyale' | 'timedKO' | 'stocks'): string {
+  const mode = modeLabelText(winCondition);
+  if (winCondition === 'timedKO') {
+    return `${mode}: most knockouts when the clock runs out wins.`;
+  }
+  return `${mode}: the ${winConditionText(winCondition)} wins.`;
+}
+
 /** One line for the compact elimination feed under the chip grid. Kept
  * to a single short sentence per fighter -- with 20 fighters dying in
  * about 90 seconds (see wiki "Arena Collapse Cascade") the feed must
@@ -92,7 +109,10 @@ export function sortFeedEntriesNewestFirst(entries: readonly EliminationFeedEntr
   });
 }
 
-function ordinal(n: number): string {
+/** Shared "1st"/"2nd"/"3rd"/"Nth" formatting, used by both the
+ * elimination feed and the Timed Brawl live knockout standing so the
+ * two never format placement differently. */
+export function ordinal(n: number): string {
   const rem100 = n % 100;
   if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
   switch (n % 10) {
@@ -101,4 +121,19 @@ function ordinal(n: number): string {
     case 3: return `${n}rd`;
     default: return `${n}th`;
   }
+}
+
+
+/** Live Timed Brawl knockout standing shown in the HUD, quiet and
+ * small: the player's own count, own rank (ties share a rank, matching
+ * the end-screen's buildStandings behaviour), and the current leader's
+ * count -- never a full N-row table (see koStandingInfo in
+ * timed-brawl.ts for how this is computed). */
+export function koStandingLineText(ownKo: number, ownRank: number, totalFighters: number, leaderKo: number): string {
+  // "leader 2" read as a fighter number rather than a knockout count when
+  // I played it, which is the exact ambiguity this whole line exists to
+  // remove, so the unit is spelled out (2026-09-19).
+  const leaderPart =
+    ownRank === 1 ? '' : ` \u00b7 leader has ${leaderKo} KO${leaderKo === 1 ? '' : 's'}`;
+  return `${ownKo} KO${ownKo === 1 ? '' : 's'} \u00b7 ${ordinal(ownRank)} of ${totalFighters}${leaderPart}`;
 }

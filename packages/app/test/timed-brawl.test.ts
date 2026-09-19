@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isTimedBrawl, ticksRemaining, formatClock, buildStandings, placementOf } from '../src/timed-brawl.ts';
+import { isTimedBrawl, ticksRemaining, formatClock, buildStandings, placementOf, koStandingInfo } from '../src/timed-brawl.ts';
 
 test('isTimedBrawl only true for winCondition timedKO', () => {
   assert.equal(isTimedBrawl({ winCondition: 'timedKO' }), true);
@@ -74,4 +74,29 @@ test('placementOf finds the place for a given slot', () => {
   assert.equal(placementOf(standings, 0), 2);
   assert.equal(placementOf(standings, 2), 1);
   assert.equal(placementOf(standings, 99), null);
+});
+
+test('koStandingInfo reports own KOs, own rank with ties, and the leader\'s count', () => {
+  const scores = [
+    { slot: 0, koCount: 5, deathCount: 1 },
+    { slot: 1, koCount: 5, deathCount: 1 }, // tied with slot 0
+    { slot: 2, koCount: 7, deathCount: 0 }, // leader
+    { slot: 3, koCount: 1, deathCount: 3 },
+  ];
+  const leader = koStandingInfo(scores, 2);
+  assert.deepEqual(leader, { ownKo: 7, ownRank: 1, totalFighters: 4, leaderKo: 7 });
+
+  const tiedA = koStandingInfo(scores, 0);
+  const tiedB = koStandingInfo(scores, 1);
+  assert.deepEqual(tiedA, { ownKo: 5, ownRank: 2, totalFighters: 4, leaderKo: 7 });
+  assert.deepEqual(tiedB, { ownKo: 5, ownRank: 2, totalFighters: 4, leaderKo: 7 }, 'ties share the same rank');
+
+  const last = koStandingInfo(scores, 3);
+  assert.deepEqual(last, { ownKo: 1, ownRank: 4, totalFighters: 4, leaderKo: 7 });
+});
+
+test('koStandingInfo returns null for an out-of-range slot', () => {
+  const scores = [{ slot: 0, koCount: 1, deathCount: 0 }];
+  assert.equal(koStandingInfo(scores, -1), null);
+  assert.equal(koStandingInfo(scores, 5), null);
 });

@@ -46,6 +46,29 @@ test('detectFighterEvents: a landed hit reports its damage delta', () => {
   assert.ok(Math.abs((hit as { damage: number }).damage - 9) < 0.01);
 });
 
+test('detectFighterEvents: hit strength scales with knockback magnitude, not just damage', () => {
+  // Two hits with the same damage delta but different resulting
+  // knockback (velocity) -- a poke on a fresh fighter vs. a launcher at
+  // high percent -- must produce different, monotonically increasing
+  // strength, with a floor so the light one still reads.
+  const prevLight = [baseFighter({ percent: fx.fromFloat(0), velX: fx.fromFloat(0), velY: fx.fromFloat(0) })];
+  const currLight = [baseFighter({ percent: fx.fromFloat(6), velX: fx.fromFloat(2), velY: fx.fromFloat(0) })];
+  const prevHeavy = [baseFighter({ percent: fx.fromFloat(0), velX: fx.fromFloat(0), velY: fx.fromFloat(0) })];
+  const currHeavy = [baseFighter({ percent: fx.fromFloat(6), velX: fx.fromFloat(18), velY: fx.fromFloat(0) })];
+
+  const lightHit = detectFighterEvents(prevLight, currLight, 1).find((e) => e.type === 'hit');
+  const heavyHit = detectFighterEvents(prevHeavy, currHeavy, 1).find((e) => e.type === 'hit');
+  assert.ok(lightHit && lightHit.type === 'hit');
+  assert.ok(heavyHit && heavyHit.type === 'hit');
+  const lightStrength = (lightHit as { strength: number }).strength;
+  const heavyStrength = (heavyHit as { strength: number }).strength;
+
+  assert.ok(lightStrength > 0, 'light hit still has nonzero strength (floor)');
+  assert.ok(heavyStrength > lightStrength, 'bigger knockback reads as a bigger hit');
+  assert.ok(heavyStrength >= lightStrength * 2, 'the difference is not marginal');
+  assert.ok(heavyStrength <= 1, 'strength stays capped at 1');
+});
+
 test('detectFighterEvents: a shield-absorbed hit is a block, not a hit', () => {
   const prev = [baseFighter({ state: FighterStateId.SHIELD, shieldHealth: fx.fromFloat(100) })];
   const curr = [baseFighter({ state: FighterStateId.SHIELD, shieldHealth: fx.fromFloat(90) })];

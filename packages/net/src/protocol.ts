@@ -78,6 +78,17 @@ export interface HelloMessage {
    *  this one connection. Optional so an older client that predates this
    *  still parses as a normal hello. */
   profile?: ClientSessionProfile;
+  /** Dev-only stage pin request: the id of a registered arena (see
+   *  @bash-fighter/content's ALL_ARENAS) the client asks the server to
+   *  pin this match's stage to, instead of the seeded pick. The client
+   *  only ever sends this from a dev build with `?arena=<id>` in the URL
+   *  -- and the server only ever HONOURS it when explicitly opted in via
+   *  the MATCH_ARENA_OVERRIDE env var, so a production server ignores it
+   *  no matter what a client sends. Unknown to older servers, which drop
+   *  it like any other unrecognised field: the version handshake is
+   *  untouched. Sanitised like every other client-supplied string and
+   *  validated against the registry server-side. */
+  arena?: string;
 }
 
 /** See HelloMessage.profile. Match-scoped, non-identifying: whether a
@@ -763,6 +774,11 @@ export function parseClientControl(text: string): ClientControlMessage | null {
       const characterId =
         typeof obj.characterId === 'string' && obj.characterId.length > 0 ? obj.characterId : undefined;
       const profile = sanitiseClientProfile(obj.profile);
+      // Dev-only stage pin (see HelloMessage.arena). Same sanitising
+      // convention as the rest of this boundary: dropped entirely if
+      // absent or unusable, never trusted beyond the length clamp --
+      // registry validation happens server-side.
+      const arena = clampCappedString(obj.arena, 64);
       return {
         t: 'hello',
         protocolVersion: obj.protocolVersion,
@@ -770,6 +786,7 @@ export function parseClientControl(text: string): ClientControlMessage | null {
         ...(resume ? { resume } : {}),
         ...(characterId ? { characterId } : {}),
         ...(profile ? { profile } : {}),
+        ...(arena ? { arena } : {}),
       };
     }
     case 'spectate':

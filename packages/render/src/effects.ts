@@ -59,6 +59,12 @@ const TRAIL_COLOR = PALETTE.hud;
 // real knockback launch does, so the trail reads as "that hit was
 // violent" rather than appearing on ordinary movement.
 const TRAIL_SPEED_THRESHOLD_PX = 9;
+// Legibility pass (2026-09-19, impact-feedback task): at 20-fighter zoom
+// (minScale 1.6, see cameraConfig in packages/render/src/index.ts) a
+// fighter's own sprite is only ~22px wide on screen, so the original
+// 2-5px-thick, 90-150ms trail read as barely-there in a busy brawl.
+// Bumped thickness/alpha/lifetime without touching MAX_TRAIL_SEGMENTS --
+// same node cap, just each one reads more clearly while it's alive.
 // Hard cap on live trail segments across all fighters -- twenty
 // fighters all being launched into a lethal blast at once must degrade
 // gracefully (fewer/shorter segments), never accumulate unbounded
@@ -252,13 +258,13 @@ export class EffectsLayer {
       oldest?.g.destroy();
     }
     const speedFrac = Math.min(1, (dist - TRAIL_SPEED_THRESHOLD_PX) / 40);
-    const thickness = 2 + speedFrac * 3;
+    const thickness = 3 + speedFrac * 4;
     const g = new Graphics();
     g.moveTo(prev.x, prev.y);
     g.lineTo(x, y);
-    g.stroke({ color: TRAIL_COLOR, width: thickness, alpha: 0.35 + speedFrac * 0.25 });
+    g.stroke({ color: TRAIL_COLOR, width: thickness, alpha: 0.5 + speedFrac * 0.3 });
     this.trailLayer.addChild(g);
-    this.trails.push({ g, ageMs: 0, lifeMs: 90 + speedFrac * 60 });
+    this.trails.push({ g, ageMs: 0, lifeMs: 110 + speedFrac * 80 });
   }
 
   /** Drop tracked position state for a fighter that's no longer live

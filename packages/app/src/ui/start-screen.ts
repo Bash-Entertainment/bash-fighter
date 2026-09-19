@@ -59,6 +59,17 @@ export class StartScreen {
       <div class="hero">
         <div class="wordmark">BASH FIGHTER</div>
         <div class="subtitle">Twenty fighters, a different arena every match, last one standing. Free and open source, plays in your browser.</div>
+        <div class="how-to-play">
+          <div class="how-to-play-goal">Knock other fighters off the arena. Last one standing wins (Timed Brawl and Stocks score it differently -- the in-match HUD always says which).</div>
+          <div class="how-to-play-controls">
+            <span><b>A/D</b> move</span>
+            <span><b>Space</b> jump</span>
+            <span><b>F</b> attack</span>
+            <span><b>G</b> special</span>
+            <span><b>Shift</b> shield</span>
+          </div>
+          <div class="how-to-play-damage">Taking damage makes you fly farther when hit -- high damage means one more hit can knock you out.</div>
+        </div>
         <div id="attract-frame">
           <div id="attract-root"></div>
         </div>

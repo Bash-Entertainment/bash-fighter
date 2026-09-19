@@ -262,6 +262,13 @@ export class NetMatch {
   // reconnect's fresh hello) via buildClientProfile. Never inferred --
   // only ever what the caller (main.ts, reading the URL) passed in.
   private readonly qaMode: boolean;
+  // Dev-only stage pin from `?arena=<id>` (issue #19 -- see
+  // HelloMessage.arena), same "caller reads the URL, NetMatch just
+  // carries it" convention as qaMode. Sent on the hello only when
+  // import.meta.env.DEV says this is a dev build, so a production build
+  // never sends it regardless of the URL; the server independently
+  // ignores it unless it opted in via MATCH_ARENA_OVERRIDE=1.
+  private readonly arenaRequest?: string;
 
   // Engagement telemetry only (see docs/MEASUREMENT.md) -- presentation/
   // reporting, never read by tick()'s sim advance and never part of
@@ -303,7 +310,13 @@ export class NetMatch {
   private lastRenderAtMs: number | null = null;
   private reportTimer: ReturnType<typeof setInterval> | null = null;
   private readonly REPORT_INTERVAL_MS = 5000;
+  // performance.now() of the most recent visibility change, or null if
+  // the tab has never been hidden or shown since this match began. Used
+  // to discard the snapshot gap that straddles a background period --
+  // see the network-hitch guard in applySnapshot.
+  private visibilityChangedAtMs: number | null = null;
   private readonly visibilityHandler = (): void => {
+    this.visibilityChangedAtMs = performance.now();
     if (document.hidden) this.sendSessionReport();
   };
 
@@ -318,6 +331,7 @@ export class NetMatch {
     events: NetMatchEvents = {},
     audio: AudioManager = new AudioManager(),
     qaMode = false,
+    arenaRequest?: string,
   ) {
     this.url = url;
     this.events = events;
@@ -325,6 +339,7 @@ export class NetMatch {
     this.audio = audio;
     this.effectsBridge = new EffectsAudioBridge(audio);
     this.qaMode = qaMode;
+    this.arenaRequest = arenaRequest;
   }
 
   async init(parent: HTMLElement): Promise<void> {
@@ -434,6 +449,12 @@ export class NetMatch {
       const hello: Record<string, unknown> = { t: 'hello', protocolVersion: PROTOCOL_VERSION, name: this.name };
       if (this.resumeToken) hello.resume = this.resumeToken;
       if (this.characterId) hello.characterId = this.characterId;
+      // Dev-only stage pin (issue #19 -- see HelloMessage.arena).
+      // import.meta.env.DEV is statically false in a production vite
+      // build, so a normal player's client never sends this however the
+      // URL is mangled; `?.` keeps the plain node --test import of this
+      // file (outside vite, no env object) from throwing.
+      if (this.arenaRequest && import.meta.env?.DEV) hello.arena = this.arenaRequest;
       // Engagement telemetry only (see docs/MEASUREMENT.md) -- small,
       // non-identifying environment snapshot, sent once per connection.
       hello.profile = buildClientProfile({
@@ -694,6 +715,7 @@ export class NetMatch {
     this.inputUsage = new InputUsageTracker();
     this.frameTimeTracker = new FrameTimeTracker();
     this.networkHitchTracker = new NetworkHitchTracker();
+    this.visibilityChangedAtMs = null;
     this.slowFrameTracker = new SlowFrameTracker();
     this.lastTransitionEffectAtMs = null;
     this.contextLostCount = 0;
@@ -796,7 +818,19 @@ export class NetMatch {
       // above) is the same "tab was hidden" case FrameTimeTracker
       // already excludes, not a network problem -- counting it here
       // would misattribute a background pause as a network stall.
-      if (!document.hidden) this.networkHitchTracker.record(measured, this.currSnapAt);
+      // The first snapshot after the tab comes back to the foreground
+      // measures a gap that spans the whole background period, and
+      // document.hidden is already false by then, so the plain check
+      // below used to count one phantom hitch per tab switch. A real
+      // player's 2026-09-19 session reported eleven "network hitches"
+      // across 34s of backgrounded time on an idle server -- all of them
+      // this artefact. Discard any gap that a visibility change falls
+      // inside.
+      const straddledBackground =
+        this.visibilityChangedAtMs !== null && this.visibilityChangedAtMs >= previousSnapAt;
+      if (!document.hidden && !straddledBackground) {
+        this.networkHitchTracker.record(measured, this.currSnapAt);
+      }
     }
 
     // Confirmed-state-only event detection (see field comment above): both

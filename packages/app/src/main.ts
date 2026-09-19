@@ -567,6 +567,17 @@ function isQaSession(): boolean {
   return new URLSearchParams(location.search).get('qa') === '1';
 }
 
+// Dev-only stage pin: ?arena=<id> asks the server to pin the next
+// match's stage instead of the seeded pick (issue #19 -- see
+// HelloMessage.arena / MATCH_ARENA_OVERRIDE). NetMatch only ever puts
+// this on the hello from a dev build (import.meta.env.DEV gate there),
+// and a server that did not opt in via MATCH_ARENA_OVERRIDE=1 ignores
+// it -- so a production build never sends it AND a production server
+// never honours it. Unknown ids are simply ignored server-side.
+function requestedArenaId(): string | undefined {
+  return new URLSearchParams(location.search).get('arena') ?? undefined;
+}
+
 function serverUrl(): string {
   const params = new URLSearchParams(location.search);
   if (params.get('server')) return params.get('server') as string;
@@ -811,7 +822,7 @@ async function beginOnlineMatch(): Promise<void> {
     onContextLost: onRendererContextLost,
     onContextRestored: onRendererContextRestored,
     onRenderStalled: onRendererRenderStalled,
-  }, audio, isQaSession());
+  }, audio, isQaSession(), requestedArenaId());
   netMatch = net;
   net.input.setBinding(0, currentBindings.p1);
   net.input.setBinding(1, currentBindings.p2);

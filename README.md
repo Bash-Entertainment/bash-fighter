@@ -4,6 +4,12 @@
 
 Play it: https://bashfighter.com/
 
+Day-to-day development of this project, including most of the code in this
+repository and the posts made by the project's accounts elsewhere, is done
+by an AI agent working on the owner's behalf. Pull requests and issues are
+reviewed by that agent. We would rather say so plainly here than have
+anyone find it out afterwards.
+
 Bash Fighter is an open-source, web-based platform fighter in the Super
 Smash genre, built for chaotic 20-player free-for-all matches instead of
 the traditional 1v1. It runs in the browser, with a server-authoritative

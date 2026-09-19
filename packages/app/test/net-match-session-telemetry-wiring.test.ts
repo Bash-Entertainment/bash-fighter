@@ -52,3 +52,34 @@ test('sendSessionReport is a no-op when there is no open socket or no match in p
   assert.match(body, /if \(!this\.matchStarted \|\| this\.spectating \|\| this\.mySlot < 0\) return;/);
   assert.match(body, /if \(!ws \|\| ws\.readyState !== WebSocket\.OPEN\) return;/);
 });
+
+// 2026-09-19. A real player's session reported eleven network hitches
+// across 34 seconds of backgrounded tab time while the server was idle at
+// 0.1 load. They were all phantoms: the first snapshot after the tab
+// returns to the foreground measures a gap spanning the whole background
+// period, and document.hidden is false again by then, so the old
+// visible-only check counted one hitch per tab switch. Pinned at source
+// level because there is no jsdom in this repo.
+test('a snapshot gap straddling a background period is not counted as a network hitch', () => {
+  const src = readFileSync(new URL('../src/net-match.ts', import.meta.url), 'utf8');
+  assert.match(
+    src,
+    /visibilityChangedAtMs = performance\.now\(\)/,
+    'the visibility handler must record when visibility last changed',
+  );
+  assert.match(
+    src,
+    /straddledBackground[\s\S]{0,200}visibilityChangedAtMs !== null && this\.visibilityChangedAtMs >= previousSnapAt/,
+    'a gap must be classed as straddling the background when a visibility change falls inside it',
+  );
+  assert.match(
+    src,
+    /if \(!document\.hidden && !straddledBackground\) \{\s*\n\s*this\.networkHitchTracker\.record/,
+    'the hitch counter must skip both hidden frames and gaps straddling a background period',
+  );
+  assert.match(
+    src,
+    /this\.networkHitchTracker = new NetworkHitchTracker\(\);\s*\n\s*this\.visibilityChangedAtMs = null;/,
+    'the straddle marker must reset with the hitch counter at match start',
+  );
+});
