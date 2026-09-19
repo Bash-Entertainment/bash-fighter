@@ -6,6 +6,7 @@ import {
   encodeSnapshot,
   decodeSnapshot,
   parseClientControl,
+  MAX_SESSION_REPORT_BYTES,
   sanitiseName,
   dedupeName,
   PROTOCOL_VERSION,
@@ -529,4 +530,30 @@ describe('client telemetry: slow-frame attribution (2026-09-15)', () => {
     assert.equal('slowFrameCount' in msg, false);
     assert.equal('slowFrameFightersAliveBuckets' in msg, false);
   });
+});
+
+// 2026-09-19. The session records had no device pixel ratio at all, so
+// every frame-time figure we quoted for high-density phone screens was
+// unbackable. The field now travels client to server, and this pins the
+// parse: kept and rounded when sane, dropped when it isn't, and never
+// enough to threaten the size cap that once made the server hang up on
+// every player.
+test('sessionReport: devicePixelRatio is kept when sane and dropped when not', () => {
+  const sessionReportWith = (extra: Record<string, unknown>) =>
+    JSON.stringify({ t: 'sessionReport', firstInputMs: 100, inputTicks: 10, frameMedianMs: 16, frameP95Ms: 20, ...extra });
+  const kept = parseClientControl(sessionReportWith({ devicePixelRatio: 2.6666 }));
+  assert.equal(kept?.t, 'sessionReport');
+  assert.equal((kept as { devicePixelRatio?: number }).devicePixelRatio, 2.67);
+
+  for (const bad of [0, -1, Number.NaN, 'two', null, 1e9]) {
+    const parsed = parseClientControl(sessionReportWith({ devicePixelRatio: bad })) as
+      | { devicePixelRatio?: number }
+      | null;
+    assert.equal(parsed?.devicePixelRatio, undefined, `devicePixelRatio ${String(bad)} must be dropped`);
+  }
+
+  assert.ok(
+    sessionReportWith({ devicePixelRatio: 3 }).length < MAX_SESSION_REPORT_BYTES,
+    'a report carrying the field must stay under the session-report cap',
+  );
 });

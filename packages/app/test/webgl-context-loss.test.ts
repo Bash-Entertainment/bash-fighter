@@ -77,7 +77,7 @@ test('the online-match and local-match constructors both hook the shared context
 test('SessionReportMessage.contextLostCount is optional, clamped, and rounded like the other counters', () => {
   assert.match(protocol, /contextLostCount\?: number;/);
   const idx = protocol.indexOf('function sanitiseSessionReport');
-  const body = protocol.slice(idx, idx + 3400); // widened 2026-09-15 for the added slow-frame-attribution fields in sanitiseSessionReport
+  const body = protocol.slice(idx, idx + 4400); // widened 2026-09-15 for slow-frame-attribution fields, again 2026-09-19 for devicePixelRatio
   assert.match(body, /clampFiniteNumber\(obj\.contextLostCount, 0, 10_000_000\)/);
   assert.match(body, /Math\.round\(contextLostCount\)/);
 });

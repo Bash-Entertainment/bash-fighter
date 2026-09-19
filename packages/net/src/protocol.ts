@@ -924,7 +924,15 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   const inputTicks = clampFiniteNumber(obj.inputTicks, 0, 10_000_000);
   const frameMedianMs = clampFiniteNumber(obj.frameMedianMs, 0, 5_000);
   const frameP95Ms = clampFiniteNumber(obj.frameP95Ms, 0, 5_000);
-  const devicePixelRatio = clampFiniteNumber(obj.devicePixelRatio, 0.01, 100);
+  // Clamping would turn nonsense into a plausible-looking reading (0 became
+  // 0.01, 1e9 became 100) and we would then quote it. Out-of-range values are
+  // dropped instead, so an absent ratio stays honestly absent. Real screens
+  // are between 0.5 and 8.
+  const dprRaw = obj.devicePixelRatio;
+  const devicePixelRatio =
+    typeof dprRaw === 'number' && Number.isFinite(dprRaw) && dprRaw >= 0.5 && dprRaw <= 8
+      ? dprRaw
+      : undefined;
   const contextLostCount = clampFiniteNumber(obj.contextLostCount, 0, 10_000_000);
   const renderStalled = typeof obj.renderStalled === 'boolean' ? obj.renderStalled : undefined;
   const frameHistogram = sanitiseFrameHistogram(obj.frameHistogram);

@@ -152,7 +152,17 @@ function deviceFrameTimeByDpr(sessions) {
   const rows = {};
   for (const s of sessions) {
     if (s.touchActive !== true && s.touchActive !== false) continue;
-    const dpr = typeof s.devicePixelRatio === 'number' ? String(s.devicePixelRatio) : 'unknown';
+    // devicePixelRatio is the exact value reported by the client since
+    // 2026-09-19; dprBucket is the coarse value the device profile has
+    // carried since before that, so historical sessions still bucket
+    // instead of piling up under "unknown".
+    const dprValue =
+      typeof s.devicePixelRatio === 'number'
+        ? s.devicePixelRatio
+        : typeof s.dprBucket === 'number'
+          ? s.dprBucket
+          : null;
+    const dpr = dprValue === null ? 'unknown' : String(dprValue);
     const deviceClass = s.touchActive ? 'touch' : 'nonTouch';
     const key = `${dpr}:${deviceClass}`;
     if (!rows[key]) rows[key] = { sessionCount: 0, valuesMedian: [], valuesP95: [] };
