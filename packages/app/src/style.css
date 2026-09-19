@@ -2214,3 +2214,85 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .match-intro-card { animation: none; }
 }
+
+/* ---- Phone widths: the world gets the screen -----------------------
+   2026-09-19. Three real non-QA touch sessions recorded 21-72s of match
+   time with literally zero input, so I measured the layout at the canvas
+   sizes those sessions reported (down to 256 CSS px wide) by loading
+   production inside a 256x493 iframe. Two defects, both fatal on a small
+   phone:
+
+   1. The dense HUD reserves a 128px column at <=700px. At 256px that is
+      half the screen handed to a 20-row leaderboard, leaving the game
+      128px wide.
+   2. Because the movement stick is shifted clear of that reserved column
+      (left: sidebar + 20px), at narrow widths it lands directly on top of
+      the Jump/Special/Attack buttons -- every drag to move also covered
+      the attack buttons, which is exactly what "zero input, felt buggy"
+      looks like from the outside.
+
+   The reserved column was the right call on a desktop (see the
+   #hud:has() rule above: an overlay hides whoever walks under it), but on
+   a phone the leaderboard is redundant -- each fighter already carries a
+   name+damage badge over its head, and the local player has the big
+   damage readout. So on phone widths the dense list goes away, the HUD
+   becomes a small non-interactive status overlay, the canvas takes the
+   full width, and the stick returns to the bottom-left corner. */
+@media (max-width: 480px) {
+  #app:has(.hud-list.dense) #canvas-root {
+    left: 0;
+  }
+
+  #app:has(.hud-list.dense) .touch-stick-base {
+    left: max(20px, env(safe-area-inset-left));
+  }
+
+  #hud:has(.hud-list.dense) {
+    top: 0;
+    bottom: auto;
+    width: auto;
+    max-width: 62vw;
+    background: transparent;
+    border-right: 0;
+    padding: 10px 12px;
+    pointer-events: none;
+  }
+
+  .hud-list.dense {
+    display: none;
+  }
+}
+
+/* Under ~330px the stick (108px) and the three-wide button cluster
+   (174px) cannot both fit beside the screen margins, so the buttons drop
+   to a 2x2 block. 52px circles with 52px spacing stay tangent, never
+   overlapping, and stay above the 44px minimum tap target. */
+@media (max-width: 330px) {
+  .touch-stick-base {
+    width: 92px;
+    height: 92px;
+  }
+
+  .touch-stick-nub {
+    width: 40px;
+    height: 40px;
+    margin-left: -20px;
+    margin-top: -20px;
+  }
+
+  .touch-buttons {
+    width: 104px;
+    height: 104px;
+  }
+
+  .touch-btn {
+    width: 52px;
+    height: 52px;
+    font-size: 9px;
+  }
+
+  .touch-btn-special { right: 0; bottom: 0; }
+  .touch-btn-attack { right: 52px; bottom: 0; }
+  .touch-btn-jump { right: 0; bottom: 52px; }
+  .touch-btn-shield { right: 52px; bottom: 52px; }
+}
