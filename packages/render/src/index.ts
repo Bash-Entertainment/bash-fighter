@@ -26,7 +26,10 @@ import { resolveAnimation } from '@bash-fighter/content';
 import {
   computeBadgePlacements,
   computeLocalPointer,
+  computeLocalDamageReadout,
+  LOCAL_DAMAGE_READOUT_FONT_SIZE,
   BADGE_FONT_SIZE,
+  LOCAL_DAMAGE_FONT_BONUS,
   type BadgeCandidate,
   type BodyBox,
 } from './badge-layout.ts';
@@ -371,6 +374,16 @@ export class Renderer {
   // computeLocalPointer in badge-layout.ts for why this replaced the old
   // world-space marker drawn on the fighter itself.
   private readonly localPointer = new Graphics();
+  // Fixed screen-space corner readout of the local player's own damage --
+  // see computeLocalDamageReadout in badge-layout.ts for why this exists
+  // separately from the in-world badge: at true 20-fighter phone density
+  // the in-world badge can legitimately be forced to drop its damage
+  // suffix, and the player's own damage is required to be the single
+  // most prominent damage number on screen regardless.
+  private readonly localDamageText = new Text({
+    text: '',
+    style: { fontFamily: 'monospace', fontSize: LOCAL_DAMAGE_READOUT_FONT_SIZE, fill: PALETTE.hud, fontWeight: 'bold' },
+  });
   private readonly debugText = makeDebugText();
   private stageBounds: StageBounds;
   private readonly effects = new EffectsLayer();
@@ -534,6 +547,8 @@ export class Renderer {
     this.app.stage.addChild(this.debugText);
     this.app.stage.addChild(this.badgeContainer);
     this.badgeContainer.addChild(this.localPointer);
+    this.localDamageText.anchor.set(0, 1);
+    this.badgeContainer.addChild(this.localDamageText);
 
     this.ready = true;
   }
@@ -698,7 +713,16 @@ export class Renderer {
       // The local player's own badge gets the same bright fill as the
       // rest for consistency, but a slightly larger size so it is the
       // one badge a player can find at a glance without reading digits.
-      text.style.fontSize = p.candidate.isLocalPlayer ? BADGE_FONT_SIZE + 3 : BADGE_FONT_SIZE;
+      // The local player's damage readout gets a further size bump on
+      // top of that (see LOCAL_DAMAGE_FONT_BONUS) -- of every damage
+      // number on screen, this is the one the player must never have to
+      // hunt for (2026-09-17 player report: "had no idea how much hp
+      // anybody had"). Colour is a secondary, non-load-bearing cue: the
+      // numeral itself already carries the information, so this reads
+      // the same under grayscale.
+      const localBonus = p.candidate.isLocalPlayer ? (p.hasPercent ? LOCAL_DAMAGE_FONT_BONUS : 3) : 0;
+      text.style.fontSize = BADGE_FONT_SIZE + localBonus;
+      text.style.fill = p.hasPercent && (p.percent ?? 0) >= 100 ? PALETTE.danger : PALETTE.hud;
     }
     for (let i = textIndex; i < this.badgeTexts.length; i++) {
       (this.badgeTexts[i] as Text).visible = false;
@@ -760,6 +784,24 @@ export class Renderer {
       .lineTo(pos.x, pos.y)
       .closePath()
       .fill({ color: PALETTE.hud });
+  }
+
+  /** Draws (or hides) the fixed corner readout of the local player's own
+   * damage. Independent of camera zoom, badge collision and everything
+   * else on screen -- see the field doc comment for why. Hidden when
+   * there is no local player or it has been eliminated (nothing to
+   * report). */
+  private drawLocalDamageReadout(percentFixed: number | undefined): void {
+    const percent = percentFixed !== undefined ? fx.toFloat(percentFixed) : undefined;
+    const readout = computeLocalDamageReadout(percent, this.viewSize);
+    if (!readout) {
+      this.localDamageText.visible = false;
+      return;
+    }
+    this.localDamageText.visible = true;
+    this.localDamageText.text = readout.text;
+    this.localDamageText.position.set(readout.x, readout.y);
+    this.localDamageText.style.fill = readout.danger ? PALETTE.danger : PALETTE.hud;
   }
 
   /** Ground-truth check of the browser's own WebGL context, independent
@@ -965,6 +1007,11 @@ export class Renderer {
         isLocalPlayer,
         headX: screen.x,
         headY: screen.y - clampHeadOffsetPx(FighterSprite.HEAD_TOP_OFFSET_WORLD * cam.scale),
+        // Presentation only: percent already lives on the RenderFighterState
+        // snapshot the sim handed this frame -- nothing here reads or
+        // derives sim state, it only decides whether/how to draw a number
+        // the sim already computed.
+        percent: fx.toFloat(f.percent),
       });
       // A generous half-width (BODY_WIDTH alone is the torso; fighters'
       // limbs/hitboxes read wider than that on screen) so a name label
@@ -984,6 +1031,7 @@ export class Renderer {
     this.lastFrameFightersOnScreen = fightersOnScreen;
     this.names = frame.names;
     this.layoutBadges(badgeCandidates, bodyBoxes);
+    this.drawLocalDamageReadout(localFighter?.eliminated ? undefined : localFighter?.percent);
 
     const hazards = frame.hazards ?? [];
     this.ensureHazardPool(hazards.length);
