@@ -178,9 +178,20 @@ export function computeBadgePlacements(
     const tiers: { label: string; hasPercent: boolean }[] = [];
     if (nameLabel) tiers.push({ label: nameLabel + pctSuffix, hasPercent: pct !== undefined });
     tiers.push({ label: numberLabel + pctSuffix, hasPercent: pct !== undefined });
-    if (pctOnly) tiers.push({ label: pctOnly, hasPercent: true });
-    if (nameLabel) tiers.push({ label: nameLabel, hasPercent: false });
-    tiers.push({ label: numberLabel, hasPercent: false });
+    // Once a percent is known, the narrowest rung is the percent alone,
+    // and the ladder stops there: a bare slot number is no narrower than
+    // "47%" yet a new player cannot decode it. Playing production on
+    // 2026-09-19 I counted seven naked numerals scattered around the
+    // arena ("15", "4", "16", ...) that read as fighter IDs, not as the
+    // damage the two players who rated camera readability 1/5 said they
+    // could not find. Identity at this density is carried by silhouette,
+    // colour and the sidebar; damage is carried only here.
+    if (pctOnly) {
+      tiers.push({ label: pctOnly, hasPercent: true });
+    } else {
+      if (nameLabel) tiers.push({ label: nameLabel, hasPercent: false });
+      tiers.push({ label: numberLabel, hasPercent: false });
+    }
 
     // Clamp the anchor itself, before any tier/collision math, using the
     // widest tier this candidate could possibly draw -- every narrower

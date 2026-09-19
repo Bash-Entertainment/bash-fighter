@@ -281,3 +281,30 @@ test('a staggered badge is drawn at the y of the box reserved for it', () => {
   const gaps = new Set(placements.map((p) => p.box.bottom - p.y));
   assert.equal(gaps.size, 1, `reserved boxes and drawn positions disagree: gaps ${[...gaps].join(', ')}`);
 });
+
+// 2026-09-19: playing production I counted seven bare slot numerals in the
+// arena with no percent sign. A naked "15" reads as a fighter ID, and it is
+// no narrower than "15%", so the ladder must never spend its last rung on it
+// when the damage figure is known.
+test('no badge ever shows a bare slot number when its damage is known', () => {
+  const candidates = Array.from({ length: 20 }, (_, i) => ({
+    slot: i,
+    headX: 300 + (i % 10) * 6,
+    headY: 400 + Math.floor(i / 10) * 4,
+    percent: 10 + i,
+    isLocalPlayer: i === 0,
+  }));
+  const names = Object.fromEntries(candidates.map((c) => [c.slot, `Fighter${c.slot + 1}`]));
+  const placements = computeBadgePlacements(
+    candidates,
+    [],
+    names,
+    { width: 1280, height: 720 },
+    fakeMeasureText,
+  );
+  assert.ok(placements.length > 0);
+  for (const p of placements) {
+    if (p.candidate.isLocalPlayer) continue; // the local badge carries no percent by design
+    assert.match(p.label, /%/, `badge "${p.label}" has no percent sign`);
+  }
+});
