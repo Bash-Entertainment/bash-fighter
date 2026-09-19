@@ -7,10 +7,18 @@
 // zone. Same function will frame 2 fighters on today's stage or 20 on a
 // much bigger one — it only ever reads positions + bounds, no fighter
 // count or stage size baked in.
+import { FIGHTER_WORLD_HEIGHT, MIN_FIGHTER_PX } from './fighter-scale.ts';
+
 export interface CameraView {
   centerX: number;
   centerY: number;
   scale: number; // pixels per world unit
+  /** True when the min-fighter-size legibility floor (see
+   * applyMinFighterSizeFloor below) overrode the fit-everyone framing for
+   * this view. Optional and absent/false on every pre-existing call site's
+   * output -- added only for callers (the metrics script, tests) that want
+   * to report which path was taken; nothing reads it to change behaviour. */
+  minSizeFollow?: boolean;
 }
 
 export interface ArenaBounds {
@@ -114,8 +122,9 @@ export function computeCamera(
   positions: readonly { x: number; y: number }[],
   cfg: CameraConfig,
   dtMs = 1000 / 60,
+  localPlayerPos?: { x: number; y: number } | null,
 ): CameraView {
-  const raw = computeRawCamera(positions, cfg);
+  const raw = computeRawCamera(positions, cfg, localPlayerPos);
   if (smoothedView === null) {
     smoothedView = raw;
     return raw;
@@ -145,8 +154,9 @@ export function computeCamera(
     },
     positions,
     cfg,
+    raw.minSizeFollow ? MIN_FIGHTER_PX / FIGHTER_WORLD_HEIGHT : undefined,
   );
-  return smoothedView;
+  return raw.minSizeFollow ? { ...smoothedView, minSizeFollow: true } : smoothedView;
 }
 
 /**
@@ -169,6 +179,13 @@ function containFighters(
   eased: CameraView,
   positions: readonly { x: number; y: number }[],
   cfg: CameraConfig,
+  /** Set when the raw target this frame is following the min-fighter-size
+   * legibility floor (computeRawCamera's applyMinFighterSizeFloor). Without
+   * this, containFighters zooms back out to keep every fighter on screen --
+   * exactly the framing the floor exists to override -- which would make
+   * the floor flicker in and out as soon as damping kicks in one frame
+   * after the initial snap. */
+  minSizeFloorScale?: number,
 ): CameraView {
   if (positions.length === 0) return eased;
   const halfW = cfg.viewWidth / 2;
@@ -217,7 +234,7 @@ function containFighters(
   const arenaSpanX = Math.max(1, cfg.arena.maxX - cfg.arena.minX);
   const arenaSpanY = Math.max(1, cfg.arena.maxY - cfg.arena.minY);
   const arenaFitScale = Math.min(cfg.viewWidth / arenaSpanX, cfg.viewHeight / arenaSpanY);
-  const scaleFloor = Math.min(cfg.minScale, arenaFitScale);
+  const scaleFloor = Math.max(Math.min(cfg.minScale, arenaFitScale), minSizeFloorScale ?? 0);
   const scale = Math.max(
     scaleFloor,
     Math.min(
@@ -233,7 +250,12 @@ function containFighters(
  * unchanged). Always call through `computeCamera` in render code so
  * reduced-motion damping applies; this is exported only so tests can
  * assert the raw target camera separately from the damped output. */
-export function computeRawCamera(
+/** The fit-everyone frame, before the min-fighter-size legibility floor
+ * (applyMinFighterSizeFloor) can override it. Exported so tests and
+ * scripts/camera-framing-metrics.mjs can report the "before" number
+ * separately from computeRawCamera's own (floor-applied) output --
+ * production code should call computeRawCamera, not this. */
+export function computeFitEveryoneCamera(
   positions: readonly { x: number; y: number }[],
   cfg: CameraConfig,
 ): CameraView {
@@ -424,6 +446,84 @@ export function computeRawCamera(
   }
 
   return { centerX, centerY, scale };
+}
+
+export function computeRawCamera(
+  positions: readonly { x: number; y: number }[],
+  cfg: CameraConfig,
+  /** The local player's own position, so the min-fighter-size legibility
+   * floor below (MIN_FIGHTER_PX) can follow them specifically instead of
+   * the whole scattered pack once fit-everyone framing goes below it.
+   * `null`/omitted means spectating -- floor centers on the living
+   * centroid instead. Every existing call site omits this and keeps the
+   * exact fit-everyone behaviour whenever that framing is already at or
+   * above MIN_FIGHTER_PX (the default on desktop). */
+  localPlayerPos?: { x: number; y: number } | null,
+): CameraView {
+  const fitEveryone = computeFitEveryoneCamera(positions, cfg);
+  return applyMinFighterSizeFloor(fitEveryone, cfg, positions, localPlayerPos);
+}
+
+// MIN-FIGHTER-SIZE LEGIBILITY FLOOR (2026-09-19): fit-everyone framing
+// (everything above) is right for the common case, but with a full
+// 20-fighter lobby spread across an arena on a narrow/short phone
+// viewport it drives the scale down far enough that a fighter renders
+// only ~12.5-17.6px tall (measured by scripts/camera-framing-metrics.mjs;
+// desktop 1280x720 measures 41-58px on the same stages -- fine). Two real
+// players rated camera readability 1/5. Below MIN_FIGHTER_PX, fitting
+// everyone stops being the goal: raise the scale to exactly the minimum
+// legible size and follow the local player (or, when spectating, the
+// living centroid) instead, accepting that some fighters fall outside
+// the frame. This never changes GROUND_BIAS, the arena floor, or any
+// existing constant above -- it only ever overrides their *output* when
+// that output would be unreadably small, which is why desktop (already
+// well above the floor) is completely unaffected.
+function applyMinFighterSizeFloor(
+  fitEveryone: CameraView,
+  cfg: CameraConfig,
+  positions: readonly { x: number; y: number }[],
+  localPlayerPos?: { x: number; y: number } | null,
+): CameraView {
+  const minSizeScale = MIN_FIGHTER_PX / FIGHTER_WORLD_HEIGHT;
+  if (positions.length === 0 || fitEveryone.scale >= minSizeScale) return fitEveryone;
+
+  const scale = minSizeScale;
+  let centerX: number;
+  let centerY: number;
+  if (localPlayerPos) {
+    centerX = localPlayerPos.x;
+    centerY = localPlayerPos.y;
+  } else {
+    // Spectating (no local player): center on the living fighters'
+    // centroid rather than any one of them.
+    let sumX = 0;
+    let sumY = 0;
+    for (const p of positions) {
+      sumX += p.x;
+      sumY += p.y;
+    }
+    centerX = sumX / positions.length;
+    centerY = sumY / positions.length;
+  }
+
+  // Same clamp this whole function's caller already used above, at the
+  // new (larger) scale -- the raised-scale view must never show anything
+  // outside the stage blast rect either.
+  const clamp = cfg.clampBounds ?? cfg.arena;
+  const halfViewWorldX = cfg.viewWidth / 2 / scale;
+  const halfViewWorldY = cfg.viewHeight / 2 / scale;
+  if (clamp.maxX - clamp.minX >= halfViewWorldX * 2) {
+    centerX = Math.min(Math.max(centerX, clamp.minX + halfViewWorldX), clamp.maxX - halfViewWorldX);
+  } else {
+    centerX = (clamp.minX + clamp.maxX) / 2;
+  }
+  if (clamp.maxY - clamp.minY >= halfViewWorldY * 2) {
+    centerY = Math.min(Math.max(centerY, clamp.minY + halfViewWorldY), clamp.maxY - halfViewWorldY);
+  } else {
+    centerY = (clamp.minY + clamp.maxY) / 2;
+  }
+
+  return { centerX, centerY, scale, minSizeFollow: true };
 }
 
 /** Convert a world point (Y-up) to screen pixels (Y-down) given a camera

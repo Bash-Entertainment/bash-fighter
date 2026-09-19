@@ -8,13 +8,9 @@
 // Run: node --experimental-strip-types scripts/camera-framing-metrics.mjs
 import { ALL_ARENAS } from '../packages/content/src/arenas.ts';
 import { arenaDataToStageBounds } from '../packages/render/src/arena-adapter.ts';
-import { computeRawCamera, computeCamera, resetCameraSmoothing, worldToScreen } from '../packages/render/src/camera.ts';
+import { computeRawCamera, computeFitEveryoneCamera, computeCamera, resetCameraSmoothing, worldToScreen } from '../packages/render/src/camera.ts';
 import { computePopulationAwareFramingFloor } from '../packages/render/src/framing.ts';
-
-// Approximate fighter half-height in world units, matching
-// fighter-shape-placeholder.ts's capsule (used only to convert a camera
-// scale into an apparent on-screen pixel height, not simulation truth).
-const FIGHTER_WORLD_HEIGHT = 36;
+import { FIGHTER_WORLD_HEIGHT, MIN_FIGHTER_PX } from '../packages/render/src/fighter-scale.ts';
 
 function scatteredPositions(stage, count) {
   // Spread across the full solid-ground span, standing on y=0 (or the
@@ -67,11 +63,18 @@ function cameraConfigLike(stage, viewWidth, viewHeight, livingCount) {
 
 function measure(stage, positions, viewWidth, viewHeight) {
   const cfg = cameraConfigLike(stage, viewWidth, viewHeight, positions.length);
-  const cam = computeRawCamera(positions, cfg);
+  // A stand-in local player, so the min-fighter-size floor's "follow the
+  // local player" branch is exercised the same way it will be in a real
+  // match (not just its spectator/centroid fallback).
+  const localPlayerPos = positions[0];
+  const fitCam = computeFitEveryoneCamera(positions, cfg);
+  const cam = computeRawCamera(positions, cfg, localPlayerPos);
   const ground = stage.platforms.find((p) => p.y === 0) ?? stage.platforms[0];
   const groundScreenY = worldToScreen(0, ground.y, cam, viewWidth, viewHeight).y;
   const belowFloorFrac = Math.max(0, Math.min(1, (viewHeight - groundScreenY) / viewHeight));
-  const fighterPx = FIGHTER_WORLD_HEIGHT * cam.scale;
+  const fighterPx = FIGHTER_WORLD_HEIGHT * fitCam.scale;
+  const fighterPxAfterFloor = FIGHTER_WORLD_HEIGHT * cam.scale;
+  const floorPath = cam.minSizeFollow ? 'min-size-follow' : 'fit-all';
 
   // DAMPED-PATH CHECK (2026-09-14): the raw measurement above is exactly
   // what shipped in production for months while a real bug lived only in
@@ -90,7 +93,7 @@ function measure(stage, positions, viewWidth, viewHeight) {
   resetCameraSmoothing();
   let damped = null;
   for (let i = 0; i < 180; i++) {
-    damped = computeCamera(positions, cfg, 1000 / 60);
+    damped = computeCamera(positions, cfg, 1000 / 60, localPlayerPos);
   }
   const dampedGroundScreenY = worldToScreen(0, ground.y, damped, viewWidth, viewHeight).y;
   const dampedBelowFloorFrac = Math.max(0, Math.min(1, (viewHeight - dampedGroundScreenY) / viewHeight));
@@ -101,6 +104,8 @@ function measure(stage, positions, viewWidth, viewHeight) {
     groundScreenY,
     belowFloorFrac,
     fighterPx,
+    fighterPxAfterFloor,
+    floorPath,
     scale: cam.scale,
     dampedScale,
     dampedBelowFloorFrac,
@@ -129,7 +134,7 @@ for (const entry of ALL_ARENAS) {
 for (const r of rows) {
   const flag = r.dampedMismatch ? '  <-- DAMPED PATH DIVERGES FROM RAW' : '';
   console.log(
-    `${r.stage.padEnd(18)} ${r.viewport.padEnd(10)} ${r.pack.padEnd(14)} belowFloor=${(r.belowFloorFrac * 100).toFixed(1)}%  fighterPx=${r.fighterPx.toFixed(1)}  scale=${r.scale.toFixed(3)}  dampedScale=${r.dampedScale.toFixed(3)}  dampedBelowFloor=${(r.dampedBelowFloorFrac * 100).toFixed(1)}%${flag}`,
+    `${r.stage.padEnd(18)} ${r.viewport.padEnd(10)} ${r.pack.padEnd(14)} belowFloor=${(r.belowFloorFrac * 100).toFixed(1)}%  fighterPx=${r.fighterPx.toFixed(1)}  scale=${r.scale.toFixed(3)}  dampedScale=${r.dampedScale.toFixed(3)}  dampedBelowFloor=${(r.dampedBelowFloorFrac * 100).toFixed(1)}%  fighterPxAfterFloor=${r.fighterPxAfterFloor.toFixed(1)}  floorPath=${r.floorPath}${flag}`,
   );
 }
 
