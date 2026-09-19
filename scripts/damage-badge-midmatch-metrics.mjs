@@ -20,6 +20,7 @@ import { computePopulationAwareFramingFloor } from '../packages/render/src/frami
 import { BODY_WIDTH, BODY_HEIGHT, HEAD_RADIUS } from '../packages/render/src/fighter-shape-placeholder.ts';
 import { FighterSprite } from '../packages/render/src/fighter-sprite.ts';
 import { computeBadgePlacements } from '../packages/render/src/badge-layout.ts';
+import { fakeMeasureText } from '../packages/render/test/fake-measure-text.ts';
 
 const N = 20;
 const arenaEntry = ALL_ARENAS.find((a) => a.id === 'battle-royale-20') ?? ALL_ARENAS[0];
@@ -62,9 +63,19 @@ function sampleAt(viewWidth, viewHeight) {
     bodyBoxes.push({ slot: i, left: s.x - halfW, right: s.x + halfW, top: s.y - topH, bottom: s.y });
     candidates.push({ slot: i, isLocalPlayer: i === 0, headX: s.x, headY: s.y - FighterSprite.HEAD_TOP_OFFSET_WORLD * cam.scale, percent: percents[i] });
   }
-  const placements = computeBadgePlacements(candidates, bodyBoxes, undefined, { width: viewWidth, height: viewHeight });
+  const placements = computeBadgePlacements(candidates, bodyBoxes, undefined, { width: viewWidth, height: viewHeight }, fakeMeasureText);
   const withDamage = placements.filter((p) => p.hasPercent).length;
-  return { living: candidates.length, withDamage };
+  let overlapPairs = 0;
+  for (let a = 0; a < placements.length; a++) {
+    for (let b = a + 1; b < placements.length; b++) {
+      const boxA = placements[a].box;
+      const boxB = placements[b].box;
+      if (boxA.left < boxB.right && boxA.right > boxB.left && boxA.top < boxB.bottom && boxA.bottom > boxB.top) {
+        overlapPairs += 1;
+      }
+    }
+  }
+  return { living: candidates.length, withDamage, overlapPairs };
 }
 
 const TICKS_PER_SEC = 60;
@@ -89,6 +100,11 @@ function report(label, samples) {
   const worstIdx = ratios.indexOf(min);
   const worst = samples[worstIdx];
   console.log(`${label}: samples=${samples.length} min=${(min * 100).toFixed(0)}% median=${(median * 100).toFixed(0)}% worst=${worst.withDamage}/${worst.living} at t=${worstIdx}s`);
+  const overlaps = samples.map((s) => s.overlapPairs);
+  const overlapsSorted = [...overlaps].sort((a, b) => a - b);
+  const overlapMedian = overlapsSorted[Math.floor(overlapsSorted.length / 2)];
+  const overlapWorst = Math.max(...overlaps);
+  console.log(`${label} overlap pairs: median=${overlapMedian} worst=${overlapWorst} (frame-by-frame through the real placement path, injected deterministic measurer)`);
 }
 report('1280x720', samples1280);
 report('390x844', samples390);

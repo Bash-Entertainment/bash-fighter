@@ -18,8 +18,12 @@
 //   3. When a fighter's real name is too wide to fit next to a close
 //      neighbour, the fallback to the bare slot-number label actually
 //      engages (a scenario constructed to force it).
-//   4. The local player's own badge is always placed (never dropped),
-//      matching the exemption documented on layoutBadges.
+//   4. The local player's badge can degrade name -> number just like
+//      anyone else, and (2026-09-18) can be dropped entirely under a
+//      genuine badge-vs-badge scrum -- the fixed corner readout is what
+//      guarantees the local player's damage stays visible, not a
+//      world-badge exemption, which only caused forced overlaps in live
+//      play.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeMeasureText } from './fake-measure-text.ts';
@@ -172,7 +176,7 @@ test('a too-wide name that would collide with another badge falls back to the nu
   assert.ok(degraded.length >= 1, 'expected the fallback to numeric label to engage for at least one of the two');
 });
 
-test('the local player badge is never dropped, even packed against neighbours', () => {
+test('the local player badge degrades to a number under real pressure, and is not force-placed over a collision', () => {
   // Loose enough that non-local badges still keep the no-overlap
   // invariant, but tight enough to exercise the local player's name ->
   // number fallback.
@@ -191,7 +195,7 @@ test('the local player badge is never dropped, even packed against neighbours', 
   const names = ['LocalPlayerLongName', 'B', 'C', 'D'];
   const placements = computeBadgePlacements(candidates, bodyBoxes, names, undefined, fakeMeasureText);
   const local = placements.find((p) => p.candidate.isLocalPlayer);
-  assert.ok(local, 'local player badge must always be placed');
+  assert.ok(local, 'this geometry has room for a collision-free local placement');
   assertNoOverlaps(placements, bodyBoxes);
 });
 

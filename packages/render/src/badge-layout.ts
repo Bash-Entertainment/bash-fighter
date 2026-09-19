@@ -233,7 +233,17 @@ export function computeBadgePlacements(
         }
       }
     }
-    if (collides && !c.isLocalPlayer) continue;
+    // The local player used to be exempt from ever being dropped, on
+    // the theory that they must always be findable in-world. But since
+    // the fixed corner readout (computeLocalDamageReadout) already
+    // guarantees the local player's damage is always visible regardless
+    // of the world badge, that exemption had no upside left and a real
+    // cost: when a scrum left no collision-free spot, the local badge
+    // was placed anyway rather than hidden, which is exactly what live
+    // play showed (2026-09-18: "Sweeper" overlapping other badges in
+    // nearly every sample). Mush is worse than an absent numeral for
+    // every fighter now, local player included.
+    if (collides) continue;
     placedBoxes.push(box);
     placements.push({
       candidate: c,
