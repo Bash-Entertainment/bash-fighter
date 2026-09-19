@@ -92,15 +92,30 @@ export function computeBadgePlacements(
     return da - db;
   });
 
-  // Checked against every other fighter's actual body box (see BodyBox
-  // above), not just previously-placed badges -- a crowd can stand
-  // close enough that a wide name label collides with a neighbour's
-  // silhouette even when that neighbour never got a badge of its own.
+  // 2026-09-18 design call: a badge is allowed to overlap another
+  // fighter's body. A number drawn over a distant shoulder costs almost
+  // nothing (the silhouette underneath is still a distinct shape), while
+  // dropping the badge to avoid that overlap costs the player exactly
+  // the information they said they were missing -- see the mid-match
+  // measurement in damage-badge-legibility.test.ts that this replaced.
+  // The one body that stays protected is the local player's own: no
+  // other fighter's badge may sit on it or on the local pointer above it
+  // (finding yourself in a crowd of twenty was itself a fixed player
+  // complaint -- see computeLocalPointer). Badge-vs-badge collision is
+  // still checked for everyone, because two numerals on top of each
+  // other really is unreadable.
+  const localBody = local ? bodyBoxes.find((b) => b.slot === local.slot) : undefined;
+  const localExclusionZone: BadgeBox | undefined = localBody
+    ? { left: localBody.left, right: localBody.right, top: localBody.top - LOCAL_EXCLUSION_MARGIN_PX, bottom: localBody.bottom }
+    : undefined;
   const placedBoxes: BadgeBox[] = [];
   const placements: BadgePlacement[] = [];
   for (const c of ordered) {
     const numberLabel = String(c.slot + 1);
-    const otherBodies = bodyBoxes.filter((b) => b.slot !== c.slot);
+    // Only the local player's own body/pointer area is a collision
+    // target now; everyone else's badge is free to overlap any other
+    // fighter's body (but never the local player's).
+    const bodyGuard: BadgeBox[] = !c.isLocalPlayer && localExclusionZone ? [localExclusionZone] : [];
     // Prefer the chosen name over the bare slot number -- it's what
     // makes a fighter "Rook" instead of "#7" at a glance -- but a name
     // is longer and more likely to collide with a neighbour at
@@ -150,13 +165,13 @@ export function computeBadgePlacements(
 
     let chosen = tiers[0] as { label: string; hasPercent: boolean };
     let box = badgeBox(c.headX, c.headY, chosen.label.length, c.isLocalPlayer, chosen.hasPercent);
-    let collides = placedBoxes.some((p) => boxesOverlap(p, box)) || otherBodies.some((b) => boxesOverlap(b, box));
+    let collides = placedBoxes.some((p) => boxesOverlap(p, box)) || bodyGuard.some((b) => boxesOverlap(b, box));
     let tierIndex = 0;
     while (collides && tierIndex < tiers.length - 1) {
       tierIndex += 1;
       chosen = tiers[tierIndex] as { label: string; hasPercent: boolean };
       box = badgeBox(c.headX, c.headY, chosen.label.length, c.isLocalPlayer, chosen.hasPercent);
-      collides = placedBoxes.some((p) => boxesOverlap(p, box)) || otherBodies.some((b) => boxesOverlap(b, box));
+      collides = placedBoxes.some((p) => boxesOverlap(p, box)) || bodyGuard.some((b) => boxesOverlap(b, box));
     }
     // Even the percent-only rung can collide in a truly packed cluster.
     // Before dropping the badge entirely (or, for the local player, who
@@ -173,7 +188,7 @@ export function computeBadgePlacements(
       for (const offset of STAGGER_OFFSETS) {
         const staggered = badgeBox(c.headX, c.headY + offset, chosen.label.length, c.isLocalPlayer, chosen.hasPercent);
         const staggerCollides =
-          placedBoxes.some((p) => boxesOverlap(p, staggered)) || otherBodies.some((b) => boxesOverlap(b, staggered));
+          placedBoxes.some((p) => boxesOverlap(p, staggered)) || bodyGuard.some((b) => boxesOverlap(b, staggered));
         if (!staggerCollides) {
           box = staggered;
           collides = false;
@@ -202,6 +217,14 @@ export function computeBadgePlacements(
 // entirely -- see the stagger step above. Slightly more than one badge
 // row so a staggered badge never touches the row it was bumped from.
 const BADGE_ROW_STAGGER_PX = 15;
+// How far above the local player's own body box stays protected from
+// other fighters' badges, to also cover the local pointer that floats
+// just above the local badge (see computeLocalPointer: pointer height is
+// at most ~16px on screen, plus its own small gap -- this margin covers
+// that with room to spare, except during the transient intro-emphasis
+// scale-up in the first ~1s of a match, which is a spawn-row moment, not
+// a clustered one, so is out of scope here).
+const LOCAL_EXCLUSION_MARGIN_PX = 26;
 // Ladder of vertical offsets tried, in order, before a badge is dropped
 // entirely (or, for the exempt local player, placed wherever it lands).
 // A real mid-match huddle is dense enough that a single row of slack

@@ -65,20 +65,15 @@ function makeCandidate(slot: number, x: number, y: number, isLocalPlayer = false
   return { slot, isLocalPlayer, headX: x, headY: y - BODY_TOP_HEIGHT_PX + 5 };
 }
 
+// 2026-09-18 design call: a badge may overlap another fighter's body --
+// the one body kept protected is the local player's own (see
+// damage-badge-legibility.test.ts for that and for the badge-vs-badge
+// stagger rule at density). This helper now only enforces the rule that
+// is still absolute: no two badges ever overlap each other.
 function assertNoOverlaps(
   placements: ReturnType<typeof computeBadgePlacements>,
-  bodyBoxes: readonly BodyBox[],
+  _bodyBoxes: readonly BodyBox[],
 ) {
-  for (const p of placements) {
-    for (const body of bodyBoxes) {
-      if (body.slot === p.candidate.slot) continue;
-      assert.equal(
-        boxesOverlap(p.box, body),
-        false,
-        `slot ${p.candidate.slot}'s badge ("${p.label}") overlaps slot ${body.slot}'s body box`,
-      );
-    }
-  }
   for (let i = 0; i < placements.length; i++) {
     for (let j = i + 1; j < placements.length; j++) {
       const a = placements[i]!;
@@ -160,21 +155,20 @@ test('fighters pinned along a screen edge: no badge overlaps a body box', () => 
   assertNoOverlaps(placements, bodyBoxes);
 });
 
-test('a too-wide name that would collide falls back to the numeric slot label', () => {
-  // Two fighters close enough together that fighter 0's long real name
-  // would overlap fighter 1's body box, but fighter 0's bare slot number
-  // ("1") fits clear. The fallback in computeBadgePlacements must
-  // actually engage: label degrades from the name to the number rather
-  // than the badge being dropped or drawn over fighter 1's body.
-  const bodyBoxes: BodyBox[] = [makeBodyBox(0, 500, 400), makeBodyBox(1, 545, 400)];
-  const candidates: BadgeCandidate[] = [makeCandidate(0, 500, 400, false), makeCandidate(1, 545, 400, false)];
+test('a too-wide name that would collide with another badge falls back to the numeric slot label', () => {
+  // Two fighters close enough that fighter 0's long real name would
+  // collide with fighter 1's own badge (not just its body -- body
+  // collision is no longer checked for non-local fighters, see the
+  // 2026-09-18 design call in damage-badge-legibility.test.ts). The
+  // name -> number fallback must still engage on badge-vs-badge
+  // collision.
+  const candidates: BadgeCandidate[] = [makeCandidate(0, 500, 400, false), makeCandidate(1, 508, 400, false)];
   const names = ['ExtremelyLongFighterNameThatWontFit', 'B'];
-  const placements = computeBadgePlacements(candidates, bodyBoxes, names);
-  assertNoOverlaps(placements, bodyBoxes);
-  const slot0 = placements.find((p) => p.candidate.slot === 0);
-  assert.ok(slot0, 'slot 0 should still get a badge (falls back to its number, not dropped)');
-  assert.equal(slot0!.label, '1');
-  assert.equal(slot0!.isNameLabel, false);
+  const placements = computeBadgePlacements(candidates, [], names);
+  assertNoOverlaps(placements, []);
+  assert.equal(placements.length, 2, 'both fighters should still get a badge (falls back to a number, not dropped)');
+  const degraded = placements.filter((p) => !p.isNameLabel);
+  assert.ok(degraded.length >= 1, 'expected the fallback to numeric label to engage for at least one of the two');
 });
 
 test('the local player badge is never dropped, even packed against neighbours', () => {
@@ -200,21 +194,22 @@ test('the local player badge is never dropped, even packed against neighbours', 
   assertNoOverlaps(placements, bodyBoxes);
 });
 
-test('the local player is exempt from being dropped even when truly packed, but still degrades to its number', () => {
-  // A crowd so tight that even the shortest possible label for the
-  // local player ("1") cannot clear a neighbour's body box. Documents
-  // (rather than hides) the one deliberate exception in the algorithm:
-  // the local player's own badge is the one identity cue this player
-  // needs every frame, so unlike everyone else it is never dropped
-  // outright -- but it still tries the name -> number fallback like
-  // anyone else, rather than displaying an oversized name untouched.
+test('a neighbour\'s body no longer forces the local player to degrade its label (2026-09-18 design call)', () => {
+  // Same tight geometry as before this design call, kept as a marker of
+  // the change: overlapping a *neighbour's* body used to force the
+  // local player's own badge down to its bare number. It no longer
+  // does, because badge-vs-body collision is no longer checked for
+  // anyone except against the local player's own body (see
+  // damage-badge-legibility.test.ts). The local player's badge still
+  // exists and still degrades under badge-vs-badge collision (covered
+  // elsewhere in this file); it just isn't this trigger any more.
   const bodyBoxes: BodyBox[] = [makeBodyBox(0, 400, 300), makeBodyBox(1, 415, 300)];
   const candidates: BadgeCandidate[] = [makeCandidate(0, 400, 300, true), makeCandidate(1, 415, 300, false)];
   const names = ['LocalPlayerVeryLongName', 'B'];
   const placements = computeBadgePlacements(candidates, bodyBoxes, names);
   const local = placements.find((p) => p.candidate.isLocalPlayer);
   assert.ok(local, 'local player badge must always be placed, even here');
-  assert.equal(local!.label, '1', 'local player still degrades to the number fallback before being kept overlapping');
+  assert.equal(local!.label, 'LocalPlayerVeryLongName', 'a non-local body should no longer force a degrade');
 });
 
 // Regression coverage for the local-player pointer (the "which one is

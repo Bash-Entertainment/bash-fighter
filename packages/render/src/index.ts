@@ -668,7 +668,23 @@ export class Renderer {
     while (this.badgeTexts.length < count) {
       const text = new Text({
         text: '',
-        style: { fontFamily: FONT_FAMILY, fontSize: BADGE_FONT_SIZE, fill: PALETTE.hud, fontWeight: '700' },
+        // A dark stroke plus a light fill: badges may now sit over any
+        // fighter's body colour (2026-09-18 design call), including the
+        // near-white slot-19 colour, against which the plain light fill
+        // alone is invisible (measured luminance difference ~0.1/255).
+        // The stroke alone carries it there; the fill alone carries it
+        // against the darkest body colours. See
+        // damage-badge-legibility.test.ts's contrast test for the
+        // measured numbers against the lightest and darkest entries in
+        // PALETTE.playerColors, and under grayscale (this pairing has no
+        // hue dependence at all, so grayscale changes nothing).
+        style: {
+          fontFamily: FONT_FAMILY,
+          fontSize: BADGE_FONT_SIZE,
+          fill: PALETTE.hud,
+          stroke: { color: PALETTE.fighterOutline, width: 3 },
+          fontWeight: '700',
+        },
       });
       text.anchor.set(0.5, 1);
       text.resolution = 2;
