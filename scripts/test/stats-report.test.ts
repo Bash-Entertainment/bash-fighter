@@ -176,3 +176,17 @@ test('buildReport: device-capability bucket distributions count known values per
   assert.deepEqual(dc.deviceMemoryBucket.counts, { 2: 1, 4: 1 });
   assert.deepEqual(dc.dprBucket.counts, { 2: 2 });
 });
+
+test('buildReport: non-QA frame times are cross-tabulated by DPR and touch class, with missing DPR visible', () => {
+  const storeLines = [
+    sessionLine({ matchId: 'dpr', qa: false, touchActive: true, dprBucket: 2, frameMedianMs: 10, frameP95Ms: 30 }),
+    sessionLine({ matchId: 'dpr', qa: false, touchActive: true, dprBucket: 2, frameMedianMs: 20, frameP95Ms: 40 }),
+    sessionLine({ matchId: 'dpr', qa: false, touchActive: false, dprBucket: 1, frameMedianMs: 15, frameP95Ms: 25 }),
+    sessionLine({ matchId: 'dpr', qa: false, touchActive: false, frameMedianMs: 50, frameP95Ms: 90 }),
+    sessionLine({ matchId: 'dpr', qa: true, touchActive: true, dprBucket: 2, frameMedianMs: 999, frameP95Ms: 999 }),
+  ];
+  const rows = buildReport({ storeLines, extraLines: [], feedbackCount: 0, since: null }).deviceFrameTimeByDpr;
+  assert.deepEqual(rows['2'].touch, { sessions: 2, medianOfMedianFrameMs: 20, medianOfP95FrameMs: 40 });
+  assert.deepEqual(rows['1'].nonTouch, { sessions: 1, medianOfMedianFrameMs: 15, medianOfP95FrameMs: 25 });
+  assert.deepEqual(rows.unknown.nonTouch, { sessions: 1, medianOfMedianFrameMs: 50, medianOfP95FrameMs: 90 });
+});

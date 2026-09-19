@@ -148,6 +148,33 @@ function percentile(sortedValues, p) {
   return sortedValues[idx];
 }
 
+function deviceFrameTimeByDpr(sessions) {
+  const rows = {};
+  for (const s of sessions) {
+    if (s.touchActive !== true && s.touchActive !== false) continue;
+    const dpr = typeof s.dprBucket === 'number' ? String(s.dprBucket) : 'unknown';
+    const deviceClass = s.touchActive ? 'touch' : 'nonTouch';
+    const key = `${dpr}:${deviceClass}`;
+    if (!rows[key]) rows[key] = { sessionCount: 0, valuesMedian: [], valuesP95: [] };
+    rows[key].sessionCount += 1;
+    if (typeof s.frameMedianMs === 'number' && s.frameMedianMs > 0) rows[key].valuesMedian.push(s.frameMedianMs);
+    if (typeof s.frameP95Ms === 'number' && s.frameP95Ms > 0) rows[key].valuesP95.push(s.frameP95Ms);
+  }
+  const result = {};
+  for (const [key, values] of Object.entries(rows)) {
+    const [dpr, deviceClass] = key.split(':');
+    result[dpr] ??= {};
+    const medians = values.valuesMedian.sort((a, b) => a - b);
+    const p95s = values.valuesP95.sort((a, b) => a - b);
+    result[dpr][deviceClass] = {
+      sessions: values.sessionCount,
+      medianOfMedianFrameMs: percentile(medians, 50),
+      medianOfP95FrameMs: percentile(p95s, 50),
+    };
+  }
+  return result;
+}
+
 function fmt(n, digits = 1) {
   return n === null || n === undefined || Number.isNaN(n) ? 'n/a' : n.toFixed(digits);
 }
@@ -506,6 +533,8 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
     };
   }
 
+  const deviceFrameTime = deviceFrameTimeByDpr(sessionsByQa.notQa);
+
   const humanSessionsByQa = {
     all: sessionGroupStats(sessionsByQa.all),
     notQa: sessionGroupStats(sessionsByQa.notQa),
@@ -561,6 +590,7 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
       },
     },
     humanSessions: humanSessionsByQa,
+    deviceFrameTimeByDpr: deviceFrameTime,
     feedbackSubmissions: feedbackCount,
   };
 }
@@ -719,6 +749,17 @@ function printReport(report) {
       }
     }
   }
+
+  w('frame time by device class (sessions NOT marked QA; median values, ms)');
+  const dprRows = Object.entries(report.deviceFrameTimeByDpr);
+  if (dprRows.length === 0) w('  (no sessions with device class and frame-time telemetry)');
+  for (const [dpr, classes] of dprRows.sort(([a], [b]) => (a === 'unknown' ? 1 : b === 'unknown' ? -1 : Number(a) - Number(b)))) {
+    for (const deviceClass of ['touch', 'nonTouch']) {
+      const row = classes[deviceClass];
+      if (row) w(`  dpr ${dpr}, ${deviceClass === 'nonTouch' ? 'non-touch' : 'touch'}: sessions ${row.sessions}, median of medians ${fmt(row.medianOfMedianFrameMs)}, median of p95s ${fmt(row.medianOfP95FrameMs)}`);
+    }
+  }
+  w();
 
   w('human seat sessions (sessions, not people -- see note above)');
   w('QA marker is self-declared (?qa=1) -- a hint, not proof. Unmarked QA traffic is still possible.');
