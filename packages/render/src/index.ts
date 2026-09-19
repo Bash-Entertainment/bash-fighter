@@ -2,7 +2,7 @@
 // interpolated by the caller) and draws it; never mutates sim state.
 // Built for N fighters — the sim milestone is fixed at 2, but nothing
 // here hardcodes that so the renderer isn't what blocks 20-player FFA.
-import { Application, Container, Graphics, Text } from 'pixi.js';
+import { Application, CanvasTextMetrics, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import { fixed as fx, FighterStateId, findMove, windowAtFrame, type CharacterData, type FighterStateValue } from '@bash-fighter/sim';
 import { PALETTE, FONT_FAMILY } from './palette.ts';
 import { clampRenderResolution } from './resolution.ts';
@@ -717,9 +717,32 @@ export class Renderer {
   private names: readonly string[] | undefined;
   private attractFraming = false;
 
+  // The exact TextStyle badge Text objects render with -- shared with
+  // measureBadgeText below so the collision box is built from the same
+  // style Pixi actually draws, not a copy that could drift out of sync.
+  private badgeTextStyle = new TextStyle({
+    fontFamily: FONT_FAMILY,
+    fontWeight: '700',
+    stroke: { color: PALETTE.fighterOutline, width: BADGE_STROKE_WIDTH_PX },
+  });
+
+  // Real measured width/height for a label at a given font size, using
+  // Pixi's own canvas-based text metrics -- no per-character estimate.
+  // This is what let "Bramble 75%" and "11 40%" (the two live-match
+  // garbling reports, 2026-09-18) be told apart correctly: a heuristic
+  // char-count times a fixed width cannot, because a proportional font
+  // draws them at genuinely different real widths for the same digit
+  // count. CanvasTextMetrics works without the Text object being on
+  // stage, so this can run ahead of layoutBadges' own placement loop.
+  private measureBadgeText = (label: string, fontSize: number): { width: number; height: number } => {
+    this.badgeTextStyle.fontSize = fontSize;
+    const metrics = CanvasTextMetrics.measureText(label, this.badgeTextStyle);
+    return { width: metrics.width, height: metrics.height };
+  };
+
   private layoutBadges(candidates: BadgeCandidate[], bodyBoxes: BodyBox[]): void {
     this.ensureBadgePool(candidates.length);
-    const placements = computeBadgePlacements(candidates, bodyBoxes, this.names, this.viewSize);
+    const placements = computeBadgePlacements(candidates, bodyBoxes, this.names, this.viewSize, this.measureBadgeText);
     let textIndex = 0;
     for (const p of placements) {
       const text = this.badgeTexts[textIndex] as Text;

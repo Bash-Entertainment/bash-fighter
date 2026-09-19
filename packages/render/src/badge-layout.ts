@@ -78,11 +78,24 @@ export interface BadgePlacement {
  * exists: a name label must never visually collide with another
  * fighter's badge OR body sprite, and degrades to the shorter slot
  * number, then to nothing, rather than overlap. */
+/** Measures a label as it will actually be drawn at the given font
+ * size. Production passes a measurer backed by Pixi's own
+ * CanvasTextMetrics (see index.ts), so the collision box below is
+ * built from the same numbers the renderer draws with rather than a
+ * guessed character width -- a per-character estimate cannot tell
+ * "Bramble 75%" apart from "11 40%" even though a proportional font
+ * draws them at very different real widths, which is exactly the class
+ * of bug that kept producing garbled overlapping badges in live play
+ * (2026-09-18). Tests inject a small deterministic fake so the
+ * assertions stay about real geometry without needing a canvas. */
+export type MeasureText = (label: string, fontSize: number) => { width: number; height: number };
+
 export function computeBadgePlacements(
   candidates: readonly BadgeCandidate[],
   bodyBoxes: readonly BodyBox[],
   names: readonly string[] | undefined,
-  view?: { width: number; height: number },
+  view: { width: number; height: number } | undefined,
+  measureText: MeasureText,
 ): BadgePlacement[] {
   const local = candidates.find((c) => c.isLocalPlayer);
   const ordered = [...candidates].sort((a, b) => {
@@ -181,20 +194,20 @@ export function computeBadgePlacements(
     let anchorY = c.headY;
     if (view) {
       const widest = tiers[0] as { label: string; hasPercent: boolean };
-      const worstCaseBox = badgeBox(c.headX, c.headY, widest.label.length, c.isLocalPlayer, widest.hasPercent);
+      const worstCaseBox = badgeBox(c.headX, c.headY, widest, c.isLocalPlayer, measureText);
       const anchorClamp = clampBoxToView(worstCaseBox, view);
       anchorX = c.headX + anchorClamp.dx;
       anchorY = c.headY + anchorClamp.dy;
     }
 
     let chosen = tiers[0] as { label: string; hasPercent: boolean };
-    let box = badgeBox(anchorX, anchorY, chosen.label.length, c.isLocalPlayer, chosen.hasPercent);
+    let box = badgeBox(anchorX, anchorY, chosen, c.isLocalPlayer, measureText);
     let collides = placedBoxes.some((p) => boxesOverlap(p, box)) || bodyGuard.some((b) => boxesOverlap(b, box));
     let tierIndex = 0;
     while (collides && tierIndex < tiers.length - 1) {
       tierIndex += 1;
       chosen = tiers[tierIndex] as { label: string; hasPercent: boolean };
-      box = badgeBox(anchorX, anchorY, chosen.label.length, c.isLocalPlayer, chosen.hasPercent);
+      box = badgeBox(anchorX, anchorY, chosen, c.isLocalPlayer, measureText);
       collides = placedBoxes.some((p) => boxesOverlap(p, box)) || bodyGuard.some((b) => boxesOverlap(b, box));
     }
     // Even the percent-only rung can collide in a truly packed cluster.
@@ -210,7 +223,7 @@ export function computeBadgePlacements(
       // ring, so in practice one offset is almost always enough; trying a
       // few costs nothing and rescues the cases a single offset cannot.
       for (const offset of STAGGER_OFFSETS) {
-        const staggered = badgeBox(anchorX, anchorY + offset, chosen.label.length, c.isLocalPlayer, chosen.hasPercent);
+        const staggered = badgeBox(anchorX, anchorY + offset, chosen, c.isLocalPlayer, measureText);
         const staggerCollides =
           placedBoxes.some((p) => boxesOverlap(p, staggered)) || bodyGuard.some((b) => boxesOverlap(b, staggered));
         if (!staggerCollides) {
@@ -395,46 +408,30 @@ export const BADGE_FONT_SIZE = 13;
 // direction. 3 (name/number bonus) + 4 here = +7 total over everyone
 // else's plain badge.
 export const LOCAL_DAMAGE_FONT_BONUS = 7;
-// Rough monospace glyph width at BADGE_FONT_SIZE, used only to build an
-// approximate collision box -- no need for exact text metrics here.
-// Bumped from 8 -- live-match garbling (2026-09-18, "Cinder 6:1910",
-// "Squa14 64%") showed the reserved box was narrower than what actually
-// draws: this is an approximation, not real text metrics (there is no
-// canvas/GL context available in this test run, see
-// character-icon-shared-context.test.ts for the same constraint), so it
-// is padded generously rather than tuned to the edge.
-const BADGE_CHAR_WIDTH_PX = 9.5;
-const BADGE_BOX_HEIGHT_PX = 16;
 const BADGE_BOX_MARGIN_PX = 3;
-// The world badge text now draws with a stroke (see index.ts) so it
-// stays legible over any fighter body colour -- a stroke visually
-// widens and heightens the glyphs beyond their fill-only bounds, which
-// the reserved box must account for or two badges placed edge-to-edge
-// will visually merge exactly like the live-match report. index.ts's
-// stroke width must match this constant.
+// Stroke bleed is exact geometry (half the stroke width extends past
+// the glyph outline on every side), not a font-rendering guess, so it
+// stays as an explicit constant even though width/height now come from
+// real measurement. index.ts's actual Pixi stroke width must match it.
 export const BADGE_STROKE_WIDTH_PX = 3;
 
-function badgeBox(x: number, y: number, digits: number, isLocalPlayer = false, hasPercent = false): BadgeBox {
-  // The local player's badge renders BADGE_FONT_SIZE + 3px larger (see
-  // layoutBadges) so it's the one badge a player can find at a glance --
-  // but this box used to always assume the default font size, so the
-  // space it reserved for the local badge was smaller than what actually
-  // got drawn. A neighbouring badge could then be placed just outside
-  // the (too-small) reserved box and still visually collide with the
-  // bigger local badge actually on screen -- the local player's own
-  // badge, exempt from ever being dropped, was the one most likely to
-  // still show an illegible overlap in a tight cluster. Scale the
-  // reserved box by the same ratio the font grows by so it actually
-  // matches what gets drawn.
+function badgeBox(
+  x: number,
+  y: number,
+  tier: { label: string; hasPercent: boolean },
+  isLocalPlayer: boolean,
+  measureText: MeasureText,
+): BadgeBox {
   // Must mirror the actual font-size bonus index.ts's layoutBadges
   // applies (BADGE_FONT_SIZE + localBonus there): reserving less space
   // than what actually gets drawn is exactly the earlier '1714 6' bug
   // pattern -- a neighbour placed just outside a too-small reserved box
   // that still visually collides with the bigger text really on screen.
-  const localBonusPx = isLocalPlayer ? (hasPercent ? LOCAL_DAMAGE_FONT_BONUS : 3) : 0;
-  const sizeScale = (BADGE_FONT_SIZE + localBonusPx) / BADGE_FONT_SIZE;
-  const halfWidth = (digits * BADGE_CHAR_WIDTH_PX * sizeScale) / 2 + BADGE_BOX_MARGIN_PX + BADGE_STROKE_WIDTH_PX;
-  const boxHeight = BADGE_BOX_HEIGHT_PX * sizeScale + BADGE_STROKE_WIDTH_PX;
+  const localBonusPx = isLocalPlayer ? (tier.hasPercent ? LOCAL_DAMAGE_FONT_BONUS : 3) : 0;
+  const fontSize = BADGE_FONT_SIZE + localBonusPx;
+  const { width, height } = measureText(tier.label, fontSize);
+  const halfWidth = width / 2 + BADGE_BOX_MARGIN_PX + BADGE_STROKE_WIDTH_PX;
+  const boxHeight = height + BADGE_STROKE_WIDTH_PX;
   return {
     left: x - halfWidth,
     right: x + halfWidth,

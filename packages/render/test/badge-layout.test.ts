@@ -22,6 +22,7 @@
 //      matching the exemption documented on layoutBadges.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { fakeMeasureText } from './fake-measure-text.ts';
 import {
   computeBadgePlacements,
   computeLocalPointer,
@@ -100,7 +101,7 @@ test('20 fighters spread in a uniform ring: no badge overlaps any body box or ba
     candidates.push(makeCandidate(i, x, y));
     names.push(`Fighter${i}`);
   }
-  const placements = computeBadgePlacements(candidates, bodyBoxes, names);
+  const placements = computeBadgePlacements(candidates, bodyBoxes, names, undefined, fakeMeasureText);
   assertNoOverlaps(placements, bodyBoxes);
 });
 
@@ -124,7 +125,7 @@ test('a tight 20-fighter cluster forces most badges to drop rather than overlap'
     candidates.push(makeCandidate(i, x, y));
     names.push(`LongFighterName${i}`);
   }
-  const placements = computeBadgePlacements(candidates, bodyBoxes, names);
+  const placements = computeBadgePlacements(candidates, bodyBoxes, names, undefined, fakeMeasureText);
   assertNoOverlaps(placements, bodyBoxes);
   // A packed cluster this dense cannot fit 20 labels clear of 20
   // overlapping body boxes -- most must be dropped rather than drawn
@@ -151,7 +152,7 @@ test('fighters pinned along a screen edge: no badge overlaps a body box', () => 
     candidates.push(makeCandidate(i, x, y));
     names.push(`Edge${i}`);
   }
-  const placements = computeBadgePlacements(candidates, bodyBoxes, names);
+  const placements = computeBadgePlacements(candidates, bodyBoxes, names, undefined, fakeMeasureText);
   assertNoOverlaps(placements, bodyBoxes);
 });
 
@@ -164,7 +165,7 @@ test('a too-wide name that would collide with another badge falls back to the nu
   // collision.
   const candidates: BadgeCandidate[] = [makeCandidate(0, 500, 400, false), makeCandidate(1, 508, 400, false)];
   const names = ['ExtremelyLongFighterNameThatWontFit', 'B'];
-  const placements = computeBadgePlacements(candidates, [], names);
+  const placements = computeBadgePlacements(candidates, [], names, undefined, fakeMeasureText);
   assertNoOverlaps(placements, []);
   assert.equal(placements.length, 2, 'both fighters should still get a badge (falls back to a number, not dropped)');
   const degraded = placements.filter((p) => !p.isNameLabel);
@@ -188,7 +189,7 @@ test('the local player badge is never dropped, even packed against neighbours', 
     makeCandidate(3, 700, 300, false),
   ];
   const names = ['LocalPlayerLongName', 'B', 'C', 'D'];
-  const placements = computeBadgePlacements(candidates, bodyBoxes, names);
+  const placements = computeBadgePlacements(candidates, bodyBoxes, names, undefined, fakeMeasureText);
   const local = placements.find((p) => p.candidate.isLocalPlayer);
   assert.ok(local, 'local player badge must always be placed');
   assertNoOverlaps(placements, bodyBoxes);
@@ -206,7 +207,7 @@ test('a neighbour\'s body no longer forces the local player to degrade its label
   const bodyBoxes: BodyBox[] = [makeBodyBox(0, 400, 300), makeBodyBox(1, 415, 300)];
   const candidates: BadgeCandidate[] = [makeCandidate(0, 400, 300, true), makeCandidate(1, 415, 300, false)];
   const names = ['LocalPlayerVeryLongName', 'B'];
-  const placements = computeBadgePlacements(candidates, bodyBoxes, names);
+  const placements = computeBadgePlacements(candidates, bodyBoxes, names, undefined, fakeMeasureText);
   const local = placements.find((p) => p.candidate.isLocalPlayer);
   assert.ok(local, 'local player badge must always be placed, even here');
   assert.equal(local!.label, 'LocalPlayerVeryLongName', 'a non-local body should no longer force a degrade');
@@ -223,7 +224,7 @@ test('computeLocalPointer: sits a fixed gap above the local player\'s own badge 
   const bodyBoxes: BodyBox[] = [makeBodyBox(0, 400, 300), makeBodyBox(1, 500, 300)];
   const candidates: BadgeCandidate[] = [makeCandidate(0, 400, 300, true), makeCandidate(1, 500, 300, false)];
   const names = ['Rook', 'Fizz'];
-  const placements = computeBadgePlacements(candidates, bodyBoxes, names);
+  const placements = computeBadgePlacements(candidates, bodyBoxes, names, undefined, fakeMeasureText);
   const local = placements.find((p) => p.candidate.isLocalPlayer);
   assert.ok(local);
   const pointer = computeLocalPointer(placements);
@@ -240,7 +241,7 @@ test('computeLocalPointer: returns null when there is no local player (e.g. the 
   const bodyBoxes: BodyBox[] = [makeBodyBox(0, 400, 300), makeBodyBox(1, 500, 300)];
   const candidates: BadgeCandidate[] = [makeCandidate(0, 400, 300, false), makeCandidate(1, 500, 300, false)];
   const names = ['Rook', 'Fizz'];
-  const placements = computeBadgePlacements(candidates, bodyBoxes, names);
+  const placements = computeBadgePlacements(candidates, bodyBoxes, names, undefined, fakeMeasureText);
   assert.equal(computeLocalPointer(placements), null);
 });
 
@@ -252,7 +253,7 @@ test('computeLocalPointer: still returns a position even when the local badge de
   const bodyBoxes: BodyBox[] = [makeBodyBox(0, 400, 300), makeBodyBox(1, 415, 300)];
   const candidates: BadgeCandidate[] = [makeCandidate(0, 400, 300, true), makeCandidate(1, 415, 300, false)];
   const names = ['LocalPlayerVeryLongName', 'B'];
-  const placements = computeBadgePlacements(candidates, bodyBoxes, names);
+  const placements = computeBadgePlacements(candidates, bodyBoxes, names, undefined, fakeMeasureText);
   const local = placements.find((p) => p.candidate.isLocalPlayer);
   assert.ok(local);
   const pointer = computeLocalPointer(placements);

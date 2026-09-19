@@ -22,6 +22,7 @@ import { BODY_WIDTH, BODY_HEIGHT, HEAD_RADIUS } from '../src/fighter-shape-place
 import { FighterSprite } from '../src/fighter-sprite.ts';
 import { PALETTE } from '../src/palette.ts';
 import { computeBadgePlacements, computeLocalDamageReadout, type BadgeCandidate, type BodyBox } from '../src/badge-layout.ts';
+import { fakeMeasureText } from './fake-measure-text.ts';
 
 const BODY_HALF_WIDTH_WORLD = BODY_WIDTH * 1.3;
 const BODY_TOP_WORLD = BODY_HEIGHT + HEAD_RADIUS * 2;
@@ -91,14 +92,14 @@ for (const [label, vw, vh] of [
   test(`battle-royale-20 damage badges: no badge-vs-badge overlap at match start (${label})`, () => {
     const percents = Array.from({ length: 20 }, (_, i) => (i * 37) % 180);
     const { candidates, bodyBoxes } = buildScene(vw, vh, percents);
-    const placements = computeBadgePlacements(candidates, bodyBoxes, undefined, { width: vw, height: vh });
+    const placements = computeBadgePlacements(candidates, bodyBoxes, undefined, { width: vw, height: vh }, fakeMeasureText);
     assertNoBadgeOverlap(placements);
   });
 
   test(`battle-royale-20 damage badges: no other fighter's badge sits on the local player's body (${label})`, () => {
     const percents = Array.from({ length: 20 }, (_, i) => (i * 37) % 180);
     const { candidates, bodyBoxes } = buildScene(vw, vh, percents);
-    const placements = computeBadgePlacements(candidates, bodyBoxes, undefined, { width: vw, height: vh });
+    const placements = computeBadgePlacements(candidates, bodyBoxes, undefined, { width: vw, height: vh }, fakeMeasureText);
     const localBody = bodyBoxes.find((b) => b.slot === 0);
     assert.ok(localBody);
     for (const p of placements) {
@@ -118,7 +119,7 @@ for (const [label, vw, vh] of [
 
 test('a fighter with no percent given (e.g. attract-mode ghost) never claims hasPercent', () => {
   const candidates: BadgeCandidate[] = [{ slot: 0, isLocalPlayer: false, headX: 100, headY: 100 }];
-  const placements = computeBadgePlacements(candidates, [], undefined);
+  const placements = computeBadgePlacements(candidates, [], undefined, undefined, fakeMeasureText);
   assert.equal(placements[0]?.hasPercent, false);
   assert.equal(placements[0]?.label, '1');
 });
@@ -130,7 +131,7 @@ test('a badge is allowed to overlap a non-local fighter\'s body', () => {
   // damage numeral intact.
   const candidates: BadgeCandidate[] = [{ slot: 1, isLocalPlayer: false, headX: 100, headY: 100, percent: 55 }];
   const bodyBoxes: BodyBox[] = [{ slot: 5, left: 80, right: 120, top: 80, bottom: 140 }];
-  const placements = computeBadgePlacements(candidates, bodyBoxes, undefined);
+  const placements = computeBadgePlacements(candidates, bodyBoxes, undefined, undefined, fakeMeasureText);
   assert.equal(placements.length, 1);
   assert.equal(placements[0]!.hasPercent, true);
   assert.ok(boxesOverlap(placements[0]!.box, bodyBoxes[0]!), 'expected the badge to actually overlap the body in this setup');
@@ -164,7 +165,7 @@ test('a tight mid-match cluster still shows a damage numeral for essentially eve
     candidates.push({ slot: i, isLocalPlayer: i === 0, headX: x, headY: y - bodyHeight - 4, percent: (i * 23) % 160 });
   }
 
-  const placements = computeBadgePlacements(candidates, bodyBoxes, undefined, { width: vw, height: vh });
+  const placements = computeBadgePlacements(candidates, bodyBoxes, undefined, { width: vw, height: vh }, fakeMeasureText);
   const withDamage = placements.filter((p) => p.hasPercent).length;
 
   assertNoBadgeOverlap(placements);
@@ -190,14 +191,14 @@ test('a tight mid-match cluster still shows a damage numeral for essentially eve
 test('a fighter near the left edge of the canvas is clamped, not hidden behind the sidebar', () => {
   const view = { width: 1280, height: 720 };
   const candidates: BadgeCandidate[] = [{ slot: 0, isLocalPlayer: false, headX: 5, headY: 100, percent: 42 }];
-  const placements = computeBadgePlacements(candidates, [], undefined, view);
+  const placements = computeBadgePlacements(candidates, [], undefined, view, fakeMeasureText);
   assert.equal(placements.length, 1);
   assert.ok(placements[0]!.box.left >= 0, 'badge box left edge sits behind x=0, i.e. behind the sidebar');
 });
 
 test("bot names drop the world badge's redundant \"CPU \" prefix", () => {
   const candidates: BadgeCandidate[] = [{ slot: 0, isLocalPlayer: false, headX: 100, headY: 100, percent: 10 }];
-  const placements = computeBadgePlacements(candidates, [], ['CPU Kestrel']);
+  const placements = computeBadgePlacements(candidates, [], ['CPU Kestrel'], undefined, fakeMeasureText);
   assert.equal(placements[0]!.label, 'Kestrel 10%');
 });
 
@@ -246,7 +247,7 @@ test("the local player's world badge keeps its name but drops the percent (the c
     { slot: 1, isLocalPlayer: false, headX: 500, headY: 500, percent: 42 },
   ];
   const names = ['Sweeper', 'Cinder'];
-  const placements = computeBadgePlacements(candidates, [], names);
+  const placements = computeBadgePlacements(candidates, [], names, undefined, fakeMeasureText);
   const local = placements.find((p) => p.candidate.isLocalPlayer)!;
   const other = placements.find((p) => !p.candidate.isLocalPlayer)!;
   assert.ok(local.label.includes('Sweeper'), `expected local badge to keep its name, got "${local.label}"`);
