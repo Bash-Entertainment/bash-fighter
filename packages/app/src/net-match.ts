@@ -180,6 +180,10 @@ export class NetMatch {
   }
   // True once stop() is called deliberately (leaving the match / navigating
   // away): close/error handlers must not try to auto-reconnect after that.
+  private readonly sessionDevicePixelRatio: number | undefined = (() => {
+    const value = typeof window !== 'undefined' ? window.devicePixelRatio : undefined;
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value * 100) / 100 : undefined;
+  })();
   private stopped = false;
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -372,6 +376,7 @@ export class NetMatch {
       inputTicks: this.inputActivity.getInputTicks(),
       frameMedianMs: this.frameTimeTracker.getMedianMs(),
       frameP95Ms: this.frameTimeTracker.getP95Ms(),
+      devicePixelRatio: this.sessionDevicePixelRatio,
       contextLostCount: this.contextLostCount,
       renderStalled: this.renderStalled,
       frameHistogram: this.frameTimeTracker.getHistogram(),

@@ -59,6 +59,7 @@ export interface StoredSessionEndRecord {
   inputTicks: number | null;
   frameMedianMs: number | null;
   frameP95Ms: number | null;
+  devicePixelRatio: number | null;
   /** Self-declared QA hint for this seat (see Seat.qa / ClientSessionProfile.qa).
    *  Always present (true or false) on records written by this code;
    *  absent from records written before this field existed, which the

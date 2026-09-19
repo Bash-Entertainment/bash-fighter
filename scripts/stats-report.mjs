@@ -152,7 +152,7 @@ function deviceFrameTimeByDpr(sessions) {
   const rows = {};
   for (const s of sessions) {
     if (s.touchActive !== true && s.touchActive !== false) continue;
-    const dpr = typeof s.dprBucket === 'number' ? String(s.dprBucket) : 'unknown';
+    const dpr = typeof s.devicePixelRatio === 'number' ? String(s.devicePixelRatio) : 'unknown';
     const deviceClass = s.touchActive ? 'touch' : 'nonTouch';
     const key = `${dpr}:${deviceClass}`;
     if (!rows[key]) rows[key] = { sessionCount: 0, valuesMedian: [], valuesP95: [] };

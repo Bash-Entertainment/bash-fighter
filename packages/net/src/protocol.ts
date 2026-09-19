@@ -205,6 +205,8 @@ export interface SessionReportMessage {
   frameMedianMs: number;
   /** 95th-percentile client frame time in ms over the same window. */
   frameP95Ms: number;
+  /** Raw device pixel ratio observed at session start, rounded to two decimals. */
+  devicePixelRatio?: number;
   /** Count of WebGL `webglcontextlost` events this seat's client has
    *  observed so far this match (2026-09-14; see wiki "Camera Framing"
    *  sibling page on renderer robustness). Almost always 0 -- a lost
@@ -922,6 +924,7 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   const inputTicks = clampFiniteNumber(obj.inputTicks, 0, 10_000_000);
   const frameMedianMs = clampFiniteNumber(obj.frameMedianMs, 0, 5_000);
   const frameP95Ms = clampFiniteNumber(obj.frameP95Ms, 0, 5_000);
+  const devicePixelRatio = clampFiniteNumber(obj.devicePixelRatio, 0.01, 100);
   const contextLostCount = clampFiniteNumber(obj.contextLostCount, 0, 10_000_000);
   const renderStalled = typeof obj.renderStalled === 'boolean' ? obj.renderStalled : undefined;
   const frameHistogram = sanitiseFrameHistogram(obj.frameHistogram);
@@ -940,7 +943,7 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   // clamped rather than trusted like every other numeric field here.
   const visibleMs = clampFiniteNumber(obj.visibleMs, 0, 21_600_000);
   const hiddenMs = clampFiniteNumber(obj.hiddenMs, 0, 21_600_000);
-  if ([firstInputMs, inputTicks, frameMedianMs, frameP95Ms, contextLostCount, renderStalled, frameHistogram, hiddenFrames, networkHitchCount, keyboardInputTicks, touchInputTicks, gamepadInputTicks, slowFrameCount, slowFrameFightersAliveBuckets, slowFrameFightersOnScreenBuckets, slowFrameEffectsLoadBuckets, slowFrameHitchCoincidentCount, slowFrameTransitionCoincidentCount, visibleMs, hiddenMs].every((v) => v === undefined)) return null;
+  if ([firstInputMs, inputTicks, frameMedianMs, frameP95Ms, devicePixelRatio, contextLostCount, renderStalled, frameHistogram, hiddenFrames, networkHitchCount, keyboardInputTicks, touchInputTicks, gamepadInputTicks, slowFrameCount, slowFrameFightersAliveBuckets, slowFrameFightersOnScreenBuckets, slowFrameEffectsLoadBuckets, slowFrameHitchCoincidentCount, slowFrameTransitionCoincidentCount, visibleMs, hiddenMs].every((v) => v === undefined)) return null;
   const out: SessionReportMessage = {
     t: 'sessionReport',
     firstInputMs: firstInputMs === undefined ? null : firstInputMs,
@@ -948,6 +951,7 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
     frameMedianMs: frameMedianMs ?? 0,
     frameP95Ms: frameP95Ms ?? 0,
   };
+  if (devicePixelRatio !== undefined) out.devicePixelRatio = Math.round(devicePixelRatio * 100) / 100;
   if (contextLostCount !== undefined) out.contextLostCount = Math.round(contextLostCount);
   if (renderStalled !== undefined) out.renderStalled = renderStalled;
   if (frameHistogram !== undefined) out.frameHistogram = frameHistogram;
