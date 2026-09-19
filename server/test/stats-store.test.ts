@@ -151,7 +151,7 @@ test('recordSessionEnd: appends one sessionEnd record derived from the real Matc
     match.start();
 
     const recorder = createStatsRecorder({ logPath, now: () => 1_700_000_010_000 });
-    const conn = fakeConn({ slot: 0, lastReport: { firstInputMs: 900, inputTicks: 42, frameMedianMs: 16.7, frameP95Ms: 20.1 } });
+    const conn = fakeConn({ slot: 0, lastReport: { firstInputMs: 900, inputTicks: 42, frameMedianMs: 16.7, frameP95Ms: 20.1, devicePixelRatio: 2.5 } });
     recorder.recordSessionEnd(conn, match);
     match.stop();
 
@@ -164,6 +164,10 @@ test('recordSessionEnd: appends one sessionEnd record derived from the real Matc
     assert.equal(record.eliminated, false);
     assert.equal(record.firstInputMs, 900);
     assert.equal(record.inputTicks, 42);
+    // Reported 2026-09-19: the field existed on the type and in the
+    // session-telemetry log but was missing from the stats record, so
+    // every DPR reading stayed null in stats.jsonl.
+    assert.equal(record.devicePixelRatio, 2.5);
 
     const serialised = JSON.stringify(record).toLowerCase();
     assert.ok(!('ip' in record));

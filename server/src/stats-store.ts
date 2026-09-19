@@ -216,6 +216,7 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       inputTicks: report?.inputTicks ?? null,
       frameMedianMs: report?.frameMedianMs ?? null,
       frameP95Ms: report?.frameP95Ms ?? null,
+      devicePixelRatio: report?.devicePixelRatio ?? null,
       qa: seat.qa,
       hwConcurrencyBucket: profile?.hwConcurrencyBucket ?? null,
       deviceMemoryBucket: profile?.deviceMemoryBucket ?? null,
