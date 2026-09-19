@@ -189,6 +189,15 @@ export interface RenderFrame {
 // never crop a living fighter off-screen. Defaults to a count high
 // enough to never shrink (full-floor behaviour unchanged) for any
 // caller that doesn't pass one.
+// Dev/QA only: raises the camera's min-fighter-size legibility floor so the
+// follow path can be watched in a real browser. Untouched in normal play.
+let devMinFighterPx: number | undefined;
+
+/** Set from the app layer when ?minFighterPx= is present. Dev/QA only. */
+export function setDevMinFighterPx(px: number | undefined): void {
+  devMinFighterPx = px !== undefined && Number.isFinite(px) && px > 0 ? px : undefined;
+}
+
 function cameraConfig(
   stage: StageBounds,
   viewWidth: number,
@@ -202,6 +211,7 @@ function cameraConfig(
     minScale: 1.6,
     maxScale: 5.5,
     paddingWorld: 20,
+    minFighterPx: devMinFighterPx,
     arena: computePopulationAwareFramingFloor(stage, viewWidth, viewHeight, livingCount, fighterSpanXHint),
     // Clamp centering to the true (live, possibly-shrunk) blast rect, not
     // the padded/aspect-corrected floor box above -- see camera.ts's
@@ -960,6 +970,10 @@ export class Renderer {
       : this.stageBounds;
 
     const fighterPositions = liveFighters.map((f) => ({ x: f.x, y: f.y }));
+    const localCandidate =
+      frame.localPlayerIndex !== undefined ? frame.fighters[frame.localPlayerIndex] : undefined;
+    const localLivingFighter =
+      localCandidate && !localCandidate.eliminated ? localCandidate : undefined;
     // Matches camera.ts's own fSpanX padding exactly, so the framing
     // floor's aspect-ratio step (framing.ts) trims to the same effective
     // width computeRawCamera will end up using -- see
@@ -982,6 +996,11 @@ export class Renderer {
         // runs on the same wall clock on a phone managing 15fps as on a
         // 60fps desktop.
         dtMs,
+        // Whose fighter to follow if the min-fighter-size legibility floor
+        // (camera.ts) has to give up on framing everyone -- undefined while
+        // spectating or once this client is eliminated, which makes the
+        // floor centre on the living centroid instead.
+        localLivingFighter ? { x: localLivingFighter.x, y: localLivingFighter.y } : null,
       );
 
     // Translate any hit/elimination effects the app layer observed since

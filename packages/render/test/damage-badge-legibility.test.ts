@@ -294,7 +294,7 @@ test('no badge ever shows a bare slot number when its damage is known', () => {
     percent: 10 + i,
     isLocalPlayer: i === 0,
   }));
-  const names = Object.fromEntries(candidates.map((c) => [c.slot, `Fighter${c.slot + 1}`]));
+  const names = candidates.map((c) => `Fighter${c.slot + 1}`);
   const placements = computeBadgePlacements(
     candidates,
     [],

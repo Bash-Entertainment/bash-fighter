@@ -30,6 +30,14 @@ export interface ArenaBounds {
 
 export interface CameraConfig {
   viewWidth: number;
+  /** Dev/QA override for the min-fighter-size legibility floor, in screen
+   * pixels. Omitted everywhere in normal play, where MIN_FIGHTER_PX applies.
+   * It exists because the floor only ever engages on viewports narrower or
+   * shorter than any real browser I can drive (the tooling refuses widths
+   * below 1024px and cannot initialise WebGL under phone emulation), so
+   * without it the follow path could only ever be verified in unit tests.
+   * The app wires it from ?minFighterPx= . */
+  minFighterPx?: number;
   viewHeight: number;
   minScale: number;
   maxScale: number;
@@ -154,7 +162,7 @@ export function computeCamera(
     },
     positions,
     cfg,
-    raw.minSizeFollow ? MIN_FIGHTER_PX / FIGHTER_WORLD_HEIGHT : undefined,
+    raw.minSizeFollow ? (cfg.minFighterPx ?? MIN_FIGHTER_PX) / FIGHTER_WORLD_HEIGHT : undefined,
   );
   return raw.minSizeFollow ? { ...smoothedView, minSizeFollow: true } : smoothedView;
 }
@@ -484,7 +492,7 @@ function applyMinFighterSizeFloor(
   positions: readonly { x: number; y: number }[],
   localPlayerPos?: { x: number; y: number } | null,
 ): CameraView {
-  const minSizeScale = MIN_FIGHTER_PX / FIGHTER_WORLD_HEIGHT;
+  const minSizeScale = (cfg.minFighterPx ?? MIN_FIGHTER_PX) / FIGHTER_WORLD_HEIGHT;
   if (positions.length === 0 || fitEveryone.scale >= minSizeScale) return fitEveryone;
 
   const scale = minSizeScale;

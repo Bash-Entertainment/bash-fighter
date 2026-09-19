@@ -116,6 +116,11 @@ function measure(stage, positions, viewWidth, viewHeight) {
 const viewports = [
   { name: '1280x720', w: 1280, h: 720 },
   { name: '390x844', w: 390, h: 844 },
+  // 1024x520 is the narrowest/shortest viewport a real browser will give me
+  // for live verification (the tooling refuses widths below 1024 and cannot
+  // initialise WebGL under phone emulation), so it is the only viewport
+  // where I can actually watch the legibility floor engage on production.
+  { name: '1024x520', w: 1024, h: 520 },
 ];
 
 const rows = [];

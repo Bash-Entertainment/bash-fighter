@@ -30,7 +30,12 @@ import {
   shouldIgnoreKeydown,
 } from '@bash-fighter/input';
 import { PLACEHOLDER_CHARACTER, resolveCharacterId, ALL_CHARACTERS, isKnownArenaId } from '@bash-fighter/content';
-import { setReducedMotion, PALETTE, type ArenaBounds } from '@bash-fighter/render';
+import {
+  setReducedMotion,
+  setDevMinFighterPx,
+  PALETTE,
+  type ArenaBounds,
+} from '@bash-fighter/render';
 import { AudioManager } from '@bash-fighter/audio';
 
 // This local build has no networking, so "the local player" is just
@@ -574,6 +579,18 @@ function isQaSession(): boolean {
 // and a server that did not opt in via MATCH_ARENA_OVERRIDE=1 ignores
 // it -- so a production build never sends it AND a production server
 // never honours it. Unknown ids are simply ignored server-side.
+// Dev/QA only: ?minFighterPx=<n> raises the camera's min-fighter-size
+// legibility floor. The floor only engages on viewports narrower or shorter
+// than any browser I can drive for testing, so this is the only way to watch
+// the follow path live rather than trusting unit tests alone.
+function applyDevMinFighterPx(): void {
+  const raw = new URLSearchParams(location.search).get('minFighterPx');
+  if (raw === null) return;
+  const px = Number(raw);
+  if (Number.isFinite(px) && px > 0) setDevMinFighterPx(px);
+}
+applyDevMinFighterPx();
+
 function requestedArenaId(): string | undefined {
   return new URLSearchParams(location.search).get('arena') ?? undefined;
 }

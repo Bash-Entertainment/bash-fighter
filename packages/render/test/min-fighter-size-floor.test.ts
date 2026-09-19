@@ -7,6 +7,7 @@
 // Measurements 2026-09-14: Phones Are the Primary Platform".
 import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   computeRawCamera,
   computeFitEveryoneCamera,
@@ -118,4 +119,14 @@ test('spectating (no local player) centres the min-size follow on the living cen
   } else {
     assert.ok(Math.abs(cam.centerY - (clamp.minY + clamp.maxY) / 2) < 1e-6);
   }
+});
+
+// Source-level pin (no jsdom in this repo): the floor is useless if the
+// renderer never tells the camera which fighter is ours -- it would then
+// centre on the living centroid even for a player who is alive, i.e.
+// follow nobody. 2026-09-19: the first implementation did exactly that.
+test('the renderer passes the local living fighter to computeCamera', () => {
+  const src = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+  assert.match(src, /localLivingFighter\s*\?\s*\{\s*x:\s*localLivingFighter\.x/);
+  assert.match(src, /localCandidate && !localCandidate\.eliminated/);
 });
