@@ -379,8 +379,8 @@ way to watch the follow path in a real browser -- the floor otherwise only
 engages on viewports narrower or shorter than the test tooling can drive;
 and `?qa=1`
 (`packages/app/src/main.ts`'s `isQaSession`) sets `hello.profile.qa =
-true` for this session -- this is the only one of the four that gets
-recorded in the private stats. None of the four are secret and none
+true` for this session -- this is the only one of the five that gets
+recorded in the private stats. None of the five are secret and none
 are enforced server-side beyond `qa` being validated as a plain
 boolean like any other profile field; they are conveniences for testers
 and contributors, not access control.
