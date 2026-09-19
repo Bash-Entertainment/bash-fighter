@@ -73,3 +73,15 @@ policy on bashfighter.com changes. Confirmed on 2026-09-14: neither
 `Origin` header, so the itch origin is accepted as-is. If that ever
 changes, this build needs a matching change or it will silently fail to
 connect.
+
+## Standing rule: re-upload after every player-facing change
+
+The itch.io build is a manual zip upload and is **not** part of `deploy.sh`, so
+it drifts silently. On 2026-09-19 the embed was a week behind production and was
+serving players an older game than bashfighter.com — including the start-screen
+how-to-play block added to answer "I don't understand how to win".
+
+Whenever a player-facing change is deployed, run `npm run build:itch`, upload
+`dist-itch.zip` on the itch project's Edit game page, keep "This file will be
+played in the browser" ticked, save, then load the public page and click Run
+game to confirm the change is actually there.
