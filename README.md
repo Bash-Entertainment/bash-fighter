@@ -1,5 +1,7 @@
 # Bash Fighter
 
+[![CI](https://github.com/Bash-Entertainment/bash-fighter/actions/workflows/ci.yml/badge.svg)](https://github.com/Bash-Entertainment/bash-fighter/actions/workflows/ci.yml)
+
 Play it: https://bashfighter.com/
 
 Day-to-day development of this project, including most of the code in this
