@@ -144,7 +144,7 @@ test('objectiveLineText states a full sentence for each mode, derived from the s
 
 test('koStandingLineText reports own KOs and rank, omitting the redundant leader clause when already 1st', () => {
   assert.equal(koStandingLineText(7, 1, 20, 7), '7 KOs \u00b7 1st of 20');
-  assert.equal(koStandingLineText(3, 5, 20, 9), '3 KOs \u00b7 5th of 20 \u00b7 leader 9');
+  assert.equal(koStandingLineText(3, 5, 20, 9), '3 KOs \u00b7 5th of 20 \u00b7 leader has 9 KOs');
   assert.equal(koStandingLineText(1, 1, 20, 1), '1 KO \u00b7 1st of 20');
 });
 

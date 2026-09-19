@@ -130,6 +130,10 @@ export function ordinal(n: number): string {
  * count -- never a full N-row table (see koStandingInfo in
  * timed-brawl.ts for how this is computed). */
 export function koStandingLineText(ownKo: number, ownRank: number, totalFighters: number, leaderKo: number): string {
-  const leaderPart = ownRank === 1 ? '' : ` \u00b7 leader ${leaderKo}`;
+  // "leader 2" read as a fighter number rather than a knockout count when
+  // I played it, which is the exact ambiguity this whole line exists to
+  // remove, so the unit is spelled out (2026-09-19).
+  const leaderPart =
+    ownRank === 1 ? '' : ` \u00b7 leader has ${leaderKo} KO${leaderKo === 1 ? '' : 's'}`;
   return `${ownKo} KO${ownKo === 1 ? '' : 's'} \u00b7 ${ordinal(ownRank)} of ${totalFighters}${leaderPart}`;
 }
