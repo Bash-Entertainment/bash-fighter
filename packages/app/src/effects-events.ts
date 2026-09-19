@@ -25,18 +25,40 @@ export type EffectEvent =
   | { type: 'victory'; fighterIndex: number };
 
 // Knockback magnitudes for the placeholder character's four moves run
-// roughly 3-19 (see the Combat Model wiki page); percent-gain-per-hit is a
-// robust, cheap proxy for "how hard was that" that works for items and
-// hazards too (which don't share a knockback formula path here). These
-// thresholds were picked by eye against that range, not derived from a
-// formula -- revisit once there's more than one character.
+// roughly 3-19 (see the Combat Model wiki page); percent-gain-per-hit was
+// the original proxy for "how hard was that" but it's flat per move
+// regardless of the target's accumulated percent -- a 130%-damage kill
+// blow and an opening jab with the same move read as the same "strength"
+// even though the sim sends the 130% fighter flying much further (see
+// Sim.tryApplyHit: knockback magnitude grows with percentAfter). Measured
+// with scripts/impact-feedback-metrics.mjs against a 20p bot brawl:
+// damage-delta strength only spans ~0.007..0.27 (p10..p90, a ~40x ratio
+// dominated by clipping near the top), while the actual knockback
+// magnitude the sim applies spans a genuine ~1..20 range every match.
+// These thresholds (still eyeballed, not derived) now key off the same
+// knockback magnitude used for strength below.
 const DAMAGE_LIGHT_MAX = 5; // Fixed-point damage delta this-or-below => light
 const DAMAGE_MEDIUM_MAX = 9;
 
-function damageToStrength(damageDelta: number): number {
-  // Normalize against the heaviest known move (10 dmg) with generous
-  // headroom for items (Bash Bomb is 18) so nothing clips silently.
-  return Math.max(0, Math.min(1, damageDelta / 18));
+// Sim's documented knockback-magnitude range (Combat Model wiki page /
+// knockback.ts comments) is roughly 1-20 for a normal hit, with outliers
+// above that for big finishers -- normalizing against 20 puts a typical
+// finishing blow near 1.0 without every mid-match hit clipping there too.
+const KB_MAGNITUDE_NORM = 20;
+// Floor so a real landed hit is never invisible/silent even at 0
+// knockback (e.g. a graze that still registers percent) -- every hit
+// still needs *some* felt feedback, just much less than a launcher.
+const STRENGTH_FLOOR = 0.12;
+
+/** 0..1 hit "weight" from the knockback magnitude actually applied by
+ * the sim this tick, not just the raw damage of the move. Since a
+ * landed hit sets velocity directly to the knockback vector
+ * (Sim.tryApplyHit / applyItemDamage), the tick-over-tick velocity
+ * *delta* on the struck fighter is that same magnitude -- no sim change
+ * needed, this only reads snapshot velocity that's already public. */
+function knockbackToStrength(kbMagnitude: number): number {
+  const raw = Math.max(0, Math.min(1, kbMagnitude / KB_MAGNITUDE_NORM));
+  return Math.max(STRENGTH_FLOOR, raw);
 }
 
 function countAlive(snapshots: readonly FighterSnapshot[], numFighters: number): number {
@@ -70,17 +92,21 @@ export function detectFighterEvents(
     if (c.state === FighterStateId.SHIELD && shieldDelta > 0.01) {
       events.push({ type: 'block', fighterIndex: i });
     } else if (damageDelta > 0.05) {
-      const strength = damageToStrength(damageDelta);
-      const strong = damageDelta > DAMAGE_MEDIUM_MAX;
-      const medium = !strong && damageDelta > DAMAGE_LIGHT_MAX;
       // Direction: knockback launches away from the attacker; we don't
       // know the attacker here, so use the fighter's own velocity delta
       // as the visual direction proxy -- it points the way the hit sent
       // them, which is what the effect should show regardless of who hit
       // them (works for hazards/items with no "attacker" concept too).
+      // Its *length* doubles as the knockback magnitude the sim actually
+      // applied (see knockbackToStrength above) since velocity is set
+      // directly to the knockback vector on a landed hit.
       const dirX = fx.toFloat(c.velX) - fx.toFloat(p.velX);
       const dirY = fx.toFloat(c.velY) - fx.toFloat(p.velY);
-      const len = Math.hypot(dirX, dirY) || 1;
+      const kbMagnitude = Math.hypot(dirX, dirY);
+      const strength = knockbackToStrength(kbMagnitude);
+      const strong = damageDelta > DAMAGE_MEDIUM_MAX;
+      const medium = !strong && damageDelta > DAMAGE_LIGHT_MAX;
+      const len = kbMagnitude || 1;
       events.push({
         type: 'hit',
         fighterIndex: i,
