@@ -60,7 +60,7 @@ export class StartScreen {
         <div class="wordmark">BASH FIGHTER</div>
         <div class="subtitle">Twenty fighters, a different arena every match, last one standing. Free and open source, plays in your browser.</div>
         <div class="how-to-play">
-          <div class="how-to-play-goal">Knock other fighters off the arena. Last one standing wins (Timed Brawl and Stocks score it differently -- the in-match HUD always says which).</div>
+          <div class="how-to-play-goal">Knock other fighters off the arena — the last one standing wins. Timed Brawl and Stocks score differently, and the in-match HUD always says which.</div>
           <div class="how-to-play-controls">
             <span><b>A/D</b> move</span>
             <span><b>Space</b> jump</span>
@@ -68,7 +68,7 @@ export class StartScreen {
             <span><b>G</b> special</span>
             <span><b>Shift</b> shield</span>
           </div>
-          <div class="how-to-play-damage">Taking damage makes you fly farther when hit -- high damage means one more hit can knock you out.</div>
+          <div class="how-to-play-damage">Damage makes you fly farther, so a damaged fighter is one hit from being knocked out.</div>
         </div>
         <div id="attract-frame">
           <div id="attract-root"></div>

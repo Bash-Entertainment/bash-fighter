@@ -184,6 +184,9 @@ html, body {
   gap: 8px;
   max-width: 560px;
   text-align: center;
+  /* Balance the centred lines: unbalanced wrapping left a one-word
+     last line under a full one, which read as ragged. */
+  text-wrap: balance;
 }
 
 .how-to-play-goal,
