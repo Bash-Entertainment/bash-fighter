@@ -472,3 +472,36 @@ function badgeBox(
   };
 }
 
+/** A badge closer than this to its own head plainly belongs to the fighter
+ * beneath it and needs no leader line. */
+export const BADGE_LEADER_MIN_DISPLACEMENT_PX = 10;
+
+export interface BadgeLeaderLine {
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+}
+
+/** The hairline joining a staggered badge to its own fighter's head, or
+ * null when the badge sits close enough to need none. Playing production on
+ * 2026-09-19 my own badge read "Sweeper" with an unrelated "42%" floating
+ * directly above it while my damage was 0%: a displaced badge silently
+ * reads as belonging to whoever it happens to hover over. Ends stop clear
+ * of both the glyphs and the fighter outline. */
+export function badgeLeaderLine(
+  x: number,
+  y: number,
+  head: { x: number; y: number },
+  fontSize: number,
+): BadgeLeaderLine | null {
+  const displacement = y - head.y;
+  if (Math.abs(displacement) < BADGE_LEADER_MIN_DISPLACEMENT_PX) return null;
+  const above = displacement < 0;
+  return {
+    fromX: x,
+    fromY: above ? y + 3 : y - fontSize - 3,
+    toX: head.x,
+    toY: above ? head.y - 3 : head.y + 3,
+  };
+}

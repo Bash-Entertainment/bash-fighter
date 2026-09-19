@@ -21,7 +21,13 @@ import { computePopulationAwareFramingFloor } from '../src/framing.ts';
 import { BODY_WIDTH, BODY_HEIGHT, HEAD_RADIUS } from '../src/fighter-shape-placeholder.ts';
 import { FighterSprite } from '../src/fighter-sprite.ts';
 import { PALETTE } from '../src/palette.ts';
-import { computeBadgePlacements, computeLocalDamageReadout, type BadgeCandidate, type BodyBox } from '../src/badge-layout.ts';
+import {
+  computeBadgePlacements,
+  computeLocalDamageReadout,
+  badgeLeaderLine,
+  type BadgeCandidate,
+  type BodyBox,
+} from '../src/badge-layout.ts';
 import { fakeMeasureText } from './fake-measure-text.ts';
 
 const BODY_HALF_WIDTH_WORLD = BODY_WIDTH * 1.3;
@@ -307,4 +313,19 @@ test('no badge ever shows a bare slot number when its damage is known', () => {
     if (p.candidate.isLocalPlayer) continue; // the local badge carries no percent by design
     assert.match(p.label, /%/, `badge "${p.label}" has no percent sign`);
   }
+});
+
+// 2026-09-19, playing production: my own badge read "Sweeper" with an
+// unrelated "42%" sitting directly above it while my damage was 0%. A badge
+// pushed off its own row has to say which fighter it belongs to.
+test('a staggered badge gets a leader line back to its own head, a settled one does not', () => {
+  const head = { x: 400, y: 440 };
+  assert.equal(badgeLeaderLine(400, 436, head, 13), null, 'settled badge needs no line');
+  const above = badgeLeaderLine(410, 410, head, 13);
+  assert.ok(above, 'badge staggered above its row needs a line');
+  assert.equal(above.toX, head.x);
+  assert.ok(above.fromY > 410 && above.toY < head.y, 'line ends clear of glyphs and fighter');
+  const below = badgeLeaderLine(410, 470, head, 13);
+  assert.ok(below, 'badge staggered below its row needs a line');
+  assert.ok(below.fromY < 470 && below.toY > head.y, 'line runs upward to the head');
 });

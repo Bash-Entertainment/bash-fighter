@@ -31,6 +31,7 @@ import {
   LOCAL_DAMAGE_READOUT_FONT_SIZE,
   BADGE_STROKE_WIDTH_PX,
   BADGE_FONT_SIZE,
+  badgeLeaderLine,
   LOCAL_DAMAGE_FONT_BONUS,
   type BadgeCandidate,
   type BodyBox,
@@ -336,6 +337,7 @@ export function computeEdgeDangerFrac(x: number, y: number, stage: StageBounds):
   return Math.max(0, 1 - nearest / EDGE_WARN_DISTANCE_WORLD);
 }
 
+
 export class Renderer {
   readonly app = new Application();
   private ready = false;
@@ -414,6 +416,13 @@ export class Renderer {
   // at a constant pixel size regardless of camera zoom. See
   // computeLocalPointer in badge-layout.ts for why this replaced the old
   // world-space marker drawn on the fighter itself.
+  // Hairlines joining a badge to the head it belongs to, drawn only when
+  // the badge had to be staggered away from its own row. Without them a
+  // staggered badge reads as belonging to whichever fighter it happens to
+  // float above: playing production on 2026-09-19 my own badge said
+  // "Sweeper" with an unrelated "42%" sitting directly over it while my
+  // damage was 0%.
+  private readonly badgeLeaders = new Graphics();
   private readonly localPointer = new Graphics();
   // Fixed screen-space corner readout of the local player's own damage --
   // see computeLocalDamageReadout in badge-layout.ts for why this exists
@@ -587,6 +596,7 @@ export class Renderer {
     this.debugText.visible = false;
     this.app.stage.addChild(this.debugText);
     this.app.stage.addChild(this.badgeContainer);
+    this.badgeContainer.addChild(this.badgeLeaders);
     this.badgeContainer.addChild(this.localPointer);
     this.localDamageText.anchor.set(0, 1);
     this.badgeContainer.addChild(this.localDamageText);
@@ -810,6 +820,7 @@ export class Renderer {
       this.lastBadgeCandidateSlotsKey = slotsKey;
     }
     const curHeadBySlot = new Map(candidates.map((c) => [c.slot, { x: c.headX, y: c.headY }]));
+    this.badgeLeaders.clear();
     let textIndex = 0;
     const followedPlacements: FollowedBadgePlacement[] = [];
     for (const p of this.cachedBadgePlacements) {
@@ -843,11 +854,26 @@ export class Renderer {
       const localBonus = p.candidate.isLocalPlayer ? (p.hasPercent ? LOCAL_DAMAGE_FONT_BONUS : 3) : 0;
       text.style.fontSize = BADGE_FONT_SIZE + localBonus;
       text.style.fill = p.hasPercent && (p.percent ?? 0) >= 100 ? PALETTE.danger : PALETTE.hud;
+      this.drawBadgeLeader(x, y, curHead);
     }
     for (let i = textIndex; i < this.badgeTexts.length; i++) {
       (this.badgeTexts[i] as Text).visible = false;
     }
     this.drawLocalPointer(followedPlacements);
+  }
+
+  /** Joins a staggered badge to its own fighter's head with a hairline.
+   * A badge sitting on its natural row needs no line -- it is directly
+   * above its owner -- so only displaced ones get one, which keeps the
+   * screen quiet at 20 fighters. */
+  private drawBadgeLeader(x: number, y: number, head: { x: number; y: number } | undefined): void {
+    if (!head) return;
+    const line = badgeLeaderLine(x, y, head, BADGE_FONT_SIZE);
+    if (!line) return;
+    this.badgeLeaders
+      .moveTo(line.fromX, line.fromY)
+      .lineTo(line.toX, line.toY)
+      .stroke({ color: PALETTE.hudDim, width: 1, alpha: 0.55 });
   }
 
   /** Draws (or hides) the single constant-size "this is you" pointer --
