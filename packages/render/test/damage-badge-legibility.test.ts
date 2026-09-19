@@ -168,9 +168,18 @@ test('a tight mid-match cluster still shows a damage numeral for essentially eve
   const withDamage = placements.filter((p) => p.hasPercent).length;
 
   assertNoBadgeOverlap(placements);
+  // 2026-09-18 part-4: the box widened to actually account for the drawn
+  // stroke (see BADGE_STROKE_WIDTH_PX in badge-layout.ts) after a live
+  // match showed badges genuinely overlapping into unreadable mush
+  // ("Cinder 6:1910") despite this same test's old 85% assertion passing --
+  // that number was only reachable by under-reserving space. A lower but
+  // truthfully collision-free count is a real improvement over a higher
+  // count that lies about being readable; the parent's own live sampling
+  // of the pre-fix build got a median of 11/20 and some of those 11 were
+  // garbled, so 11/20 *clean* is the number to beat, not a floor to regret.
   assert.ok(
-    withDamage >= count * 0.85,
-    `expected almost every fighter to show a damage numeral in a tight cluster, got ${withDamage}/${count}`,
+    withDamage >= count * 0.5,
+    `expected at least half of a tight cluster to show a clean damage numeral, got ${withDamage}/${count}`,
   );
   for (const p of placements) {
     assert.ok(p.box.left >= -0.01 && p.box.right <= vw + 0.01, 'badge box left the visible canvas horizontally');
@@ -223,4 +232,25 @@ test('badge text (light fill + dark stroke) contrasts against the lightest and d
   // Grayscale check: luminance-only contrast is exactly what filter:
   // grayscale(1) leaves behind (it does not touch relative luminance),
   // so the assertions above already are the grayscale case.
+});
+
+// 2026-09-18 part-4: the parent reported the local player's own world
+// badge duplicating the exact same percent already guaranteed by the
+// fixed corner readout, and being the widest label on screen right in
+// the middle of the action for no benefit. The world badge now keeps
+// the local player's name (helps find yourself) but never appends a
+// percent suffix -- that job belongs to the corner readout alone.
+test("the local player's world badge keeps its name but drops the percent (the corner readout already covers it)", () => {
+  const candidates: BadgeCandidate[] = [
+    { slot: 0, isLocalPlayer: true, headX: 200, headY: 200, percent: 87 },
+    { slot: 1, isLocalPlayer: false, headX: 500, headY: 500, percent: 42 },
+  ];
+  const names = ['Sweeper', 'Cinder'];
+  const placements = computeBadgePlacements(candidates, [], names);
+  const local = placements.find((p) => p.candidate.isLocalPlayer)!;
+  const other = placements.find((p) => !p.candidate.isLocalPlayer)!;
+  assert.ok(local.label.includes('Sweeper'), `expected local badge to keep its name, got "${local.label}"`);
+  assert.ok(!local.label.includes('%'), `expected local world badge to drop the percent suffix, got "${local.label}"`);
+  assert.equal(local.hasPercent, false);
+  assert.ok(other.label.includes('%'), `expected a non-local badge to still show its percent, got "${other.label}"`);
 });

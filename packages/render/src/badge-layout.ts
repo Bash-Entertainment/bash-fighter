@@ -141,7 +141,13 @@ export function computeBadgePlacements(
     // needs to survive a mid-match cluster.
     const name = rawName?.startsWith('CPU ') ? rawName.slice(4) : rawName;
     const nameLabel = name && name.length > 0 ? name : undefined;
-    const pct = c.percent !== undefined ? Math.max(0, Math.round(c.percent)) : undefined;
+    // The local player already has a guaranteed, always-visible damage
+    // number in the fixed corner readout (computeLocalDamageReadout).
+    // Repeating it on the world badge over their own fighter -- the
+    // single widest label on screen, sitting right where the action is
+    // -- duplicates information without adding any, so the world badge
+    // keeps just the name/number that helps a player find themselves.
+    const pct = !c.isLocalPlayer && c.percent !== undefined ? Math.max(0, Math.round(c.percent)) : undefined;
     const pctSuffix = pct !== undefined ? ` ${pct}%` : '';
     const pctOnly = pct !== undefined ? `${pct}%` : undefined;
 
@@ -163,14 +169,32 @@ export function computeBadgePlacements(
     if (nameLabel) tiers.push({ label: nameLabel, hasPercent: false });
     tiers.push({ label: numberLabel, hasPercent: false });
 
+    // Clamp the anchor itself, before any tier/collision math, using the
+    // widest tier this candidate could possibly draw -- every narrower
+    // tier then automatically fits inside the same clamped anchor. This
+    // must happen before collision checks, not after (clamping only the
+    // final chosen box, once collision-free, could shift it straight
+    // into a neighbour that was placed assuming the pre-clamp position:
+    // exactly the class of reserved-space-vs-drawn-space bug this
+    // feature has hit twice already).
+    let anchorX = c.headX;
+    let anchorY = c.headY;
+    if (view) {
+      const widest = tiers[0] as { label: string; hasPercent: boolean };
+      const worstCaseBox = badgeBox(c.headX, c.headY, widest.label.length, c.isLocalPlayer, widest.hasPercent);
+      const anchorClamp = clampBoxToView(worstCaseBox, view);
+      anchorX = c.headX + anchorClamp.dx;
+      anchorY = c.headY + anchorClamp.dy;
+    }
+
     let chosen = tiers[0] as { label: string; hasPercent: boolean };
-    let box = badgeBox(c.headX, c.headY, chosen.label.length, c.isLocalPlayer, chosen.hasPercent);
+    let box = badgeBox(anchorX, anchorY, chosen.label.length, c.isLocalPlayer, chosen.hasPercent);
     let collides = placedBoxes.some((p) => boxesOverlap(p, box)) || bodyGuard.some((b) => boxesOverlap(b, box));
     let tierIndex = 0;
     while (collides && tierIndex < tiers.length - 1) {
       tierIndex += 1;
       chosen = tiers[tierIndex] as { label: string; hasPercent: boolean };
-      box = badgeBox(c.headX, c.headY, chosen.label.length, c.isLocalPlayer, chosen.hasPercent);
+      box = badgeBox(anchorX, anchorY, chosen.label.length, c.isLocalPlayer, chosen.hasPercent);
       collides = placedBoxes.some((p) => boxesOverlap(p, box)) || bodyGuard.some((b) => boxesOverlap(b, box));
     }
     // Even the percent-only rung can collide in a truly packed cluster.
@@ -186,7 +210,7 @@ export function computeBadgePlacements(
       // ring, so in practice one offset is almost always enough; trying a
       // few costs nothing and rescues the cases a single offset cannot.
       for (const offset of STAGGER_OFFSETS) {
-        const staggered = badgeBox(c.headX, c.headY + offset, chosen.label.length, c.isLocalPlayer, chosen.hasPercent);
+        const staggered = badgeBox(anchorX, anchorY + offset, chosen.label.length, c.isLocalPlayer, chosen.hasPercent);
         const staggerCollides =
           placedBoxes.some((p) => boxesOverlap(p, staggered)) || bodyGuard.some((b) => boxesOverlap(b, staggered));
         if (!staggerCollides) {
@@ -197,14 +221,13 @@ export function computeBadgePlacements(
       }
     }
     if (collides && !c.isLocalPlayer) continue;
-    const clamped = view ? clampBoxToView(box, view) : { box, dx: 0, dy: 0 };
-    placedBoxes.push(clamped.box);
+    placedBoxes.push(box);
     placements.push({
       candidate: c,
       label: chosen.label,
-      box: clamped.box,
-      x: c.headX + clamped.dx,
-      y: c.headY + clamped.dy,
+      box,
+      x: anchorX,
+      y: anchorY,
       isNameLabel: chosen.label !== numberLabel && chosen.label !== numberLabel + pctSuffix,
       hasPercent: chosen.hasPercent,
       percent: pct,
@@ -374,9 +397,22 @@ export const BADGE_FONT_SIZE = 13;
 export const LOCAL_DAMAGE_FONT_BONUS = 7;
 // Rough monospace glyph width at BADGE_FONT_SIZE, used only to build an
 // approximate collision box -- no need for exact text metrics here.
-const BADGE_CHAR_WIDTH_PX = 8;
+// Bumped from 8 -- live-match garbling (2026-09-18, "Cinder 6:1910",
+// "Squa14 64%") showed the reserved box was narrower than what actually
+// draws: this is an approximation, not real text metrics (there is no
+// canvas/GL context available in this test run, see
+// character-icon-shared-context.test.ts for the same constraint), so it
+// is padded generously rather than tuned to the edge.
+const BADGE_CHAR_WIDTH_PX = 9.5;
 const BADGE_BOX_HEIGHT_PX = 16;
 const BADGE_BOX_MARGIN_PX = 3;
+// The world badge text now draws with a stroke (see index.ts) so it
+// stays legible over any fighter body colour -- a stroke visually
+// widens and heightens the glyphs beyond their fill-only bounds, which
+// the reserved box must account for or two badges placed edge-to-edge
+// will visually merge exactly like the live-match report. index.ts's
+// stroke width must match this constant.
+export const BADGE_STROKE_WIDTH_PX = 3;
 
 function badgeBox(x: number, y: number, digits: number, isLocalPlayer = false, hasPercent = false): BadgeBox {
   // The local player's badge renders BADGE_FONT_SIZE + 3px larger (see
@@ -397,8 +433,8 @@ function badgeBox(x: number, y: number, digits: number, isLocalPlayer = false, h
   // that still visually collides with the bigger text really on screen.
   const localBonusPx = isLocalPlayer ? (hasPercent ? LOCAL_DAMAGE_FONT_BONUS : 3) : 0;
   const sizeScale = (BADGE_FONT_SIZE + localBonusPx) / BADGE_FONT_SIZE;
-  const halfWidth = (digits * BADGE_CHAR_WIDTH_PX * sizeScale) / 2 + BADGE_BOX_MARGIN_PX;
-  const boxHeight = BADGE_BOX_HEIGHT_PX * sizeScale;
+  const halfWidth = (digits * BADGE_CHAR_WIDTH_PX * sizeScale) / 2 + BADGE_BOX_MARGIN_PX + BADGE_STROKE_WIDTH_PX;
+  const boxHeight = BADGE_BOX_HEIGHT_PX * sizeScale + BADGE_STROKE_WIDTH_PX;
   return {
     left: x - halfWidth,
     right: x + halfWidth,

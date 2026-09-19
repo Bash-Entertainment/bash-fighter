@@ -28,6 +28,7 @@ import {
   computeLocalPointer,
   computeLocalDamageReadout,
   LOCAL_DAMAGE_READOUT_FONT_SIZE,
+  BADGE_STROKE_WIDTH_PX,
   BADGE_FONT_SIZE,
   LOCAL_DAMAGE_FONT_BONUS,
   type BadgeCandidate,
@@ -682,7 +683,7 @@ export class Renderer {
           fontFamily: FONT_FAMILY,
           fontSize: BADGE_FONT_SIZE,
           fill: PALETTE.hud,
-          stroke: { color: PALETTE.fighterOutline, width: 3 },
+          stroke: { color: PALETTE.fighterOutline, width: BADGE_STROKE_WIDTH_PX },
           fontWeight: '700',
         },
       });
