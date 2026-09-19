@@ -27,6 +27,7 @@ import {
   computeBadgePlacements,
   computeLocalPointer,
   computeLocalDamageReadout,
+  type LocalPointerInput,
   LOCAL_DAMAGE_READOUT_FONT_SIZE,
   BADGE_STROKE_WIDTH_PX,
   BADGE_FONT_SIZE,
@@ -35,6 +36,18 @@ import {
   type BodyBox,
 } from './badge-layout.ts';
 import { computePopulationAwareFramingFloor } from './framing.ts';
+
+/** Minimal shape layoutBadges hands to drawLocalPointer/text placement
+ * after re-anchoring a cached decision to this frame's fighter
+ * positions -- see layoutBadges' own comment for why positions are
+ * recomputed every frame even though the underlying collision/tier
+ * decision (computeBadgePlacements) is not. */
+interface FollowedBadgePlacement {
+  candidate: BadgeCandidate;
+  x: number;
+  y: number;
+  box: { left: number; right: number; top: number; bottom: number };
+}
 
 export { RenderItemTypeId } from './item-sprite.ts';
 export { EffectsLayer, type HitEffectInput, setReducedMotion, isReducedMotion } from './effects.ts';
@@ -368,6 +381,23 @@ export class Renderer {
   // screen positions first. See layoutBadges() below.
   private readonly badgeContainer = new Container();
   private readonly badgeTexts: Text[] = [];
+  // Badge *placement decisions* (which label tier survives collision,
+  // which stagger row it lands on) are re-solved only every
+  // BADGE_LAYOUT_INTERVAL frames rather than all 60/s -- see
+  // layoutBadges() below for why this is safe. Cached here between
+  // recomputes; cachedBadgeHeadBySlot records each cached placement's
+  // fighter head position *at the moment it was computed*, so every
+  // frame in between can re-anchor the same decision to that fighter's
+  // current head position without re-running collision detection.
+  private badgeFrameCounter = 0;
+  private cachedBadgePlacements: ReturnType<typeof computeBadgePlacements> = [];
+  private cachedBadgeHeadBySlot: Map<number, { x: number; y: number }> = new Map();
+  private lastBadgeCandidateSlotsKey = '';
+  // ~20Hz at a 60Hz render rate. Badge/name-label placement is
+  // presentation-only layout, not anything that must track a fighter
+  // pixel-perfectly every frame (positions themselves are still updated
+  // every frame below, only the collision/tier decision is throttled).
+  private static readonly BADGE_LAYOUT_INTERVAL = 3;
   // The one persistent "this is you" pointer: a single Graphics object
   // (not pooled per-fighter -- there is only ever at most one local
   // player) living in screen space alongside the badges, so it renders
@@ -740,15 +770,55 @@ export class Renderer {
     return { width: metrics.width, height: metrics.height };
   };
 
+  // Re-solving badge placement means re-running collision detection
+  // across every fighter *and* real canvas text measurement for however
+  // many label tiers each one tries (see badge-layout.ts) -- real work
+  // that scales with fighter count, on a path that used to run all
+  // 60 times a second. Which tier a badge lands on, and whether it gets
+  // staggered up/down a row, changes only when the crowd shifts
+  // meaningfully; nothing about *reading* a badge's position needs that
+  // decision re-litigated every single frame. So the decision itself
+  // (computeBadgePlacements) is only re-run every BADGE_LAYOUT_INTERVAL
+  // frames, or immediately whenever the *set* of alive fighters changes
+  // (an elimination can free up or crowd space badges were relying on --
+  // riding out a stale decision an extra couple of frames there would be
+  // visibly wrong, not just slightly stale). Positions themselves are
+  // still recomputed every frame: each cached placement remembers the
+  // fighter head position it was solved against, and every frame
+  // re-anchors it to that fighter's *current* head position by the same
+  // delta -- so a badge visibly follows its fighter at full 60Hz even on
+  // a frame where the underlying tier/stagger decision was not touched.
   private layoutBadges(candidates: BadgeCandidate[], bodyBoxes: BodyBox[]): void {
     this.ensureBadgePool(candidates.length);
-    const placements = computeBadgePlacements(candidates, bodyBoxes, this.names, this.viewSize, this.measureBadgeText);
+    this.badgeFrameCounter += 1;
+    const slotsKey = candidates.map((c) => c.slot).join(',');
+    const structureChanged = slotsKey !== this.lastBadgeCandidateSlotsKey;
+    const dueForRecompute = this.badgeFrameCounter % Renderer.BADGE_LAYOUT_INTERVAL === 0;
+    if (structureChanged || dueForRecompute || this.cachedBadgePlacements.length === 0) {
+      this.cachedBadgePlacements = computeBadgePlacements(candidates, bodyBoxes, this.names, this.viewSize, this.measureBadgeText);
+      this.cachedBadgeHeadBySlot = new Map(candidates.map((c) => [c.slot, { x: c.headX, y: c.headY }]));
+      this.lastBadgeCandidateSlotsKey = slotsKey;
+    }
+    const curHeadBySlot = new Map(candidates.map((c) => [c.slot, { x: c.headX, y: c.headY }]));
     let textIndex = 0;
-    for (const p of placements) {
+    const followedPlacements: FollowedBadgePlacement[] = [];
+    for (const p of this.cachedBadgePlacements) {
+      const cachedHead = this.cachedBadgeHeadBySlot.get(p.candidate.slot);
+      const curHead = curHeadBySlot.get(p.candidate.slot);
+      const dx = cachedHead && curHead ? curHead.x - cachedHead.x : 0;
+      const dy = cachedHead && curHead ? curHead.y - cachedHead.y : 0;
+      const x = p.x + dx;
+      const y = p.y + dy;
+      followedPlacements.push({
+        candidate: p.candidate,
+        x,
+        y,
+        box: { left: p.box.left + dx, right: p.box.right + dx, top: p.box.top + dy, bottom: p.box.bottom + dy },
+      });
       const text = this.badgeTexts[textIndex] as Text;
       textIndex += 1;
       text.text = p.label;
-      text.position.set(p.x, p.y);
+      text.position.set(x, y);
       text.visible = true;
       // The local player's own badge gets the same bright fill as the
       // rest for consistency, but a slightly larger size so it is the
@@ -767,7 +837,7 @@ export class Renderer {
     for (let i = textIndex; i < this.badgeTexts.length; i++) {
       (this.badgeTexts[i] as Text).visible = false;
     }
-    this.drawLocalPointer(placements);
+    this.drawLocalPointer(followedPlacements);
   }
 
   /** Draws (or hides) the single constant-size "this is you" pointer --
@@ -786,7 +856,7 @@ export class Renderer {
    * automatically whenever there is no local-player badge placement --
    * i.e. whenever there is no local player at all (attract mode) -- by
    * computeLocalPointer returning null. */
-  private drawLocalPointer(placements: ReturnType<typeof computeBadgePlacements>): void {
+  private drawLocalPointer(placements: readonly LocalPointerInput[]): void {
     const pos = computeLocalPointer(placements, {
       width: this.viewSize.width,
       height: this.viewSize.height,

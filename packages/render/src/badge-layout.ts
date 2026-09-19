@@ -328,8 +328,12 @@ export const LOCAL_POINTER_GAP_PX = 4;
  * can never appear with no local player (attract mode) and never floats
  * disconnected from the identity cue it's reinforcing. Returns null when
  * there is no local-player placement this frame. */
+export type LocalPointerInput = Pick<BadgePlacement, 'candidate' | 'x' | 'y'> & {
+  box: Pick<BadgeBox, 'top'>;
+};
+
 export function computeLocalPointer(
-  placements: readonly BadgePlacement[],
+  placements: readonly LocalPointerInput[],
   view?: { width: number; height: number },
 ): LocalPointer | null {
   const local = placements.find((p) => p.candidate.isLocalPlayer);
