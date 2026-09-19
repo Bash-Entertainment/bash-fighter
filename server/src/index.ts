@@ -643,7 +643,7 @@ function handleText(conn: ClientConn, text: string): void {
       }
 
       const name = sanitiseName(msg.name);
-      const { match, slot } = manager.joinLobby(name, msg.characterId, msg.profile?.qa === true);
+      const { match, slot } = manager.joinLobby(name, msg.characterId, msg.profile?.qa === true, msg.arena);
       conn.match = match;
       conn.slot = slot;
       watcherSet(match.id).add(conn.id);

@@ -29,11 +29,36 @@ anywhere. Any other message before `hello`, or a malformed message, gets
 
 | `t` | Fields | Meaning |
 |---|---|---|
-| `hello` | `protocolVersion`, `name`, `profile`? | First message. Server assigns a match/slot and replies `welcome`. `profile` is an optional, small, non-identifying client snapshot (see below) used only for engagement telemetry -- see `docs/MEASUREMENT.md`. |
+| `hello` | `protocolVersion`, `name`, `profile`?, `arena`? | First message. Server assigns a match/slot and replies `welcome`. `profile` is an optional, small, non-identifying client snapshot (see below) used only for engagement telemetry -- see `docs/MEASUREMENT.md`. `arena` is a dev-only stage pin (see below). |
 | `spectate` | — | Client wants to only watch, not play (used after being assigned, or after elimination to keep watching without reconciliation). |
 | `pong` | `id` | Echo of a server `ping`, for RTT measurement. |
 | `startNow` | — | Sent by a client holding a seat in a still-filling lobby (the waiting screen's "Start now" button): fills the rest of that lobby with bots and starts immediately, instead of waiting out the countdown/bot-fill grace period. The server only honours this from a connection that actually holds a seat in that exact match (never a spectator, never a stranger); once the match has left the lobby phase, further `startNow` messages for it are a silent no-op, so a client may resend freely (e.g. a double click). |
 | `sessionReport` | `firstInputMs`, `inputTicks`, `frameMedianMs`, `frameP95Ms`, plus optional device/frame/input telemetry (see below) | Engagement telemetry only, added 2026-09-13 -- see `docs/MEASUREMENT.md`. Sent periodically (every ~5s) and once more, best-effort, when the tab is hidden. Never required for the match to function; a client that never sends one simply produces a less complete `[sessionEnd]` server log line. `firstInputMs` is milliseconds from match start to this seat's first non-neutral local input, or `null` if none yet. `inputTicks` is the cumulative count of ticks with any input. `frameMedianMs`/`frameP95Ms` are a rolling client frame-time distribution in ms. All fields are validated and clamped server-side (see `packages/net/src/protocol.ts`); a malformed payload is simply rejected like any other bad control message, never trusted partially. All fields beyond the four above are optional and may be absent from an older client build -- the server always treats absence as "not tracked", never a fabricated zero, and a report with none of them still validates and stores. As of 2026-09-15 this includes six `slowFrame*` fields (see "Slow-frame attribution" table below); an earlier 2026-09-14 change added `frameHistogram`, `hiddenFrames`, `networkHitchCount`, `keyboardInputTicks`, `touchInputTicks`, `gamepadInputTicks` (see `packages/net/src/protocol.ts` for their exact shapes -- not re-documented here). As of 2026-09-15 it also includes `visibleMs`/`hiddenMs` -- cumulative real ms of frame deltas observed with the tab visible vs hidden this match, the numerator for the "actually playing" session-duration metric (see `docs/MEASUREMENT.md` "Actually-playing session duration"); each is clamped to 0..21,600,000ms (6h) server-side and absence means "not tracked", same convention as every other optional field here. |
+
+### `hello.arena` (dev-only)
+
+An optional stage pin for local/CI development (issue #19): the id of a
+registered arena (see `@bash-fighter/content`'s `ALL_ARENAS`, e.g.
+`the-atoll`) the client asks the server to pin the match's stage to instead
+of the seeded pick. Two independent gates keep it out of production:
+
+- **Client side:** a dev build only. `NetMatch` reads `?arena=<id>` from
+  the URL, but puts it on the hello only when `import.meta.env.DEV` is
+  true -- a production build never sends it however the URL is mangled.
+- **Server side:** explicit opt-in. The server honours the request only
+  when `MATCH_ARENA_OVERRIDE=1` is set (the same `MATCH_*` env pattern as
+  every other dev/test override; the production systemd unit sets none of
+  them) and only when the id is registered (`isKnownArenaId`). A request
+  without the opt-in, or with an unknown id, is silently ignored and the
+  seeded `pickArenaId(seed)` stands -- never an error.
+
+Older servers that predate the field drop it like any other unrecognised
+registry validation happens server-side anyway. When the pin wins, the
+`[matchStart]` log line carries `arenaPinned: true` so a journalctl reader
+can tell a pinned dev/CI match from a seeded one. The first joiner to
+actually present a pin claims it for that lobby: a joiner without one
+neither claims nor blocks, and a later joiner never retargets a lobby
+another joiner has already pinned.
 
 ### `hello.profile`
 

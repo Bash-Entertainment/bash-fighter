@@ -4,7 +4,7 @@
 import { randomBytes } from 'node:crypto';
 import { Sim, makeInputFrame, type InputFrame, type MatchSettings, type WinCondition } from '@bash-fighter/sim/src/index.ts';
 import { BotController, BotDifficulty, deriveBotSeed, type BotDifficultyValue } from '@bash-fighter/sim/src/ai/bot.ts';
-import { createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID, pickArenaId } from '@bash-fighter/content/src/index.ts';
+import { createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID, pickArenaId, isKnownArenaId } from '@bash-fighter/content/src/index.ts';
 import { SNAPSHOT_HZ, dedupeName } from '@bash-fighter/net/src/protocol.ts';
 import { recordTickDurationMs } from './tick-metrics.ts';
 import { PRODUCTION_DEFAULT_BOT_DIFFICULTY_NAME } from './match-defaults.ts';
@@ -232,6 +232,32 @@ export class Match {
   plannedWinCondition?: WinCondition;
   plannedTimeLimitTicks?: number;
   plannedStartingStocks?: number;
+
+  /** Dev-only stage pin request (issue #19): the arena id a client asked
+   *  for via the hello handshake's `arena` field (see HelloMessage.arena).
+   *  Set by RoomManager from the first joiner that actually presents one
+   *  (a joiner without a pin neither claims nor blocks one, and a later
+   *  joiner never retargets a lobby that already has a claim). NOT
+   *  honoured by start() unless the server explicitly opted in via
+   *  MATCH_ARENA_OVERRIDE=1, so a production server ignores it no matter
+   *  what any client sends, and an unknown id falls back to the seeded
+   *  pick anyway. Undefined by default: every existing test that
+   *  constructs a Match directly keeps the seeded pick. */
+  arenaRequest?: string;
+
+  /** Resolves the dev-only arena pin against the server-side opt-in --
+   *  the single precedence point start() and any caller that wants to
+   *  preview the pick both use: the request only wins when
+   *  MATCH_ARENA_OVERRIDE=1 AND the id is a registered one (isKnownArenaId
+   *  -- a garbled or unregistered request falls back to the seeded pick
+   *  rather than erroring a lobby). Production (systemd unit sets none of
+   *  this) always returns the seeded pick. */
+  effectiveArenaId(): string {
+    if (process.env.MATCH_ARENA_OVERRIDE === '1' && isKnownArenaId(this.arenaRequest)) {
+      return this.arenaRequest!;
+    }
+    return pickArenaId(this.seed);
+  }
 
   /** What start() will actually pick, computable before start() has run
    * (needed for the lobby message: a waiting player must be told the
@@ -533,7 +559,10 @@ export class Match {
     // Seeded, not wall-clock-rotated: two matches created in the same
     // second must not collide, and a match must be able to replay
     // identically from its recorded seed (see pickArenaId's comment).
-    this.arenaId = pickArenaId(this.seed);
+    // Dev-only exception (issue #19): a hello-supplied arenaRequest pins
+    // the stage when the server explicitly opted in via
+    // MATCH_ARENA_OVERRIDE=1 -- see effectiveArenaId for the precedence.
+    this.arenaId = this.effectiveArenaId();
     // Per-seat character, resolved from each seat's requested id (see
     // Seat.characterId's comment for the bot/unset/unknown-id fallback).
     const characters = this.seats.map((seat) => resolveCharacterId(seat.characterId));
@@ -596,6 +625,13 @@ export class Match {
     console.log(`[matchStart] ${JSON.stringify({
       matchId: this.id,
       arenaId: this.arenaId,
+      // Only present when a dev-only hello pin actually won (issue #19):
+      // a log reader can tell a pinned dev/CI match from a seeded pick
+      // at a glance, and an absent key keeps the production line's shape
+      // byte-identical to before.
+      ...(process.env.MATCH_ARENA_OVERRIDE === '1' && this.arenaRequest !== undefined && this.arenaId === this.arenaRequest
+        ? { arenaPinned: true }
+        : {}),
       winCondition: this.winCondition,
       seatCount: this.seats.length,
     })}`);
