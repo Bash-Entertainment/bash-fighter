@@ -2,7 +2,14 @@
 // slightly austere. No gradients, no neon glow — flat fills, crisp edges.
 export const PALETTE = {
   background: 0x0b0d10,
-  stageFill: 0x1c2026,
+  // Raised from 0x1c2026 on 2026-09-19. The old fill sat at a 1.19:1
+  // contrast ratio against the background, so platform bodies were
+  // invisible and a stage read as a few thin bright edge lines floating in
+  // black -- a plausible reading of the two "camera readability 1/5"
+  // reports. This sits at 1.72:1 against the background (mass visible),
+  // still 9:1 under the bright stage edge, and 2.47:1 against the darkest
+  // fighter colour so fighters stay separate from the ground they stand on.
+  stageFill: 0x333b45,
   stageEdge: 0xe8e6df,
   blastZone: 0x3a1418,
   gridLine: 0x14171b,
