@@ -372,7 +372,12 @@ local play with 20 characters for solo layout testing (see
 (`packages/input/src/touch.ts`) forces touch-control detection on for
 testing touch UI without a touch device; `?bashTest=1`
 (`packages/app/src/main.ts`) exposes `window.__bashTestMatch` /
-`__bashTestTouch` / `__bashTestAudio` test hooks; and `?qa=1`
+`__bashTestTouch` / `__bashTestAudio` test hooks; `?minFighterPx=<n>`
+(`packages/app/src/main.ts` -> `setDevMinFighterPx`) raises the camera's
+min-fighter-size legibility floor from its normal 26px, which is the only
+way to watch the follow path in a real browser -- the floor otherwise only
+engages on viewports narrower or shorter than the test tooling can drive;
+and `?qa=1`
 (`packages/app/src/main.ts`'s `isQaSession`) sets `hello.profile.qa =
 true` for this session -- this is the only one of the four that gets
 recorded in the private stats. None of the four are secret and none
