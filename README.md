@@ -1,6 +1,6 @@
 # Bash Fighter
 
-[![CI](https://github.com/BashEntertainment/bash-fighter/actions/workflows/ci.yml/badge.svg)](https://github.com/BashEntertainment/bash-fighter/actions/workflows/ci.yml)
+[![CI](https://github.com/Bash-Entertainment/bash-fighter/actions/workflows/ci.yml/badge.svg)](https://github.com/Bash-Entertainment/bash-fighter/actions/workflows/ci.yml)
 
 Play it: https://bashfighter.com/
 
