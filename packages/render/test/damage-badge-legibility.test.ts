@@ -255,3 +255,29 @@ test("the local player's world badge keeps its name but drops the percent (the c
   assert.equal(local.hasPercent, false);
   assert.ok(other.label.includes('%'), `expected a non-local badge to still show its percent, got "${other.label}"`);
 });
+
+// 2026-09-18, part 7. Live play on production showed nearly every badge
+// drawn on a single row at the ground line, merging into unreadable mush,
+// while the placement code believed it had staggered them apart. Cause:
+// when a stagger offset resolved a collision the reserved box moved up a
+// row, but the placement's y kept the un-staggered anchor, so the text
+// was drawn back onto the crowded row it had just been bumped off. That
+// is the fourth reserved-space-versus-drawn-space mismatch in this
+// feature, so the test ties the two together: the box reserved for a
+// placement must be the box its drawn y implies.
+test('a staggered badge is drawn at the y of the box reserved for it', () => {
+  const candidates: BadgeCandidate[] = [];
+  for (let i = 0; i < 4; i++) {
+    candidates.push({ slot: i, isLocalPlayer: false, headX: 400, headY: 300, percent: 25 + i });
+  }
+  const names = candidates.map((_, i) => `Fighter${i}`);
+  const placements = computeBadgePlacements(candidates, [], names, { width: 1280, height: 720 }, fakeMeasureText);
+  assert.ok(placements.length >= 2, 'expected at least two badges to survive a shared spot');
+  const rows = new Set(placements.map((p) => p.y));
+  assert.equal(rows.size, placements.length, 'badges sharing a spot must be drawn on distinct rows');
+  // The reserved box sits a fixed gap above the drawn anchor, so that gap
+  // must be identical for every placement. A staggered badge whose y was
+  // left behind shows up here as a different gap.
+  const gaps = new Set(placements.map((p) => p.box.bottom - p.y));
+  assert.equal(gaps.size, 1, `reserved boxes and drawn positions disagree: gaps ${[...gaps].join(', ')}`);
+});

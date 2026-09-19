@@ -228,6 +228,13 @@ export function computeBadgePlacements(
           placedBoxes.some((p) => boxesOverlap(p, staggered)) || bodyGuard.some((b) => boxesOverlap(b, staggered));
         if (!staggerCollides) {
           box = staggered;
+          // The drawn y must move with the box reserved for it. Keeping
+          // the un-staggered anchorY here (the bug live play found on
+          // 2026-09-18) reserved a row above the head but drew the text
+          // back on the crowded original row, so at 20 fighters nearly
+          // every badge landed on the same ground-line row and merged
+          // into mush.
+          anchorY += offset;
           collides = false;
           break;
         }
