@@ -136,14 +136,15 @@ test('a fighter with no percent given (e.g. attract-mode ghost) never claims has
   assert.equal(placements[0]?.label, '1');
 });
 
-test('a damage suffix that would collide is dropped before the identity label is', () => {
-  // Two candidates close enough that name+pct collides but the bare
-  // number/name alone does not -- picking the mid tier (number + pct)
-  // over the top tier (name + pct) proves the fallback engages per-tier,
-  // not just name-vs-number as before this feature.
+test('two close candidates both keep their damage numeral by falling back through tiers/stagger rather than dropping identity first', () => {
+  // Two candidates close enough that name+pct collides for both -- the
+  // reordered ladder (name+%, number+%, %-alone, stagger, only then
+  // identity-without-%) should still land a percent for each of them
+  // rather than surviving via a dropped percent, which is what the old
+  // identity-first ladder would have done.
   const candidates: BadgeCandidate[] = [
     { slot: 0, isLocalPlayer: false, headX: 100, headY: 100, percent: 42 },
-    { slot: 1, isLocalPlayer: false, headX: 118, headY: 100, percent: 7 },
+    { slot: 1, isLocalPlayer: false, headX: 132, headY: 100, percent: 7 },
   ];
   const bodyBoxes: BodyBox[] = [];
   const placements = computeBadgePlacements(candidates, bodyBoxes, ['Rook', 'Wisp']);
@@ -152,5 +153,81 @@ test('a damage suffix that would collide is dropped before the identity label is
       assert.ok(!boxesOverlap(placements[i]!.box, placements[j]!.box), 'two badges overlap');
     }
   }
-  assert.ok(placements.length < 2, 'expected one candidate to be dropped rather than overlap at this spacing');
+  const withPercent = placements.filter((p) => p.hasPercent).length;
+  assert.ok(withPercent >= 1, 'expected at least one candidate to keep its damage numeral');
+});
+
+// 2026-09-18: a live 20-fighter match measured on production showed only
+// 9 of 20 badges visible a few seconds in, once fighters converge from
+// their tidy two-row spawn into a real cluster -- the spawn-frame tests
+// above are the easy case and do not exercise this. This pins the new
+// ladder (name+%, number+%, percent-alone, one-row stagger, only then
+// drop) against a deliberately tight cluster: fighters packed within a
+// radius small enough that even numeric badges routinely collide, the
+// way a real mid-match dogpile does.
+test('a tight mid-match cluster still shows a damage numeral for essentially every fighter', () => {
+  const vw = 1280;
+  const vh = 720;
+  const centerX = vw / 2;
+  const centerY = vh / 2;
+  const count = 20;
+  const bodyHalfWidth = 10;
+  const bodyHeight = 26;
+  // A blob, not a ring: real convergence during a fight bunches fighters
+  // into an irregular huddle with some touching shoulders and others a
+  // half-body apart -- unlike a symmetric ring, badges get uneven local
+  // slack to work with, which is what the stagger fallback is for. This
+  // is the shape the live match actually showed (nine of twenty world
+  // badges survived there under the old, identity-first ladder).
+  const cols = 5;
+  const spacingX = bodyHalfWidth * 4.4;
+  const spacingY = bodyHeight * 2.2;
+  const candidates: BadgeCandidate[] = [];
+  const bodyBoxes: BodyBox[] = [];
+  for (let i = 0; i < count; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const jitterX = ((i * 7) % 5) - 2;
+    const jitterY = ((i * 11) % 5) - 2;
+    const x = centerX + (col - (cols - 1) / 2) * spacingX + jitterX;
+    const y = centerY + (row - 1.5) * spacingY + jitterY;
+    bodyBoxes.push({ slot: i, left: x - bodyHalfWidth, right: x + bodyHalfWidth, top: y - bodyHeight, bottom: y });
+    candidates.push({ slot: i, isLocalPlayer: i === 0, headX: x, headY: y - bodyHeight - 4, percent: (i * 23) % 160 });
+  }
+
+  const placements = computeBadgePlacements(candidates, bodyBoxes, undefined, { width: vw, height: vh });
+  const withDamage = placements.filter((p) => p.hasPercent).length;
+
+  // No overlap regardless of density.
+  for (let i = 0; i < placements.length; i++) {
+    for (let j = i + 1; j < placements.length; j++) {
+      assert.ok(!boxesOverlap(placements[i]!.box, placements[j]!.box), 'two badges overlap in a tight cluster');
+    }
+  }
+  // The whole point of the reordered ladder: a numeral should survive
+  // for almost everyone, not just the sparse few the old name-first
+  // ladder preserved.
+  assert.ok(
+    withDamage >= count * 0.85,
+    `expected almost every fighter to show a damage numeral in a tight cluster, got ${withDamage}/${count}`,
+  );
+  // And every box stays inside the visible canvas.
+  for (const p of placements) {
+    assert.ok(p.box.left >= -0.01 && p.box.right <= vw + 0.01, 'badge box left the visible canvas horizontally');
+    assert.ok(p.box.top >= -0.01 && p.box.bottom <= vh + 0.01, 'badge box left the visible canvas vertically');
+  }
+});
+
+test('a fighter near the left edge of the canvas is clamped, not hidden behind the sidebar', () => {
+  const view = { width: 1280, height: 720 };
+  const candidates: BadgeCandidate[] = [{ slot: 0, isLocalPlayer: false, headX: 5, headY: 100, percent: 42 }];
+  const placements = computeBadgePlacements(candidates, [], undefined, view);
+  assert.equal(placements.length, 1);
+  assert.ok(placements[0]!.box.left >= 0, 'badge box left edge sits behind x=0, i.e. behind the sidebar');
+});
+
+test("bot names drop the world badge's redundant \"CPU \" prefix", () => {
+  const candidates: BadgeCandidate[] = [{ slot: 0, isLocalPlayer: false, headX: 100, headY: 100, percent: 10 }];
+  const placements = computeBadgePlacements(candidates, [], ['CPU Kestrel']);
+  assert.equal(placements[0]!.label, 'Kestrel 10%');
 });

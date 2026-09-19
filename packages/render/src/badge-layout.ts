@@ -50,6 +50,12 @@ export interface BadgePlacement {
   candidate: BadgeCandidate;
   label: string;
   box: BadgeBox;
+  /** Draw anchor -- equal to candidate.headX/headY unless clampBoxToView
+   * had to slide the box back onto the visible canvas, in which case
+   * this is the shifted position and `box` matches it. Renderers must
+   * draw at (x, y), never at candidate.headX/headY directly. */
+  x: number;
+  y: number;
   isNameLabel: boolean;
   /** True when `label` ends with the damage-percent suffix -- i.e. the
    * richer tier was reachable without colliding with anything. Lets the
@@ -76,6 +82,7 @@ export function computeBadgePlacements(
   candidates: readonly BadgeCandidate[],
   bodyBoxes: readonly BodyBox[],
   names: readonly string[] | undefined,
+  view?: { width: number; height: number },
 ): BadgePlacement[] {
   const local = candidates.find((c) => c.isLocalPlayer);
   const ordered = [...candidates].sort((a, b) => {
@@ -110,20 +117,34 @@ export function computeBadgePlacements(
     // a neighbour at full width forever (checking this fallback only
     // decided whether to *place* a badge, never whether to keep it once
     // placed, so it costs the local player nothing to run it too).
-    const name = names?.[c.slot];
+    const rawName = names?.[c.slot];
+    // World badges drop the "CPU " prefix bots carry in their full name
+    // (packages/sim/src/ai/bot.ts's nameFor): the sidebar chip grid
+    // already marks bots separately (see hud-text.ts's chipDisplayName,
+    // which does the same strip for the same reason), and in the world
+    // those four characters are exactly the width the damage numeral
+    // needs to survive a mid-match cluster.
+    const name = rawName?.startsWith('CPU ') ? rawName.slice(4) : rawName;
     const nameLabel = name && name.length > 0 ? name : undefined;
     const pct = c.percent !== undefined ? Math.max(0, Math.round(c.percent)) : undefined;
     const pctSuffix = pct !== undefined ? ` ${pct}%` : '';
+    const pctOnly = pct !== undefined ? `${pct}%` : undefined;
 
-    // Damage readability tiers, richest first: identity+damage, then
-    // bare-number+damage (damage kept, identity dropped -- damage is the
-    // thing this whole feature exists for), then identity alone, then the
-    // bare number as the last-resort floor that already existed before
-    // this feature. Each tier is only tried if the previous one collided,
-    // exactly like the pre-existing name->number fallback this extends.
+    // Damage readability tiers, richest first, but with the damage
+    // numeral itself as the most durable element rather than the first
+    // casualty (2026-09-18 live-match measurement: nine of twenty badges
+    // visible mid-match, because the old ladder dropped straight from
+    // "name+%" to "number+%" to "name" to "number" to nothing -- the same
+    // width budget kept getting spent on identity, which a real cluster
+    // usually cannot afford, instead of on the two-or-three-character
+    // percent a cluster almost always can). Order: name+%, number+%,
+    // percent alone (very little width, should fit even in a tight
+    // cluster), then -- and only then -- identity with no percent at
+    // all, and the bare number as the absolute last non-empty rung.
     const tiers: { label: string; hasPercent: boolean }[] = [];
     if (nameLabel) tiers.push({ label: nameLabel + pctSuffix, hasPercent: pct !== undefined });
     tiers.push({ label: numberLabel + pctSuffix, hasPercent: pct !== undefined });
+    if (pctOnly) tiers.push({ label: pctOnly, hasPercent: true });
     if (nameLabel) tiers.push({ label: nameLabel, hasPercent: false });
     tiers.push({ label: numberLabel, hasPercent: false });
 
@@ -137,18 +158,79 @@ export function computeBadgePlacements(
       box = badgeBox(c.headX, c.headY, chosen.label.length, c.isLocalPlayer, chosen.hasPercent);
       collides = placedBoxes.some((p) => boxesOverlap(p, box)) || otherBodies.some((b) => boxesOverlap(b, box));
     }
+    // Even the percent-only rung can collide in a truly packed cluster.
+    // Before dropping the badge entirely (or, for the local player, who
+    // is exempt from being dropped, before drawing it wherever it lands),
+    // try stacking it one row higher -- the way nameplates stack in many
+    // other games -- and only fall further if that still collides.
+    if (collides) {
+      // Try a small ladder of stagger offsets -- one row up (the common
+      // case: a badge's own row is crowded but the row above it, over a
+      // neighbour's head, is clear), then one row down, then two rows up
+      // -- before giving up. A real cluster is a blob, not a symmetric
+      // ring, so in practice one offset is almost always enough; trying a
+      // few costs nothing and rescues the cases a single offset cannot.
+      for (const offset of STAGGER_OFFSETS) {
+        const staggered = badgeBox(c.headX, c.headY + offset, chosen.label.length, c.isLocalPlayer, chosen.hasPercent);
+        const staggerCollides =
+          placedBoxes.some((p) => boxesOverlap(p, staggered)) || otherBodies.some((b) => boxesOverlap(b, staggered));
+        if (!staggerCollides) {
+          box = staggered;
+          collides = false;
+          break;
+        }
+      }
+    }
     if (collides && !c.isLocalPlayer) continue;
-    placedBoxes.push(box);
+    const clamped = view ? clampBoxToView(box, view) : { box, dx: 0, dy: 0 };
+    placedBoxes.push(clamped.box);
     placements.push({
       candidate: c,
       label: chosen.label,
-      box,
+      box: clamped.box,
+      x: c.headX + clamped.dx,
+      y: c.headY + clamped.dy,
       isNameLabel: chosen.label !== numberLabel && chosen.label !== numberLabel + pctSuffix,
       hasPercent: chosen.hasPercent,
       percent: pct,
     });
   }
   return placements;
+}
+
+// How far up, in px, a colliding badge is stacked before it is dropped
+// entirely -- see the stagger step above. Slightly more than one badge
+// row so a staggered badge never touches the row it was bumped from.
+const BADGE_ROW_STAGGER_PX = 15;
+// Ladder of vertical offsets tried, in order, before a badge is dropped
+// entirely (or, for the exempt local player, placed wherever it lands).
+// A real mid-match huddle is dense enough that a single row of slack
+// often is not enough headroom to seat every damage numeral -- widening
+// this ladder is cheap (no extra text, no smaller font) and measurably
+// raises how many fighters keep a visible numeral in a tight cluster;
+// see scripts/damage-badge-midmatch-metrics.mjs.
+const STAGGER_OFFSETS = [-1, 1, -2, 2, -3, 3].map((n) => n * BADGE_ROW_STAGGER_PX);
+
+/** Slides a box (and the (dx,dy) its anchor moved by) fully inside the
+ * visible canvas, the same idea as computeLocalPointer's off-screen
+ * clamp: `view` here is already the canvas's own size (see index.ts's
+ * viewSize, which excludes the HUD sidebar), so a box that pokes past
+ * its left/top/right/bottom edge is a box that would otherwise render
+ * underneath the sidebar DOM element or off the far edge -- both places
+ * a player near the edge of a cluster genuinely stood in a live match. */
+function clampBoxToView(box: BadgeBox, view: { width: number; height: number }): { box: BadgeBox; dx: number; dy: number } {
+  let dx = 0;
+  let dy = 0;
+  if (box.left < 0) dx = -box.left;
+  else if (box.right > view.width) dx = view.width - box.right;
+  if (box.top < 0) dy = -box.top;
+  else if (box.bottom > view.height) dy = view.height - box.bottom;
+  if (dx === 0 && dy === 0) return { box, dx, dy };
+  return {
+    box: { left: box.left + dx, right: box.right + dx, top: box.top + dy, bottom: box.bottom + dy },
+    dx,
+    dy,
+  };
 }
 
 /** Fixed screen-space gap, in pixels, between the top of the local
@@ -176,7 +258,7 @@ export function computeLocalPointer(
 ): LocalPointer | null {
   const local = placements.find((p) => p.candidate.isLocalPlayer);
   if (!local) return null;
-  const x = local.candidate.headX;
+  const x = local.x ?? local.candidate.headX;
   const y = local.box.top - LOCAL_POINTER_GAP_PX;
   if (!view) return { x, y, offScreen: false, angle: 0 };
   // A fighter can genuinely be outside the frame: launched toward a blast

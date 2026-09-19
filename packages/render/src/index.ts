@@ -702,13 +702,13 @@ export class Renderer {
 
   private layoutBadges(candidates: BadgeCandidate[], bodyBoxes: BodyBox[]): void {
     this.ensureBadgePool(candidates.length);
-    const placements = computeBadgePlacements(candidates, bodyBoxes, this.names);
+    const placements = computeBadgePlacements(candidates, bodyBoxes, this.names, this.viewSize);
     let textIndex = 0;
     for (const p of placements) {
       const text = this.badgeTexts[textIndex] as Text;
       textIndex += 1;
       text.text = p.label;
-      text.position.set(p.candidate.headX, p.candidate.headY);
+      text.position.set(p.x, p.y);
       text.visible = true;
       // The local player's own badge gets the same bright fill as the
       // rest for consistency, but a slightly larger size so it is the
