@@ -14,6 +14,8 @@ import { dirname, join } from 'node:path';
 import {
   modeLabelText,
   winConditionText,
+  objectiveLineText,
+  koStandingLineText,
   eliminationFeedLine,
   chipDisplayName,
   sortFeedEntriesNewestFirst,
@@ -131,4 +133,33 @@ test('the chip name element uses chipDisplayName, not the raw (possibly "CPU "-p
 test('the match-status block gets real match settings on both online and local paths', () => {
   assert.match(mainSrc, /winCondition:\s*onlineSettings\.winCondition/, 'online hud.update() call must pass the real win condition');
   assert.match(mainSrc, /winCondition:\s*localSettings\.winCondition/, 'local hud.update() call must pass the real win condition');
+});
+
+
+test('objectiveLineText states a full sentence for each mode, derived from the same mode/win-condition text the sidebar already used', () => {
+  assert.equal(objectiveLineText('battleRoyale'), 'Battle Royale: the last fighter standing wins.');
+  assert.equal(objectiveLineText('timedKO'), 'Timed Brawl: most knockouts when the clock runs out wins.');
+  assert.equal(objectiveLineText('stocks'), 'Stocks: the last stock standing wins.');
+});
+
+test('koStandingLineText reports own KOs and rank, omitting the redundant leader clause when already 1st', () => {
+  assert.equal(koStandingLineText(7, 1, 20, 7), '7 KOs \u00b7 1st of 20');
+  assert.equal(koStandingLineText(3, 5, 20, 9), '3 KOs \u00b7 5th of 20 \u00b7 leader 9');
+  assert.equal(koStandingLineText(1, 1, 20, 1), '1 KO \u00b7 1st of 20');
+});
+
+test('the persistent objective line is derived from the mode via objectiveLineText, not hardcoded per call site', () => {
+  assert.match(
+    hudSrc,
+    /matchModeLine\.textContent\s*=\s*objectiveLineText\(matchInfo\.winCondition\)/,
+    'hud.ts must build the objective line from objectiveLineText(matchInfo.winCondition) so it can never drift from the sidebar mode/win-condition source of truth',
+  );
+});
+
+test('the knockout standing line only shows for Timed Brawl (winCondition timedKO)', () => {
+  assert.match(
+    hudSrc,
+    /if \(matchInfo\.winCondition === 'timedKO'[\s\S]*?koStandingLine\.style\.display = ''/,
+    "koStandingLine must only be un-hidden inside a winCondition === 'timedKO' branch",
+  );
 });

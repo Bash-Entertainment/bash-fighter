@@ -7,7 +7,8 @@
 // from spectator/types.ts's MatchAdapter once wired up.
 import { fixed as fx, FighterStateId, type FighterSnapshot } from '@bash-fighter/sim';
 import { PALETTE } from '@bash-fighter/render';
-import { survivorsLineText, modeLabelText, winConditionText, eliminationFeedLine, chipDisplayName, sortFeedEntriesNewestFirst, type EliminationFeedEntry } from './hud-text.ts';
+import { survivorsLineText, objectiveLineText, koStandingLineText, eliminationFeedLine, chipDisplayName, sortFeedEntriesNewestFirst, type EliminationFeedEntry } from './hud-text.ts';
+import { koStandingInfo, type TimedBrawlScore } from '../timed-brawl.ts';
 
 export interface HudFighterExtra {
   eliminated: boolean;
@@ -51,6 +52,7 @@ export class Hud {
   private readonly matchStatus: HTMLDivElement;
   private readonly matchModeLine: HTMLDivElement;
   private readonly matchClockLine: HTMLDivElement;
+  private readonly koStandingLine: HTMLDivElement;
   private readonly eliminationFeed: HTMLDivElement;
   /** Tracks which slots we have already emitted a feed line for, reset
    * whenever a new match starts (see show()) so a rematch doesn't carry
@@ -85,10 +87,14 @@ export class Hud {
     this.matchModeLine.className = 'match-status-mode';
     this.matchClockLine = document.createElement('div');
     this.matchClockLine.className = 'match-status-clock';
+    this.koStandingLine = document.createElement('div');
+    this.koStandingLine.className = 'match-status-ko';
+    this.koStandingLine.style.display = 'none';
     this.eliminationFeed = document.createElement('div');
     this.eliminationFeed.className = 'elimination-feed';
     this.matchStatus.appendChild(this.matchModeLine);
     this.matchStatus.appendChild(this.matchClockLine);
+    this.matchStatus.appendChild(this.koStandingLine);
     this.matchStatus.appendChild(this.eliminationFeed);
     this.root.appendChild(this.clockLine);
     this.root.appendChild(this.survivorsLine);
@@ -207,7 +213,7 @@ export class Hud {
     }
     this.survivorsLine.textContent = survivorsLineText(survivors, snapshots.length, Boolean(timedBrawl));
     this.survivorsLine.style.display = this.survivorsLine.textContent ? '' : 'none';
-    this.updateMatchStatus(snapshots, extras, names, matchInfo);
+    this.updateMatchStatus(snapshots, extras, names, matchInfo, localIndex);
   }
 
   /** Renders the mode/win-condition/clock line plus a capped elimination
@@ -220,14 +226,31 @@ export class Hud {
     extras: readonly HudFighterExtra[] | undefined,
     names: readonly string[] | undefined,
     matchInfo: HudMatchInfo | undefined,
+    localIndex: number,
   ): void {
     if (!matchInfo) {
       this.matchStatus.style.display = 'none';
       return;
     }
     this.matchStatus.style.display = '';
-    this.matchModeLine.textContent = `${modeLabelText(matchInfo.winCondition)} · ${winConditionText(matchInfo.winCondition)}`;
+    this.matchModeLine.textContent = objectiveLineText(matchInfo.winCondition);
     this.matchClockLine.textContent = matchInfo.clockText;
+    // Live knockout standing (2026-09-19): Timed Brawl only, since it's
+    // the only mode actually decided by KO count -- see koStandingInfo
+    // in timed-brawl.ts. Own count/rank + the leader's count, never a
+    // full table, so it stays quiet next to the damage sidebar.
+    if (matchInfo.winCondition === 'timedKO' && localIndex >= 0 && localIndex < snapshots.length) {
+      const scores: TimedBrawlScore[] = snapshots.map((s, i) => ({ slot: i, koCount: s.koCount, deathCount: s.deathCount }));
+      const info = koStandingInfo(scores, localIndex);
+      if (info) {
+        this.koStandingLine.textContent = koStandingLineText(info.ownKo, info.ownRank, info.totalFighters, info.leaderKo);
+        this.koStandingLine.style.display = '';
+      } else {
+        this.koStandingLine.style.display = 'none';
+      }
+    } else {
+      this.koStandingLine.style.display = 'none';
+    }
     for (let i = 0; i < snapshots.length; i++) {
       const s = snapshots[i] as FighterSnapshot;
       const extra = extras?.[i];

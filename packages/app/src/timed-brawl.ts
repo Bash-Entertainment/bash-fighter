@@ -76,3 +76,46 @@ export function buildStandings(leaderboard: readonly number[], scores: readonly 
 export function placementOf(standings: readonly TimedBrawlStanding[], slot: number): number | null {
   return standings.find((s) => s.slot === slot)?.place ?? null;
 }
+
+
+/** Deterministic best-to-worst slot order derived directly from scores,
+ * for the HUD's live standing -- mid-match there is no server-sent
+ * leaderboard array to reuse (that only arrives with the match-end
+ * message, see buildStandings' doc comment), but the tie-break rule is
+ * exactly Sim.getLeaderboard's own (packages/sim/src/sim.ts): highest
+ * koCount first, ties broken by fewest deathCount, then by slot for a
+ * fully deterministic order. Every client computes this from the same
+ * snapshot fields, so it always agrees with the server's own ordering
+ * once the match actually ends. */
+export function standingsFromScores(scores: readonly TimedBrawlScore[]): TimedBrawlStanding[] {
+  const order = [...scores]
+    .sort((a, b) => b.koCount - a.koCount || a.deathCount - b.deathCount || a.slot - b.slot)
+    .map((s) => s.slot);
+  return buildStandings(order, scores);
+}
+
+export interface KoStandingInfo {
+  ownKo: number;
+  /** 1-based; ties share a rank, same convention as TimedBrawlStanding.place. */
+  ownRank: number;
+  totalFighters: number;
+  leaderKo: number;
+}
+
+/** The three numbers the live HUD standing needs (see
+ * koStandingLineText in hud-text.ts) -- the local player's own count,
+ * own rank, and the current leader's count -- or null if localSlot
+ * isn't in scores (shouldn't happen for a real match, but this is fed
+ * straight to the UI so it must degrade rather than throw). */
+export function koStandingInfo(scores: readonly TimedBrawlScore[], localSlot: number): KoStandingInfo | null {
+  if (localSlot < 0) return null;
+  const standings = standingsFromScores(scores);
+  const own = standings.find((s) => s.slot === localSlot);
+  if (!own) return null;
+  return {
+    ownKo: own.koCount,
+    ownRank: own.place,
+    totalFighters: standings.length,
+    leaderKo: standings[0]?.koCount ?? own.koCount,
+  };
+}

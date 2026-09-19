@@ -172,6 +172,40 @@ html, body {
   text-align: center;
 }
 
+/* Always-visible how-to-play summary (2026-09-19): a real player
+   finished a full match and said they didn't understand how to win or
+   what to do. This sits above the fold, visible without opening the
+   Controls (C) or Moves (M) panels -- a short summary, not a
+   replacement for either. */
+.how-to-play {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 560px;
+  text-align: center;
+}
+
+.how-to-play-goal,
+.how-to-play-damage {
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.how-to-play-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.how-to-play-controls b {
+  color: var(--accent);
+  font-weight: 700;
+}
+
 .wordmark {
   font-size: 56px;
   font-weight: 800;
@@ -1227,6 +1261,18 @@ html, body {
   color: var(--accent-strong);
   margin-top: 4px;
   letter-spacing: 0.02em;
+}
+
+/* Live Timed Brawl knockout standing (2026-09-19): small and quiet on
+   purpose, sits between the clock and the elimination feed -- it must
+   not compete with the damage sidebar's chip grid or the world-space
+   damage badges for attention, just answer "am I winning" at a glance. */
+.match-status-ko {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-dim);
+  margin-top: 4px;
+  letter-spacing: 0.01em;
 }
 
 .elimination-feed {
