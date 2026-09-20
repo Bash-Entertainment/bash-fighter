@@ -72,9 +72,60 @@ export interface ClientConn {
    *  Seat.joinedAt, which survives a reconnect; this is this socket's own
    *  lifetime). */
   connectedAt: number;
+  /** How many times this connection's seat has been resumed from a prior
+   *  disconnect within this same match (see handleResume) -- 0 until a
+   *  resume actually happens onto this seat. Carried onto the sessionEnd
+   *  record so double-counted-vs-genuine-reconnect is visible in stats,
+   *  see server/src/session-telemetry.ts's SessionEndConnLike. */
+  reconnectCount: number;
 }
 
 const clients = new Map<string, ClientConn>();
+
+// --- One sessionEnd record per seat per match, even across a reconnect ---
+// (2026-09-20 fix for the double-counted-telemetry bug, see wiki/commit for
+// the production evidence). A human seat's whole stay in a match must
+// produce exactly one [sessionEnd]/StoredSessionEndRecord, spanning any
+// number of disconnect-then-resume cycles. Two pieces of state make that
+// true:
+//   - pendingSessionEnds: when a live seat's socket closes, we don't yet
+//     know if it will be resumed, so we stash its last-known telemetry
+//     context here instead of emitting immediately. It is resolved by
+//     exactly one of: a successful resume (adopted onto the new
+//     connection, entry deleted, nothing emitted here), the match's own
+//     grace timer expiring with no resume (onSeatGraceExpired below,
+//     emitted then), or the match ending while the seat is still in its
+//     grace window (onMatchEnd below, emitted then).
+//   - emittedSessionEnds: belt-and-suspenders de-dup keyed the same way,
+//     checked by emitSessionEndOnce right before actually writing a
+//     record, so no code path (including a connection that resumes into
+//     an already-ended match, which never held a live seat to begin with)
+//     can ever produce a second record for the same seat/match.
+interface PendingSessionEnd {
+  profile: ClientSessionProfile | null;
+  lastReport: SessionReportMessage | null;
+  reconnectCount: number;
+}
+const pendingSessionEnds = new Map<string, PendingSessionEnd>();
+const emittedSessionEnds = new Set<string>();
+
+function seatKey(matchId: string, slot: number): string {
+  return `${matchId}:${slot}`;
+}
+
+/** Writes the one-and-only [sessionEnd] log line + durable stats record
+ *  for a seat's whole stay, or does nothing if one has already been
+ *  written for this matchId+slot. */
+function emitSessionEndOnce(
+  connLike: { slot: number; profile: ClientSessionProfile | null; lastReport: SessionReportMessage | null; reconnectCount: number },
+  match: Match,
+): void {
+  const key = seatKey(match.id, connLike.slot);
+  if (emittedSessionEnds.has(key)) return;
+  emittedSessionEnds.add(key);
+  logSessionEnd(connLike, match);
+  statsRecorder.recordSessionEnd(connLike, match);
+}
 // matchId -> set of client ids watching it (players + spectators)
 const watchers = new Map<string, Set<string>>();
 
@@ -222,15 +273,25 @@ function makeEventsFor(matchId: string) {
       if (match && match.phase === 'lobby') broadcastLobby(match);
     },
     onSeatGraceExpired(slot: number) {
-      if (!LOGGING_ENABLED) return;
-      const line = {
-        ts: new Date().toISOString(),
-        connId: null,
-        matchId,
-        slot,
-        event: 'seat_grace_expired',
-      };
-      console.log(`[conn] ${JSON.stringify(line)}`);
+      if (LOGGING_ENABLED) {
+        const line = {
+          ts: new Date().toISOString(),
+          connId: null,
+          matchId,
+          slot,
+          event: 'seat_grace_expired',
+        };
+        console.log(`[conn] ${JSON.stringify(line)}`);
+      }
+      // The grace window closed with no resume: this seat's stay is over,
+      // emit its stashed telemetry now (see pendingSessionEnds docs above).
+      const match = manager.getMatch(matchId);
+      const key = seatKey(matchId, slot);
+      const pending = pendingSessionEnds.get(key);
+      if (match && pending) {
+        pendingSessionEnds.delete(key);
+        emitSessionEndOnce({ slot, ...pending }, match);
+      }
     },
     onSnapshot(tick: number, acked: Map<number, number>) {
       const match = manager.getMatch(matchId);
@@ -279,6 +340,18 @@ function makeEventsFor(matchId: string) {
       for (const cid of watcherSet(matchId)) {
         const c = clients.get(cid);
         if (c) send(c, msg);
+      }
+      // Any seat still sitting in its disconnect grace window when the
+      // match ends is genuinely over now too -- the match end boundary
+      // beats the grace timer, per the sessionEnd de-dup contract above.
+      const endedMatch = manager.getMatch(matchId);
+      if (endedMatch) {
+        for (const [key, pending] of [...pendingSessionEnds.entries()]) {
+          if (!key.startsWith(`${matchId}:`)) continue;
+          const slot = Number(key.slice(matchId.length + 1));
+          pendingSessionEnds.delete(key);
+          emitSessionEndOnce({ slot, ...pending }, endedMatch);
+        }
       }
     },
   };
@@ -353,6 +426,7 @@ const wss = new WebSocketServer({ server, path: '/socket' });
     profile: null,
     lastReport: null,
     connectedAt: Date.now(),
+    reconnectCount: 0,
   };
   clients.set(conn.id, conn);
   logConn(conn, 'connected');
@@ -389,8 +463,30 @@ const wss = new WebSocketServer({ server, path: '/socket' });
     // now, so it must never call markDisconnected again.
     const hadLiveSeat = conn.match && !conn.spectating && conn.slot >= 0 && !conn.superseded;
     if (hadLiveSeat && conn.match) {
-      logSessionEnd(conn, conn.match);
-      statsRecorder.recordSessionEnd(conn, conn.match);
+      // Telemetry for this seat's stay is emitted exactly once for the
+      // whole match, not on every close: if the match is already over
+      // there is no more grace window to wait out, so this really is the
+      // end of the stay and we emit immediately; otherwise stash the
+      // telemetry context and let the match's own grace timer (via
+      // onSeatGraceExpired) or a later match end (via onMatchEnd) decide
+      // when the stay is genuinely over -- a resume in between adopts the
+      // stash and cancels this pending emission. See pendingSessionEnds
+      // docs above.
+      if (conn.match.phase === 'ended') {
+        emitSessionEndOnce(conn, conn.match);
+      } else {
+        pendingSessionEnds.set(seatKey(conn.match.id, conn.slot), {
+          profile: conn.profile,
+          lastReport: conn.lastReport,
+          reconnectCount: conn.reconnectCount,
+        });
+      }
+      // Always mark the seat disconnected in the match's own bookkeeping,
+      // even when we emitted immediately above -- resume tokens are only
+      // reclaimable (Match.reclaimSeat) once seat.connected is false, and
+      // a seat that stayed connected all the way through match end must
+      // still be resumable afterwards (see the resume_after_match_ended
+      // branch in handleResume) to tell the player the real outcome.
       conn.match.markDisconnected(conn.slot);
       logConn(conn, 'seat_disconnected', { gracePeriod: true, ...closeInfo });
     } else if (conn.superseded) {
@@ -538,6 +634,14 @@ function handleResume(conn: ClientConn, token: string): void {
     // the client so it can show a result screen instead of hanging.
     conn.match = match;
     conn.slot = slot;
+    // Never treat this as holding a live seat: there is nothing left to
+    // disconnect from, and without this the ws 'close' handler's
+    // hadLiveSeat check (`conn.match && !conn.spectating && conn.slot >= 0`)
+    // would be true and emit a second, all-null sessionEnd record for a
+    // seat that already produced one on its real disconnect -- the bug
+    // fixed 2026-09-20. emitSessionEndOnce's own de-dup guards the same
+    // case defensively even if this flag is ever missed.
+    conn.spectating = true;
     watcherSet(match.id).add(conn.id);
     syncWatcherCount(match);
     send(conn, {
@@ -578,6 +682,22 @@ function handleResume(conn: ClientConn, token: string): void {
 
   conn.match = match;
   conn.slot = slot;
+  // Adopt whatever telemetry context the previous connection for this
+  // seat had stashed on disconnect (see pendingSessionEnds docs above), so
+  // the eventual single sessionEnd record for this seat's whole stay still
+  // reflects its profile/report rather than starting blank, and cancel
+  // that pending emission -- this connection now owns telling the seat's
+  // story. joinedAt is untouched (Match keeps the original), so the
+  // eventual sessionDurationSec still spans the whole stay including the
+  // disconnected gap.
+  const resumedKey = seatKey(match.id, slot);
+  const stashed = pendingSessionEnds.get(resumedKey);
+  if (stashed) {
+    pendingSessionEnds.delete(resumedKey);
+    conn.profile = stashed.profile;
+    conn.lastReport = stashed.lastReport;
+    conn.reconnectCount = stashed.reconnectCount + 1;
+  }
   watcherSet(match.id).add(conn.id);
   syncWatcherCount(match);
   logConn(conn, 'resume_succeeded');

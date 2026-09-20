@@ -12,6 +12,10 @@ export interface SessionEndConnLike {
   slot: number;
   profile: ClientSessionProfile | null;
   lastReport: SessionReportMessage | null;
+  /** How many times this seat's stay in the match involved a successful
+   *  resume (reclaimed via resume token) before this record was emitted.
+   *  0 for a seat that never disconnected-and-came-back. */
+  reconnectCount: number;
 }
 
 /** Server-derived "actually playing" figures for one ending session --
@@ -168,6 +172,7 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
       activePlayMs: derived.activePlayMs,
       spectatingMs: derived.spectatingMs,
       leftBeforeFirstElimination: derived.leftBeforeFirstElimination,
+      reconnectCount: conn.reconnectCount,
     };
     console.log(`[sessionEnd] ${JSON.stringify(line)}`);
   } catch (err) {

@@ -121,6 +121,10 @@ export interface StoredSessionEndRecord {
   activePlayMs: number | null;
   spectatingMs: number | null;
   leftBeforeFirstElimination: boolean | null;
+  /** How many times this seat's stay in the match involved a successful
+   *  resume before this record was emitted. 0 for a seat that never
+   *  disconnected-and-came-back. */
+  reconnectCount: number;
 }
 
 export type StatsRecord = StoredMatchEndRecord | StoredSessionEndRecord;
@@ -246,6 +250,7 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       activePlayMs: derived.activePlayMs,
       spectatingMs: derived.spectatingMs,
       leftBeforeFirstElimination: derived.leftBeforeFirstElimination,
+      reconnectCount: conn.reconnectCount,
     };
     appendStatsLine(logPath, record);
   }

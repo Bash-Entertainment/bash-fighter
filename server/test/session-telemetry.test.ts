@@ -39,6 +39,7 @@ function fakeConn(overrides: Partial<SessionEndConnLike>): SessionEndConnLike {
     slot: 0,
     profile: null,
     lastReport: null,
+    reconnectCount: 0,
     ...overrides,
   };
 }
