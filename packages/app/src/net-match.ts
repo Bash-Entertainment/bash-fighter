@@ -184,6 +184,12 @@ export class NetMatch {
     const value = typeof window !== 'undefined' ? window.devicePixelRatio : undefined;
     return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value * 100) / 100 : undefined;
   })();
+  // True when this match was entered by clicking "Play again" on the
+  // elimination/match-end overlay or win screen, rather than the start
+  // screen -- see main.ts's beginOnlineMatch(requeued) callers. Fixed at
+  // construction, like sessionDevicePixelRatio above, since it describes
+  // how THIS session began, not anything that can change mid-match.
+  private readonly requeued: boolean;
   private stopped = false;
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -336,6 +342,7 @@ export class NetMatch {
     audio: AudioManager = new AudioManager(),
     qaMode = false,
     arenaRequest?: string,
+    requeued = false,
   ) {
     this.url = url;
     this.events = events;
@@ -344,6 +351,7 @@ export class NetMatch {
     this.effectsBridge = new EffectsAudioBridge(audio);
     this.qaMode = qaMode;
     this.arenaRequest = arenaRequest;
+    this.requeued = requeued;
   }
 
   async init(parent: HTMLElement): Promise<void> {
@@ -377,6 +385,7 @@ export class NetMatch {
       frameMedianMs: this.frameTimeTracker.getMedianMs(),
       frameP95Ms: this.frameTimeTracker.getP95Ms(),
       devicePixelRatio: this.sessionDevicePixelRatio,
+      requeued: this.requeued,
       contextLostCount: this.contextLostCount,
       renderStalled: this.renderStalled,
       frameHistogram: this.frameTimeTracker.getHistogram(),

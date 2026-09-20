@@ -70,6 +70,12 @@ function summarise(records) {
   const leftEarlyTouch = leftEarlyAlive.filter((r) => r.touchActive === true).length;
   const leftEarlyPlayedAnyway = leftEarlyAlive.filter((r) => typeof r.inputTicks === 'number' && r.inputTicks > 0).length;
 
+  // Re-queue rate: of non-QA sessions, how many were entered via "Play
+  // again" rather than the start screen -- the metric we care most
+  // about for the re-queue loop.
+  const notQa = records.filter((r) => r.qa !== true);
+  const requeuedNotQaCount = notQa.filter((r) => r.requeued === true).length;
+
   return {
     count,
     endReasonCounts,
@@ -83,6 +89,8 @@ function summarise(records) {
     leftEarlyNeverPressed,
     leftEarlyTouch,
     leftEarlyPlayedAnyway,
+    requeuedNotQaCount,
+    notQaCount: notQa.length,
   };
 }
 
@@ -113,6 +121,9 @@ function printSummary(s) {
   if (s.leftEarlyAlive.length > 0) {
     console.log(`  of those: never pressed a key ${s.leftEarlyNeverPressed}, on touch ${s.leftEarlyTouch}, played but left anyway ${s.leftEarlyPlayedAnyway}`);
   }
+
+  const requeuePct = s.notQaCount > 0 ? ((s.requeuedNotQaCount / s.notQaCount) * 100).toFixed(1) : 'n/a';
+  console.log(`\nre-queue rate (non-QA sessions entered via "Play again"): ${s.requeuedNotQaCount}/${s.notQaCount} (${requeuePct}${s.notQaCount > 0 ? '%' : ''})`);
 }
 
 async function main() {

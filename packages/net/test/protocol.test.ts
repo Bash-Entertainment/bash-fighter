@@ -557,3 +557,29 @@ test('sessionReport: devicePixelRatio is kept when sane and dropped when not', (
     'a report carrying the field must stay under the session-report cap',
   );
 });
+
+// 2026-09-19. Re-queue rate (Play again vs start screen) is the metric we
+// care most about, so requeued must survive a strict boolean and get
+// dropped otherwise -- never coerced from a truthy/falsy non-boolean.
+test('sessionReport: requeued is kept only when a strict boolean', () => {
+  const sessionReportWith = (extra: Record<string, unknown>) =>
+    JSON.stringify({ t: 'sessionReport', firstInputMs: 100, inputTicks: 10, frameMedianMs: 16, frameP95Ms: 20, ...extra });
+
+  const keptTrue = parseClientControl(sessionReportWith({ requeued: true }));
+  assert.equal((keptTrue as { requeued?: boolean })?.requeued, true);
+
+  const keptFalse = parseClientControl(sessionReportWith({ requeued: false }));
+  assert.equal((keptFalse as { requeued?: boolean })?.requeued, false);
+
+  for (const bad of [1, 0, 'true', null, undefined, {}]) {
+    const parsed = parseClientControl(sessionReportWith({ requeued: bad })) as
+      | { requeued?: boolean }
+      | null;
+    assert.equal(parsed?.requeued, undefined, `requeued ${String(bad)} must be dropped`);
+  }
+
+  assert.ok(
+    sessionReportWith({ requeued: true }).length < MAX_SESSION_REPORT_BYTES,
+    'a report carrying the field must stay under the session-report cap',
+  );
+});

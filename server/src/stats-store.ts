@@ -60,6 +60,7 @@ export interface StoredSessionEndRecord {
   frameMedianMs: number | null;
   frameP95Ms: number | null;
   devicePixelRatio: number | null;
+  requeued: boolean | null;
   /** Self-declared QA hint for this seat (see Seat.qa / ClientSessionProfile.qa).
    *  Always present (true or false) on records written by this code;
    *  absent from records written before this field existed, which the
@@ -217,6 +218,7 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       frameMedianMs: report?.frameMedianMs ?? null,
       frameP95Ms: report?.frameP95Ms ?? null,
       devicePixelRatio: report?.devicePixelRatio ?? null,
+      requeued: report?.requeued ?? null,
       qa: seat.qa,
       hwConcurrencyBucket: profile?.hwConcurrencyBucket ?? null,
       deviceMemoryBucket: profile?.deviceMemoryBucket ?? null,

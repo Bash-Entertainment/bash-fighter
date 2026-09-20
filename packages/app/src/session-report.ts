@@ -465,6 +465,9 @@ export function buildSessionReportMessage(input: {
   frameP95Ms: number;
   /** Raw device pixel ratio observed at session start; omitted when unavailable. */
   devicePixelRatio?: number;
+  /** True when this match was entered via "Play again" on the elimination/
+   *  match-end overlay or win screen, rather than the start screen. */
+  requeued?: boolean;
   /** See SessionReportMessage.contextLostCount. Optional/omitted (not
    *  sent as 0) when the caller has no count to report, matching every
    *  other optional field's "absent means not tracked" convention. */
@@ -511,6 +514,9 @@ export function buildSessionReportMessage(input: {
   };
   if (typeof input.devicePixelRatio === 'number' && Number.isFinite(input.devicePixelRatio) && input.devicePixelRatio > 0) {
     msg.devicePixelRatio = Math.round(input.devicePixelRatio * 100) / 100;
+  }
+  if (typeof input.requeued === 'boolean') {
+    msg.requeued = input.requeued;
   }
   if (input.contextLostCount !== undefined) msg.contextLostCount = input.contextLostCount;
   if (input.renderStalled !== undefined) msg.renderStalled = input.renderStalled;

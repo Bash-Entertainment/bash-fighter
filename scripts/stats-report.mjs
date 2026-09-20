@@ -562,6 +562,10 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
     else if (cls === 'noQaSeats') matchesByQa.noQaSeats.push(m);
     else matchesByQa.unknown.push(m);
   }
+  // Re-queue rate (2026-09-19): of NON-QA sessions, how many were entered
+  // via "Play again" rather than the start screen -- the metric we care
+  // most about for the re-queue loop.
+  const requeuedNotQaCount = sessionsByQa.notQa.filter((s) => s.requeued === true).length;
   const qaSeatsTotalKnown = matches
     .map((m) => m.qaSeats)
     .filter((v) => typeof v === 'number')
@@ -598,6 +602,11 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
         matchesUnknown: matchesByQa.unknown.length,
         totalQaSeatsKnown: qaSeatsTotalKnown,
       },
+    },
+    requeue: {
+      notQaCount: requeuedNotQaCount,
+      notQaTotal: sessionsByQa.notQa.length,
+      notQaPct: sessionsByQa.notQa.length > 0 ? (100 * requeuedNotQaCount) / sessionsByQa.notQa.length : null,
     },
     humanSessions: humanSessionsByQa,
     deviceFrameTimeByDpr: deviceFrameTime,
@@ -786,6 +795,9 @@ function printReport(report) {
   }
   w();
   w(`feedback submissions (count only, text is never surfaced here): ${report.feedbackSubmissions}`);
+  w();
+  w(`re-queue rate (non-QA sessions entered via "Play again"): ${report.requeue.notQaCount} of ${report.requeue.notQaTotal}` +
+    (report.requeue.notQaPct !== null ? ` (${report.requeue.notQaPct.toFixed(1)}%)` : ''));
   w();
   w('what this report cannot tell us: unique people/visitors (not tracked, by design);');
   w('whether an unmarked session was really a real player or a tester who forgot ?qa=1;');

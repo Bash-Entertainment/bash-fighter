@@ -118,6 +118,7 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
       frameMedianMs: report?.frameMedianMs ?? null,
       frameP95Ms: report?.frameP95Ms ?? null,
       devicePixelRatio: report?.devicePixelRatio ?? null,
+      requeued: report?.requeued ?? null,
       contextLostCount: report?.contextLostCount ?? null,
       renderStalled: report?.renderStalled ?? null,
       // Device-capability tags and frame/network telemetry added

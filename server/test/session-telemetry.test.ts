@@ -382,3 +382,29 @@ test('[sessionEnd]: an older client that never reports slow-frame/canvas fields 
   assert.equal(record.slowFrameCount, null);
   assert.equal(record.slowFrameFightersAliveBuckets, null);
 });
+
+test('[sessionEnd]: requeued (Play again vs start screen) logs through as true/false, and null when absent', () => {
+  const trueMatch = realMatch();
+  const trueConn = fakeConn({
+    slot: 0,
+    lastReport: { t: 'sessionReport', firstInputMs: null, inputTicks: 0, frameMedianMs: 16, frameP95Ms: 20, requeued: true },
+  });
+  const trueLines = captureLogs(() => logSessionEnd(trueConn, trueMatch));
+  const trueRecord = JSON.parse(trueLines.find((l) => l.startsWith('[sessionEnd]'))!.slice('[sessionEnd] '.length));
+  assert.equal(trueRecord.requeued, true);
+
+  const falseMatch = realMatch();
+  const falseConn = fakeConn({
+    slot: 0,
+    lastReport: { t: 'sessionReport', firstInputMs: null, inputTicks: 0, frameMedianMs: 16, frameP95Ms: 20, requeued: false },
+  });
+  const falseLines = captureLogs(() => logSessionEnd(falseConn, falseMatch));
+  const falseRecord = JSON.parse(falseLines.find((l) => l.startsWith('[sessionEnd]'))!.slice('[sessionEnd] '.length));
+  assert.equal(falseRecord.requeued, false);
+
+  const absentMatch = realMatch();
+  const absentConn = fakeConn({ slot: 0, profile: null, lastReport: null });
+  const absentLines = captureLogs(() => logSessionEnd(absentConn, absentMatch));
+  const absentRecord = JSON.parse(absentLines.find((l) => l.startsWith('[sessionEnd]'))!.slice('[sessionEnd] '.length));
+  assert.equal(absentRecord.requeued, null);
+});

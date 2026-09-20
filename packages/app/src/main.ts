@@ -241,7 +241,7 @@ function onRendererInitFailed(where: string, error: unknown): void {
   contextLostOverlayShowing = true;
   showContextLostOverlay();
 }
-const spectateChip = new SpectateChip(appRoot, () => void beginOnlineMatch());
+const spectateChip = new SpectateChip(appRoot, () => void beginOnlineMatch(true));
 const matchIntro = new MatchIntro(appRoot);
 /** The 20-slot FFA palette entry for a seat, as a CSS colour -- the same
  *  colour the renderer fills that fighter with, so the intro's swatch and
@@ -607,7 +607,11 @@ function serverUrl(): string {
   return `${proto}//${location.host}/socket`;
 }
 
-async function beginOnlineMatch(): Promise<void> {
+// requeued: true when this call is a click on "Play again" (elimination
+// overlay, match-end overlay, win screen, timed-brawl end screen, or the
+// spectate-stall chip) rather than the start screen's "Play online"
+// button -- feeds the requeued session-report field (see net-match.ts).
+async function beginOnlineMatch(requeued = false): Promise<void> {
   lastMatchWasOnline = true;
   eliminatedThisOnlineMatch = false;
   lastEliminationContent = null;
@@ -755,7 +759,7 @@ async function beginOnlineMatch(): Promise<void> {
         matchOverlay.show({
           title: 'Match ended',
           message: 'This match ended before it finished. You can jump straight into a new one.',
-          actions: [{ label: 'Play again', onClick: () => void beginOnlineMatch() }],
+          actions: [{ label: 'Play again', onClick: () => void beginOnlineMatch(true) }],
         });
         return;
       }
@@ -800,7 +804,7 @@ async function beginOnlineMatch(): Promise<void> {
         title: `You finished ${placement} of ${totalFighters}`,
         message: `You can jump straight into a new match${SPECTATE_OFFER}.`,
         actions: [
-          { label: 'Play again', onClick: () => void beginOnlineMatch() },
+          { label: 'Play again', onClick: () => void beginOnlineMatch(true) },
           {
             label: 'Keep spectating',
             onClick: () => {
@@ -840,7 +844,7 @@ async function beginOnlineMatch(): Promise<void> {
     onContextLost: onRendererContextLost,
     onContextRestored: onRendererContextRestored,
     onRenderStalled: onRendererRenderStalled,
-  }, audio, isQaSession(), requestedArenaId());
+  }, audio, isQaSession(), requestedArenaId(), requeued);
   netMatch = net;
   net.input.setBinding(0, currentBindings.p1);
   net.input.setBinding(1, currentBindings.p2);
@@ -906,7 +910,7 @@ const winScreen = new WinScreen(
   appRoot,
   () => {
     if (lastMatchWasOnline) {
-      void beginOnlineMatch();
+      void beginOnlineMatch(true);
     } else {
       void beginMatch();
     }
@@ -925,7 +929,7 @@ const timedBrawlEndScreen = new TimedBrawlEndScreen(
   appRoot,
   () => {
     if (lastMatchWasOnline) {
-      void beginOnlineMatch();
+      void beginOnlineMatch(true);
     } else {
       void beginMatch();
     }

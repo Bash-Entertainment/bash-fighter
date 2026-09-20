@@ -151,7 +151,7 @@ test('recordSessionEnd: appends one sessionEnd record derived from the real Matc
     match.start();
 
     const recorder = createStatsRecorder({ logPath, now: () => 1_700_000_010_000 });
-    const conn = fakeConn({ slot: 0, lastReport: { firstInputMs: 900, inputTicks: 42, frameMedianMs: 16.7, frameP95Ms: 20.1, devicePixelRatio: 2.5 } });
+    const conn = fakeConn({ slot: 0, lastReport: { firstInputMs: 900, inputTicks: 42, frameMedianMs: 16.7, frameP95Ms: 20.1, devicePixelRatio: 2.5, requeued: true } });
     recorder.recordSessionEnd(conn, match);
     match.stop();
 
@@ -168,6 +168,9 @@ test('recordSessionEnd: appends one sessionEnd record derived from the real Matc
     // session-telemetry log but was missing from the stats record, so
     // every DPR reading stayed null in stats.jsonl.
     assert.equal(record.devicePixelRatio, 2.5);
+    // 2026-09-19: requeued (Play again vs start screen) must carry through
+    // to the persisted record -- it's the re-queue-loop metric.
+    assert.equal(record.requeued, true);
 
     const serialised = JSON.stringify(record).toLowerCase();
     assert.ok(!('ip' in record));
@@ -421,6 +424,30 @@ test('recordSessionEnd: absent slow-frame/canvas telemetry logs as null, not zer
     assert.equal(record.uaFamily, null);
     assert.equal(record.slowFrameCount, null);
     assert.equal(record.slowFrameFightersAliveBuckets, null);
+  } finally {
+    cleanup();
+  }
+});
+
+test('recordSessionEnd: requeued false and absent both persist honestly (false != null)', () => {
+  const { logPath, cleanup } = scratchDir();
+  try {
+    const match = new Match('stats-session-requeue-test', 2, 1, noopEvents());
+    match.addSeat('human-a', false);
+    match.addSeat('human-b', false);
+    match.start();
+
+    const recorder = createStatsRecorder({ logPath, now: () => 1_700_000_010_000 });
+    recorder.recordSessionEnd(
+      fakeConn({ slot: 0, lastReport: { firstInputMs: 10, inputTicks: 1, frameMedianMs: 16, frameP95Ms: 20, requeued: false } }),
+      match,
+    );
+    recorder.recordSessionEnd(fakeConn({ slot: 1 }), match);
+    match.stop();
+
+    const lines = readLines(logPath);
+    assert.equal(lines[0]?.requeued, false);
+    assert.equal(lines[1]?.requeued, null);
   } finally {
     cleanup();
   }
