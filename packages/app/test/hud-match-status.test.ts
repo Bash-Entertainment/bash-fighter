@@ -138,7 +138,10 @@ test('the match-status block gets real match settings on both online and local p
 
 test('objectiveLineText states a full sentence for each mode, derived from the same mode/win-condition text the sidebar already used', () => {
   assert.equal(objectiveLineText('battleRoyale'), 'Battle Royale: the last fighter standing wins.');
-  assert.equal(objectiveLineText('timedKO'), 'Timed Brawl: most knockouts when the clock runs out wins.');
+  assert.equal(
+    objectiveLineText('timedKO'),
+    'Timed Brawl: you respawn when knocked out, and most knockouts when the clock runs out wins.',
+  );
   assert.equal(objectiveLineText('stocks'), 'Stocks: the last stock standing wins.');
 });
 

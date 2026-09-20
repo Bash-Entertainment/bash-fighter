@@ -49,7 +49,11 @@ export function winConditionText(winCondition: 'battleRoyale' | 'timedKO' | 'sto
 export function objectiveLineText(winCondition: 'battleRoyale' | 'timedKO' | 'stocks'): string {
   const mode = modeLabelText(winCondition);
   if (winCondition === 'timedKO') {
-    return `${mode}: most knockouts when the clock runs out wins.`;
+    // The respawn clause matters more than the win condition for a
+    // newcomer: Timed Brawl is now the first match a first-time visitor
+    // gets (server/src/mode-rotation.ts) precisely because being knocked
+    // out does not end their match, and nothing else on screen says so.
+    return `${mode}: you respawn when knocked out, and most knockouts when the clock runs out wins.`;
   }
   return `${mode}: the ${winConditionText(winCondition)} wins.`;
 }
