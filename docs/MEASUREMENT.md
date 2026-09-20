@@ -997,3 +997,28 @@ activity in a stretch does not distinguish "reading the screen" from
 never produced a `sessionEnd` at all (a killed server process, for
 instance); and, as always, nothing about *people* -- only sessions,
 since no identifying signal is collected.
+
+## Seeing real phone layout
+
+The browser in our container refuses viewports narrower than 1024px, and
+phone emulation cannot initialise WebGL, so phone layout used to be
+unobservable. Real sessions report canvas sizes as small as 260 CSS px wide
+(780x1478 at devicePixelRatio 3), and defects live down there.
+
+Load the game inside an iframe of the size you want to test, from a page
+already open in the browser:
+
+```js
+const f = document.createElement('iframe');
+f.style.cssText = 'position:fixed;left:0;top:0;width:260px;height:493px;z-index:99999';
+f.src = 'https://bashfighter.com/?qa=1&forceTouch=1';
+document.body.appendChild(f);
+```
+
+The iframe is the layout viewport for fixed positioning and media queries,
+and WebGL still works because the host is a desktop GPU context. Drive it
+with `f.contentDocument` and measure with `getBoundingClientRect()`;
+screenshots of the iframe region are not reliably to scale, so trust the
+measured rectangles. This is how the 2026-09-19 phone-width defects (a
+128px-wide canvas, the stick sitting on the action buttons, a 220x414
+elimination panel) were found.

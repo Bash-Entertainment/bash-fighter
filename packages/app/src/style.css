@@ -1857,7 +1857,11 @@ html, body {
   .touch-btn-special { right: 0; bottom: 0; }
   .touch-btn-shield { right: 116px; bottom: 0; }
 
-  .match-overlay, .win-panel {
+  /* 2026-09-19: this used to target .match-overlay, which is the
+     full-screen inset:0 backdrop -- an over-constrained width that the
+     browser simply ignored, so the panel never shrank on a phone at all.
+     It is the panel that needs the narrower box. */
+  .match-overlay-panel, .win-panel {
     width: min(92vw, 420px);
     padding: 20px;
   }
@@ -2260,6 +2264,35 @@ html, body {
 
   .hud-list.dense {
     display: none;
+  }
+
+  /* The elimination overlay used to take 414px of a 493px-tall phone
+     screen behind a near-opaque backdrop, so "keep watching this one play
+     out" was an empty offer -- and 71% of real sessions end at the
+     player's own elimination. On a phone it becomes a compact bottom
+     sheet with the match still visible above it. */
+  .match-overlay {
+    align-items: flex-end;
+    background: transparent;
+  }
+
+  .match-overlay-panel {
+    width: 100%;
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+  }
+
+  .match-overlay-title {
+    font-size: 19px;
+    margin-bottom: 6px;
+  }
+
+  .match-overlay-message {
+    font-size: 13px;
+    line-height: 1.45;
+    margin-bottom: 14px;
   }
 }
 

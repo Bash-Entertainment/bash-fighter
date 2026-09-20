@@ -53,3 +53,15 @@ test('on the narrowest phones the stick and the button cluster cannot overlap', 
   }
   assert.ok(btn >= 44, 'tap targets stay at least 44px');
 });
+
+// The 700px tier set a width on .match-overlay -- the full-screen inset:0
+// backdrop -- which the browser ignores as over-constrained, so on a real
+// 256x493 phone the elimination panel measured 220x414: 71% of the screen,
+// behind a near-opaque backdrop, while offering "keep watching this one
+// play out".
+test('the phone elimination overlay is a compact sheet that leaves the match visible', () => {
+  assert.doesNotMatch(css, /\n  \.match-overlay, \.win-panel \{/, 'width must go on the panel, not the backdrop');
+  const phone = mediaBlock('max-width: 480px');
+  assert.match(phone, /\.match-overlay \{[^}]*align-items: flex-end;[^}]*background: transparent;/);
+  assert.match(phone, /\.match-overlay-panel \{[^}]*width: 100%;/);
+});
