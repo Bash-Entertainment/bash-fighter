@@ -378,6 +378,10 @@ export class Renderer {
   // the actual cause.
   private framesPresented = 0;
 
+  /** Last camera view this renderer drew with. Dev/QA read-only hook: the
+   * app layer must not steer framing from it (see cameraOverride). */
+  lastCamera: CameraView | undefined;
+
   private readonly world = new Container();
   private readonly stageLayer = new Graphics();
   private readonly debugLayer = new Graphics();
@@ -1029,6 +1033,11 @@ export class Renderer {
         // floor centre on the living centroid instead.
         localLivingFighter ? { x: localLivingFighter.x, y: localLivingFighter.y } : null,
       );
+    // Dev/QA hook: the camera is computed here and nowhere else, and it is
+    // the one piece of framing state that cannot be inferred from the
+    // sprites. Exposing the last view makes "what scale is production
+    // actually drawing at on this device" a measurement instead of a guess.
+    this.lastCamera = cam;
 
     // Translate any hit/elimination effects the app layer observed since
     // the last render() call into screen space using *this* frame's

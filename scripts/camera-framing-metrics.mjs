@@ -121,6 +121,9 @@ const viewports = [
   // left only half of this for the game, so the honest figure for a small
   // phone was worse than anything measured here.
   { name: '256x493', w: 256, h: 493 },
+  // Landscape phone: the HUD sidebar still applies above 480px wide, so
+  // the canvas is 540 of a 740px screen and only 360 tall.
+  { name: '540x360', w: 540, h: 360 },
   // 1024x520 is the narrowest/shortest viewport a real browser will give me
   // for live verification (the tooling refuses widths below 1024 and cannot
   // initialise WebGL under phone emulation), so it is the only viewport
