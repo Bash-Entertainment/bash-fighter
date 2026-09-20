@@ -73,9 +73,11 @@ export class WinScreen {
     }
     if (winnerIndex === null) this.lastResult = 'no_survivor';
     this.root.classList.remove('hidden');
+    document.body.classList.add('end-screen-open');
   }
 
   hide(): void {
     this.root.classList.add('hidden');
+    document.body.classList.remove('end-screen-open');
   }
 }

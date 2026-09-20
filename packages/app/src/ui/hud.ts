@@ -235,6 +235,12 @@ export class Hud {
     this.matchStatus.style.display = '';
     this.matchModeLine.textContent = objectiveLineText(matchInfo.winCondition);
     this.matchClockLine.textContent = matchInfo.clockText;
+    // Timed Brawl already gets the big amber .hud-clock-line at the top
+    // of the HUD, so showing the same countdown again here printed the
+    // clock twice -- two different sizes, ~95px apart on a 493px-tall
+    // phone screen. Keep the prominent one; this line still carries the
+    // elapsed time in every other mode, where there is no top clock.
+    this.matchClockLine.style.display = matchInfo.winCondition === 'timedKO' ? 'none' : '';
     // Live knockout standing (2026-09-19): Timed Brawl only, since it's
     // the only mode actually decided by KO count -- see koStandingInfo
     // in timed-brawl.ts. Own count/rank + the leader's count, never a

@@ -119,3 +119,27 @@ export function koStandingInfo(scores: readonly TimedBrawlScore[], localSlot: nu
     leaderKo: standings[0]?.koCount ?? own.koCount,
   };
 }
+
+/**
+ * Headline text for a Timed Brawl that ended with nobody alone in first.
+ *
+ * The old text was a flat "Time out — tied for first", which reads as a
+ * statement about the player: at 256px width I finished 20th of 20 with
+ * no knockouts and that was still the biggest text on the screen. So
+ * say who actually tied, and only say "you" when the player is one of
+ * them.
+ */
+export function tiedHeadline(
+  standings: readonly TimedBrawlStanding[],
+  localSlot: number | undefined | null,
+  nameFor?: (slot: number) => string,
+): string {
+  const leaders = standings.filter((s) => s.place === 1);
+  if (leaders.length === 0) return 'Time out';
+  const youAreLeading = localSlot !== undefined && localSlot !== null && leaders.some((s) => s.slot === localSlot);
+  if (youAreLeading) return 'Time out — you tied for first';
+  const label = (slot: number): string => (nameFor ? nameFor(slot) : `#${slot + 1}`);
+  if (leaders.length === 1) return `Time out — ${label(leaders[0]!.slot)} led`;
+  if (leaders.length === 2) return `Time out — ${label(leaders[0]!.slot)} and ${label(leaders[1]!.slot)} tied`;
+  return `Time out — ${label(leaders[0]!.slot)} and ${leaders.length - 1} others tied`;
+}

@@ -6,7 +6,7 @@
 // to speak both makes neither reading clear. Same voice, same "screen"
 // shell, same one-button way forward as WinScreen and MatchOverlay.
 import { PALETTE } from '@bash-fighter/render';
-import { buildStandings, placementOf, type TimedBrawlScore } from '../timed-brawl.ts';
+import { buildStandings, placementOf, tiedHeadline, type TimedBrawlScore } from '../timed-brawl.ts';
 
 const PLAYER_HEX = PALETTE.playerColors.map((c) => `#${c.toString(16).padStart(6, '0')}`);
 
@@ -75,7 +75,12 @@ export class TimedBrawlEndScreen {
     this.headline.style.borderBottomColor = '';
     this.winnerSwatch.style.display = 'none';
     if (winnerSlot === null) {
-      this.headline.textContent = 'Time out — tied for first';
+      // Naming the tied leaders matters: playing this at phone width I
+      // finished 20th of 20 with no knockouts and the headline still
+      // read "tied for first", which at a glance says I tied for first.
+      // The subtitle below corrects it, but the biggest text on the
+      // screen should never be the wrong answer to "how did I do?".
+      this.headline.textContent = tiedHeadline(standings, localSlot, nameFor);
     } else {
       const colour = PLAYER_HEX[winnerSlot % PLAYER_HEX.length] as string;
       const label = nameFor ? nameFor(winnerSlot) : `#${winnerSlot + 1}`;
@@ -114,10 +119,12 @@ export class TimedBrawlEndScreen {
       this.list.appendChild(el);
     }
     this.root.classList.remove('hidden');
+    document.body.classList.add('end-screen-open');
   }
 
   hide(): void {
     this.root.classList.add('hidden');
+    document.body.classList.remove('end-screen-open');
   }
 
   get isVisible(): boolean {

@@ -1383,6 +1383,17 @@ html, body {
   z-index: 20;
 }
 
+/* While a match-end screen is up, the fixed bottom-left connection chip
+   ("Match complete") sits on top of the end screen's Feedback button --
+   found by playing a Timed Brawl to time-out at 256px width. The chip
+   says nothing the end screen does not already say, and feedback is the
+   one control on that screen we most want pressed, so the chip stands
+   down. Class set in timed-brawl-end-screen.ts and win-screen.ts. */
+body.end-screen-open #net-status,
+body.end-screen-open #net-mode-line {
+  display: none;
+}
+
 #net-status[data-state='error'],
 #net-status[data-state='disconnected'] {
   color: #ff8a8a;
@@ -2276,6 +2287,7 @@ html, body {
      backdrop behind just the text keeps both readable, and the feed is
      clamped to two lines so it cannot grow over the match. */
   #hud:has(.hud-list.dense) .survivors-line,
+  #hud:has(.hud-list.dense) .hud-clock-line,
   #hud:has(.hud-list.dense) .match-status {
     background: rgba(11, 13, 16, 0.74);
     border-radius: 4px;
