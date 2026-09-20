@@ -50,6 +50,10 @@ export interface FeedbackContext {
  *  the match/UI, already sanitised and clamped. */
 export interface StoredFeedback {
   receivedAt: string;
+  /** Self-declared ?qa=1 session (our own testing). Kept so the daily
+   *  feedback review can tell our smoke tests from a real player's
+   *  words -- the same self-declared flag the stats report uses. */
+  qa?: boolean;
   comment?: string;
   ratings?: FeedbackRatings;
   context?: FeedbackContext;
@@ -290,6 +294,7 @@ export function createFeedbackHandler(options: FeedbackHandlerOptions = {}) {
       }
 
       const record: StoredFeedback = { receivedAt: new Date(now()).toISOString() };
+      if (body.qa === true) record.qa = true;
       if (comment) record.comment = comment;
       if (ratings) record.ratings = ratings;
       if (context) record.context = context;

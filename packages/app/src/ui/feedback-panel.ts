@@ -205,6 +205,7 @@ export class FeedbackPanel {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
+          ...(new URLSearchParams(location.search).get('qa') === '1' ? { qa: true } : {}),
           comment: comment.length > 0 ? comment : undefined,
           ratings: Object.keys(ratings).length > 0 ? ratings : undefined,
           context: {

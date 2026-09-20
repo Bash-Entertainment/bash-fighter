@@ -826,7 +826,16 @@ async function main() {
   const storeLines = await readLines(storePath);
   const extraLines = await readLines(args.extraLog);
   const feedbackLines = await readLines(feedbackPath);
-  const feedbackCount = feedbackLines.filter((l) => l.trim().length > 0).length;
+  // Our own ?qa=1 submissions carry qa:true (server/src/feedback.ts); the
+  // count the owner sees is real players only.
+  const feedbackCount = feedbackLines.filter((l) => {
+    if (l.trim().length === 0) return false;
+    try {
+      return JSON.parse(l).qa !== true;
+    } catch {
+      return true;
+    }
+  }).length;
 
   const report = buildReport({ storeLines, extraLines, feedbackCount, since: args.since });
 

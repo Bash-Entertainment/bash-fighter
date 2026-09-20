@@ -319,3 +319,25 @@ test('feedback: a missing/unwritable log directory falls back to stdout instead 
 
   assert.ok(consoleLines.some((l) => l.includes('should not crash the process')));
 });
+
+test('feedback: a self-declared QA submission is marked, a player submission is not', async () => {
+  await withServer({}, async (baseUrl, logPath) => {
+    for (const body of [
+      { comment: 'our own smoke test', qa: true },
+      { comment: 'a real players words' },
+      { comment: 'not a boolean', qa: 'yes' },
+    ]) {
+      const res = await fetch(`${baseUrl}/api/feedback`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      assert.equal(res.status, 200);
+    }
+    const lines = readLines(logPath);
+    assert.equal(lines.length, 3);
+    assert.equal(lines[0].qa, true);
+    assert.equal(lines[1].qa, undefined);
+    assert.equal(lines[2].qa, undefined);
+  });
+});
