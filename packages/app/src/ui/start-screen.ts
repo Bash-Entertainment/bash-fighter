@@ -130,6 +130,15 @@ export class StartScreen {
     this.nameInput.addEventListener('input', () => {
       savePersistedName(this.nameInput.value);
     });
+    // Enter in the name field starts the match. Typing a name and pressing
+    // Enter is what everyone tries first, and it used to do nothing at all,
+    // leaving the player sitting on the start screen with no feedback.
+    this.nameInput.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      this.nameInput.blur();
+      onStart();
+    });
   }
 
   /** Player 1's chosen character id, from @bash-fighter/content's roster.
