@@ -10,6 +10,9 @@ test('Enter in the name field starts the match', () => {
   assert.ok(handler, 'name input has a keydown handler');
   const body = handler[0];
   assert.match(body, /ev\.key !== 'Enter'/);
-  assert.match(body, /onStart\(\)/);
+  // Enter must trigger the primary action (Play online), not the local
+  // side door. Shipping the naive version started a local 1v1 instead.
+  assert.match(body, /#primary-actions button/);
+  assert.match(body, /primary\.click\(\)/);
   assert.match(body, /preventDefault\(\)/);
 });

@@ -137,7 +137,13 @@ export class StartScreen {
       if (ev.key !== 'Enter') return;
       ev.preventDefault();
       this.nameInput.blur();
-      onStart();
+      // The primary action is "Play online", which main.ts mounts into
+      // #primary-actions. onStart is the local-keyboard side door, so it is
+      // only the fallback: Enter must not quietly start a two-player local
+      // match when the player expected to be matched online.
+      const primary = this.root.querySelector<HTMLButtonElement>('#primary-actions button');
+      if (primary) primary.click();
+      else onStart();
     });
   }
 
