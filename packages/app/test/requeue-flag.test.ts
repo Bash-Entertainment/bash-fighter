@@ -18,7 +18,7 @@ test('beginOnlineMatch defaults requeued to false for the start-screen path', ()
 });
 
 test('every "Play again" style action passes requeued=true into beginOnlineMatch', () => {
-  const playAgainCallSites = [...main.matchAll(/label: 'Play again',\s*onClick: \(\) => void beginOnlineMatch\((true)?\)/g)];
+  const playAgainCallSites = [...main.matchAll(/label: 'Play again',[^}]*?onClick: \(\) => void beginOnlineMatch\((true)?\)/g)];
   assert.ok(playAgainCallSites.length >= 2, 'expected the elimination overlay and match-end overlay Play again buttons');
   for (const m of playAgainCallSites) {
     assert.equal(m[1], 'true', 'a Play again button must call beginOnlineMatch(true)');
