@@ -35,6 +35,9 @@ const STICK_RADIUS = 52;
 // button" release logic for free (issue #27).
 const KEYBOARD_POINTER_ID = -1;
 
+/** Clearance between the top of the stick and the damage readout. */
+const STICK_READOUT_GAP_PX = 14;
+
 export class TouchControls {
   readonly root: HTMLDivElement;
   readonly source = new TouchSource();
@@ -45,7 +48,14 @@ export class TouchControls {
 
   private readonly buttonPointers = new Map<number, TouchButton>();
 
-  constructor(parent: HTMLElement) {
+  /** Told the height the controls occupy in the bottom-left corner, so the
+   * canvas can move anything drawn there (the local damage percent) out
+   * from under the player's thumb. Injected rather than imported so this
+   * module stays free of the renderer. */
+  private readonly onBottomLeftInsetChange: (px: number) => void;
+
+  constructor(parent: HTMLElement, onBottomLeftInsetChange: (px: number) => void = () => {}) {
+    this.onBottomLeftInsetChange = onBottomLeftInsetChange;
     this.root = document.createElement('div');
     this.root.id = 'touch-controls';
     this.root.className = 'hidden';
@@ -71,10 +81,17 @@ export class TouchControls {
 
   show(): void {
     this.root.classList.remove('hidden');
+    // The local damage percent -- the biggest number on screen -- is drawn
+    // into the canvas's bottom-left corner, which is exactly where the
+    // movement stick sits on a phone. Tell the renderer how much of that
+    // corner is taken so the number moves above the stick.
+    const stick = this.stickBase.getBoundingClientRect();
+    this.onBottomLeftInsetChange(stick.height + STICK_READOUT_GAP_PX);
   }
 
   hide(): void {
     this.root.classList.add('hidden');
+    this.onBottomLeftInsetChange(0);
     this.reset();
   }
 

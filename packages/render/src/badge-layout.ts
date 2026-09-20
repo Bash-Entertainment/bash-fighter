@@ -417,6 +417,17 @@ export const LOCAL_DAMAGE_READOUT_FONT_SIZE = 28;
  * danger. */
 const DANGER_PERCENT_THRESHOLD = 100;
 
+/** Height in px of anything the page has put over the bottom-left corner of
+ * the canvas -- in practice the touch movement stick. The readout is drawn
+ * into the canvas and the stick is a DOM element above it, so without this
+ * the biggest number on screen sits under the player's left thumb. Set by
+ * TouchControls as it shows and hides. */
+let bottomLeftInsetPx = 0;
+
+export function setLocalReadoutBottomInset(px: number): void {
+  bottomLeftInsetPx = Number.isFinite(px) && px > 0 ? px : 0;
+}
+
 export function computeLocalDamageReadout(
   percent: number | undefined,
   view: { width: number; height: number },
@@ -426,7 +437,7 @@ export function computeLocalDamageReadout(
   const m = LOCAL_DAMAGE_READOUT_MARGIN_PX;
   return {
     x: m,
-    y: view.height - m,
+    y: view.height - m - bottomLeftInsetPx,
     text: `${pct}%`,
     danger: pct >= DANGER_PERCENT_THRESHOLD,
   };

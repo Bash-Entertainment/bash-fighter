@@ -29,6 +29,9 @@ test('phone widths give the canvas the full width and keep the dense list out of
   assert.match(phone, /#app:has\(\.hud-list\.dense\) #canvas-root \{\s*left: 0;/);
   assert.match(phone, /\.hud-list\.dense \{\s*display: none;/);
   assert.match(phone, /#app:has\(\.hud-list\.dense\) \.touch-stick-base \{\s*left: max\(20px/);
+  // #top-right-controls wraps onto two rows at phone width; the status block
+  // has to clear them or "5 / 20 remaining" is struck through by "Sound off".
+  assert.match(phone, /#hud:has\(\.hud-list\.dense\) \{[^}]*top: 80px;/);
 });
 
 test('on the narrowest phones the stick and the button cluster cannot overlap', () => {
@@ -64,4 +67,24 @@ test('the phone elimination overlay is a compact sheet that leaves the match vis
   const phone = mediaBlock('max-width: 480px');
   assert.match(phone, /\.match-overlay \{[^}]*align-items: flex-end;[^}]*background: transparent;/);
   assert.match(phone, /\.match-overlay-panel \{[^}]*width: 100%;/);
+});
+
+// Playing at 256px: the spectate chip ("You finished 14th of 20") sat
+// directly on top of the Attack and Special buttons.
+test('the spectate chip clears the touch controls on a phone', () => {
+  const phone = mediaBlock('max-width: 480px');
+  const m = phone.match(/\.spectate-chip \{[^}]*bottom: (\d+)px/);
+  assert.ok(m, 'no phone rule for the spectate chip');
+  const narrow = mediaBlock('max-width: 330px');
+  const cluster = Number(narrow.match(/\.touch-buttons \{[^}]*height: (\d+)px/)![1]);
+  assert.ok(Number(m[1]) >= cluster + 16, `chip at ${m[1]}px does not clear a ${cluster}px cluster`);
+});
+
+// At 256px the win headline ("CPU Pixel won") ran off both edges at 32px and
+// the body copy sat hard against x = 0.
+test('phone widths keep the win headline and screen copy inside the screen', () => {
+  const phone = mediaBlock('max-width: 480px');
+  const headline = Number(phone.match(/\.win-headline \{[^}]*font-size: (\d+)px/)![1]);
+  assert.ok(headline <= 24, `win headline is ${headline}px at phone width`);
+  assert.match(phone, /\.screen \{[^}]*padding-left: \d+px;/);
 });

@@ -25,6 +25,7 @@ import {
   computeBadgePlacements,
   computeLocalDamageReadout,
   badgeLeaderLine,
+  setLocalReadoutBottomInset,
   type BadgeCandidate,
   type BodyBox,
 } from '../src/badge-layout.ts';
@@ -328,4 +329,20 @@ test('a staggered badge gets a leader line back to its own head, a settled one d
   const below = badgeLeaderLine(410, 470, head, 13);
   assert.ok(below, 'badge staggered below its row needs a line');
   assert.ok(below.fromY < 470 && below.toY > head.y, 'line runs upward to the head');
+});
+
+// 2026-09-19, measured at 256 CSS px: the local damage percent, the biggest
+// number on screen, was drawn under the touch movement stick -- i.e. under
+// the player's left thumb on the platform 82% of real sessions use.
+test('the local damage readout clears whatever covers the bottom-left corner', () => {
+  const view = { width: 390, height: 844 };
+  const base = computeLocalDamageReadout(46, view);
+  assert.ok(base);
+  setLocalReadoutBottomInset(120);
+  const lifted = computeLocalDamageReadout(46, view);
+  assert.ok(lifted);
+  assert.equal(lifted.y, base.y - 120);
+  assert.equal(lifted.x, base.x, 'it stays in the same column');
+  setLocalReadoutBottomInset(0);
+  assert.equal(computeLocalDamageReadout(46, view)?.y, base.y, 'hiding the controls puts it back');
 });

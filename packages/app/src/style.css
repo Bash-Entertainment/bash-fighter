@@ -2251,9 +2251,14 @@ html, body {
     left: max(20px, env(safe-area-inset-left));
   }
 
+  /* #top-right-controls wraps onto two rows at this width, and with the
+     reserved column gone the HUD status block sits directly under it, so
+     the status text has to start below the wrapped rows. */
   #hud:has(.hud-list.dense) {
-    top: 0;
+    top: 80px;
     bottom: auto;
+    max-height: 40vh;
+    overflow: hidden;
     width: auto;
     max-width: 62vw;
     background: transparent;
@@ -2264,6 +2269,44 @@ html, body {
 
   .hud-list.dense {
     display: none;
+  }
+
+  /* Without the reserved column the status text sits straight on the
+     arena, where it tangled with the fighters' own damage badges. A quiet
+     backdrop behind just the text keeps both readable, and the feed is
+     clamped to two lines so it cannot grow over the match. */
+  #hud:has(.hud-list.dense) .survivors-line,
+  #hud:has(.hud-list.dense) .match-status {
+    background: rgba(11, 13, 16, 0.74);
+    border-radius: 4px;
+    padding: 4px 7px;
+    width: fit-content;
+  }
+
+  #hud:has(.hud-list.dense) .elimination-feed {
+    max-height: 2.6em;
+    overflow: hidden;
+  }
+
+  /* At 256px the 32px win headline ran off both edges of the screen and
+     the body copy sat hard against x=0. */
+  .win-headline {
+    font-size: 22px;
+    line-height: 1.2;
+  }
+
+  .screen {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  /* The spectate chip's bottom-right corner is the action buttons on a
+     phone: playing at 256px it sat straight on Attack and Special. It goes
+     above the whole control block (104px of buttons plus their margin). */
+  .spectate-chip {
+    bottom: 132px;
+    right: 12px;
+    left: 12px;
   }
 
   /* The elimination overlay used to take 414px of a 493px-tall phone

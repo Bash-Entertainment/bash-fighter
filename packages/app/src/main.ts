@@ -35,6 +35,7 @@ import {
   setDevMinFighterPx,
   PALETTE,
   type ArenaBounds,
+  setLocalReadoutBottomInset,
 } from '@bash-fighter/render';
 import { AudioManager } from '@bash-fighter/audio';
 
@@ -252,7 +253,7 @@ function localPlayerColour(slot: number): string {
 }
 const controlsHint = new ControlsHint(appRoot);
 
-const touchControls = new TouchControls(appRoot);
+const touchControls = new TouchControls(appRoot, setLocalReadoutBottomInset);
 const touchCapable = isTouchCapable();
 
 // Test-only hook: lets an automated harness (dispatching real PointerEvents

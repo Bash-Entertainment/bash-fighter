@@ -59,6 +59,7 @@ export { type BackdropId } from './backdrop.ts';
 export type { ArenaBounds, CameraView, CameraConfig } from './camera.ts';
 export { computeCamera, resetCameraSmoothing, worldToScreen } from './camera.ts';
 export { computeFollowCamera, computeOverviewCamera, SmoothedCamera, type FollowConfig } from './spectator-camera.ts';
+export { setLocalReadoutBottomInset } from './badge-layout.ts';
 export { PALETTE, FONT_FAMILY, UI_FONT_FAMILY } from './palette.ts';
 export { clampRenderResolution } from './resolution.ts';
 export { renderCharacterIcon } from './character-icon.ts';
