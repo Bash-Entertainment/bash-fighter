@@ -222,7 +222,7 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       frameMedianMs: report?.frameMedianMs ?? null,
       frameP95Ms: report?.frameP95Ms ?? null,
       devicePixelRatio: report?.devicePixelRatio ?? null,
-      requeued: report?.requeued ?? null,
+      requeued: report?.requeued ?? (conn.requeuedAtJoin ? true : null),
       qa: seat.qa,
       hwConcurrencyBucket: profile?.hwConcurrencyBucket ?? null,
       deviceMemoryBucket: profile?.deviceMemoryBucket ?? null,

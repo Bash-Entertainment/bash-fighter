@@ -453,3 +453,29 @@ test('recordSessionEnd: requeued false and absent both persist honestly (false !
     cleanup();
   }
 });
+
+// A player auto-requeued after their own elimination never unloads the page, so
+// the end-of-session report that normally carries `requeued` may never arrive.
+// The flag has to survive on the join message alone, or "did they play a second
+// match?" -- the number we most want to move -- is unmeasurable for exactly the
+// players it describes.
+test('recordSessionEnd: the join-time requeued flag stands in when no report arrived', () => {
+  const { logPath, cleanup } = scratchDir();
+  try {
+    const match = new Match('stats-session-requeue-test', 2, 1, noopEvents());
+    match.addSeat('human-a', false, undefined as unknown as string, false);
+    match.addSeat('human-b', false, undefined as unknown as string, false);
+    match.start();
+
+    const recorder = createStatsRecorder({ logPath, now: () => 1_700_000_010_000 });
+    recorder.recordSessionEnd(fakeConn({ slot: 0, requeuedAtJoin: true }), match);
+    recorder.recordSessionEnd(fakeConn({ slot: 1, requeuedAtJoin: false }), match);
+    match.stop();
+
+    const lines = readLines(logPath);
+    assert.equal(lines[0]?.requeued, true);
+    assert.equal(lines[1]?.requeued, null);
+  } finally {
+    cleanup();
+  }
+});

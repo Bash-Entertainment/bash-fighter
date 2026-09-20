@@ -607,6 +607,14 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
       notQaCount: requeuedNotQaCount,
       notQaTotal: sessionsByQa.notQa.length,
       notQaPct: sessionsByQa.notQa.length > 0 ? (100 * requeuedNotQaCount) / sessionsByQa.notQa.length : null,
+      // Each record is one match participation, so auto-requeued players make
+      // the raw count look like more people than turned up. A record that was
+      // NOT entered via "Play again" starts a visit; the rest continue one.
+      visits: sessionsByQa.notQa.length - requeuedNotQaCount,
+      matchesPerVisit:
+        sessionsByQa.notQa.length - requeuedNotQaCount > 0
+          ? sessionsByQa.notQa.length / (sessionsByQa.notQa.length - requeuedNotQaCount)
+          : null,
     },
     humanSessions: humanSessionsByQa,
     deviceFrameTimeByDpr: deviceFrameTime,
@@ -798,6 +806,8 @@ function printReport(report) {
   w();
   w(`re-queue rate (non-QA sessions entered via "Play again"): ${report.requeue.notQaCount} of ${report.requeue.notQaTotal}` +
     (report.requeue.notQaPct !== null ? ` (${report.requeue.notQaPct.toFixed(1)}%)` : ''));
+  w(`non-QA visits (match participations minus re-queues): ${report.requeue.visits}` +
+    (report.requeue.matchesPerVisit !== null ? `, ${report.requeue.matchesPerVisit.toFixed(2)} matches per visit` : ''));
   w();
   w('what this report cannot tell us: unique people/visitors (not tracked, by design);');
   w('whether an unmarked session was really a real player or a tester who forgot ?qa=1;');

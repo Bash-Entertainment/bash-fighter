@@ -78,6 +78,11 @@ export interface ClientConn {
    *  record so double-counted-vs-genuine-reconnect is visible in stats,
    *  see server/src/session-telemetry.ts's SessionEndConnLike. */
   reconnectCount: number;
+  /** True when the client said at join that this connection came from a
+   *  "Play again"/rematch action rather than the start screen. Kept on the
+   *  connection because an auto-requeued player often never unloads the page
+   *  and so sends no end-of-session report to carry the same flag. */
+  requeuedAtJoin: boolean;
 }
 
 const clients = new Map<string, ClientConn>();
@@ -105,6 +110,7 @@ interface PendingSessionEnd {
   profile: ClientSessionProfile | null;
   lastReport: SessionReportMessage | null;
   reconnectCount: number;
+  requeuedAtJoin: boolean;
 }
 const pendingSessionEnds = new Map<string, PendingSessionEnd>();
 const emittedSessionEnds = new Set<string>();
@@ -119,7 +125,13 @@ function seatKey(matchId: string, slot: number): string {
  *  for a seat's whole stay, or does nothing if one has already been
  *  written for this matchId+slot. */
 function emitSessionEndOnce(
-  connLike: { slot: number; profile: ClientSessionProfile | null; lastReport: SessionReportMessage | null; reconnectCount: number },
+  connLike: {
+    slot: number;
+    profile: ClientSessionProfile | null;
+    lastReport: SessionReportMessage | null;
+    reconnectCount: number;
+    requeuedAtJoin: boolean;
+  },
   match: Match,
 ): void {
   const key = seatKey(match.id, connLike.slot);
@@ -434,6 +446,7 @@ const wss = new WebSocketServer({ server, path: '/socket' });
     lastReport: null,
     connectedAt: Date.now(),
     reconnectCount: 0,
+    requeuedAtJoin: false,
   };
   clients.set(conn.id, conn);
   logConn(conn, 'connected');
@@ -486,6 +499,7 @@ const wss = new WebSocketServer({ server, path: '/socket' });
           profile: conn.profile,
           lastReport: conn.lastReport,
           reconnectCount: conn.reconnectCount,
+          requeuedAtJoin: conn.requeuedAtJoin,
         });
       }
       // Always mark the seat disconnected in the match's own bookkeeping,
@@ -704,6 +718,7 @@ function handleResume(conn: ClientConn, token: string): void {
     conn.profile = stashed.profile;
     conn.lastReport = stashed.lastReport;
     conn.reconnectCount = stashed.reconnectCount + 1;
+    conn.requeuedAtJoin = stashed.requeuedAtJoin;
   }
   watcherSet(match.id).add(conn.id);
   syncWatcherCount(match);
@@ -763,6 +778,7 @@ function handleText(conn: ClientConn, text: string): void {
       // if the client didn't send one (older client, or malformed profile
       // already dropped by parseClientControl).
       if (msg.profile) conn.profile = msg.profile;
+      if (msg.requeued === true) conn.requeuedAtJoin = true;
 
       if (msg.resume) {
         handleResume(conn, msg.resume);

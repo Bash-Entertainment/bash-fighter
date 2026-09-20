@@ -78,6 +78,13 @@ export interface HelloMessage {
    *  this one connection. Optional so an older client that predates this
    *  still parses as a normal hello. */
   profile?: ClientSessionProfile;
+  /** True when this connection was opened by a "Play again"/rematch action
+   *  rather than from the start screen. The end-of-session report carries the
+   *  same flag, but a player who is auto-requeued never unloads the page and
+   *  so may send no report at all -- and that is exactly the case we are
+   *  trying to count. Stating it at join time makes every seat's record able
+   *  to say whether it began a visit or continued one. */
+  requeued?: boolean;
   /** Dev-only stage pin request: the id of a registered arena (see
    *  @bash-fighter/content's ALL_ARENAS) the client asks the server to
    *  pin this match's stage to, instead of the seeded pick. The client
@@ -792,6 +799,7 @@ export function parseClientControl(text: string): ClientControlMessage | null {
         ...(characterId ? { characterId } : {}),
         ...(profile ? { profile } : {}),
         ...(arena ? { arena } : {}),
+        ...(typeof obj.requeued === 'boolean' ? { requeued: obj.requeued } : {}),
       };
     }
     case 'spectate':

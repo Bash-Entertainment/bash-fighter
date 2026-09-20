@@ -583,3 +583,14 @@ test('sessionReport: requeued is kept only when a strict boolean', () => {
     'a report carrying the field must stay under the session-report cap',
   );
 });
+
+test('hello accepts requeued only as a strict boolean', () => {
+  const hello = (extra: Record<string, unknown>) =>
+    parseClientControl(JSON.stringify({ t: 'hello', protocolVersion: PROTOCOL_VERSION, name: 'Ash', ...extra })) as {
+      requeued?: boolean;
+    } | null;
+  assert.equal(hello({ requeued: true })?.requeued, true);
+  assert.equal(hello({ requeued: false })?.requeued, false);
+  assert.equal(hello({ requeued: 'yes' })?.requeued, undefined);
+  assert.equal(hello({})?.requeued, undefined);
+});

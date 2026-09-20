@@ -16,6 +16,7 @@ export interface SessionEndConnLike {
    *  resume (reclaimed via resume token) before this record was emitted.
    *  0 for a seat that never disconnected-and-came-back. */
   reconnectCount: number;
+  requeuedAtJoin?: boolean;
 }
 
 /** Server-derived "actually playing" figures for one ending session --
@@ -122,7 +123,7 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
       frameMedianMs: report?.frameMedianMs ?? null,
       frameP95Ms: report?.frameP95Ms ?? null,
       devicePixelRatio: report?.devicePixelRatio ?? null,
-      requeued: report?.requeued ?? null,
+      requeued: report?.requeued ?? (conn.requeuedAtJoin ? true : null),
       contextLostCount: report?.contextLostCount ?? null,
       renderStalled: report?.renderStalled ?? null,
       // Device-capability tags and frame/network telemetry added

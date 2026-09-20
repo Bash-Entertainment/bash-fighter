@@ -463,6 +463,9 @@ export class NetMatch {
       const hello: Record<string, unknown> = { t: 'hello', protocolVersion: PROTOCOL_VERSION, name: this.name };
       if (this.resumeToken) hello.resume = this.resumeToken;
       if (this.characterId) hello.characterId = this.characterId;
+      // Stated at join as well as in the end report: an auto-requeued player
+      // may never unload the page, so the report can be missing.
+      if (this.requeued) hello.requeued = true;
       // Dev-only stage pin (issue #19 -- see HelloMessage.arena).
       // import.meta.env.DEV is statically false in a production vite
       // build, so a normal player's client never sends this however the
