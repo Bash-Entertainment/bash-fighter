@@ -66,7 +66,7 @@ test('a counting-down action shows the seconds and stops at zero', async () => {
 
 test('the elimination overlay arms the countdown and says so', () => {
   const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  assert.match(main, /label: 'Play again', autoAfterSec: 8/);
+  assert.match(main, /label: 'Play again', autoAfterSec: 4/);
   assert.match(main, /A new match starts on its own in a few seconds/);
 });
 

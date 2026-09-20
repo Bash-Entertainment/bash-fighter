@@ -809,7 +809,7 @@ async function beginOnlineMatch(requeued = false): Promise<void> {
           // of play, so the default outcome of doing nothing should be
           // another match rather than the end of the session. Pressing
           // "Keep spectating" cancels it.
-          { label: 'Play again', autoAfterSec: 8, onClick: () => void beginOnlineMatch(true) },
+          { label: 'Play again', autoAfterSec: 4, onClick: () => void beginOnlineMatch(true) },
           {
             label: 'Keep spectating',
             onClick: () => {
