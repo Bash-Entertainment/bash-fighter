@@ -73,6 +73,11 @@ test('a full match played over real WebSockets ends with identical state hashes 
         MATCH_MINIMUM: String(MATCH_CAPACITY),
         MATCH_COUNTDOWN_SECONDS: '1',
         MATCH_SHRINK_FULLY_CLOSED_TICK: '300', // 5s: force a fast match for this test
+        // This test's clients are non-requeued human joins, so without this
+        // override the first-time-visitor rule (decideMatchModeForJoin,
+        // mode-rotation.ts) would force timedKO and the match would never
+        // end via elimination/shrink the way this test expects.
+        MATCH_MODE_ROTATION_DISABLED: 'true',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     },

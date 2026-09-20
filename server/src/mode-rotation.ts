@@ -130,6 +130,41 @@ export function decideMatchMode(
  *  ('timedKO'/'stocks') to a player. Battle Royale is the headline
  *  default and gets a short label; the other two state their win
  *  condition and any relevant number in words a new player understands. */
+/** Fresh-match variant of decideMatchMode for RoomManager.joinLobby:
+ *  a first-time visitor's first online match should be Timed Brawl
+ *  (winCondition timedKO) rather than Last-Fighter-Standing, because in
+ *  Battle Royale a newcomer is often eliminated well under a minute in
+ *  and their session simply ends, while Timed Brawl respawns them and
+ *  guarantees continuous play for the match's duration. A player who
+ *  arrived via auto-requeue ("Play again") is not a first-time visitor
+ *  in this sense -- they already know what they're getting into and
+ *  keep the normal rotation.
+ *
+ *  Deliberately layered on top of decideMatchMode rather than folded
+ *  into it: this does not consume or shift the rotation sequence for
+ *  other matches. `matchNumber` is RoomManager's own creation counter
+ *  and increments once per fresh match regardless of which mode any
+ *  match ends up using, so overriding the *result* here for one match
+ *  never changes what decideMatchMode(matchNumber) returns for any
+ *  other matchNumber. The rotation stays exactly as deterministic and
+ *  testable as before.
+ *
+ *  The kill switch (MODE_ROTATION_DISABLED, an explicit operator
+ *  choice) wins over this rule too: when rotation is disabled the
+ *  server is pinned to the pre-rotation battleRoyale-only behaviour and
+ *  this function does not second-guess that. */
+export function decideMatchModeForJoin(
+  matchNumber: number,
+  joinerRequeued: boolean,
+  cadenceOrRotation: number | WinCondition[] = MODE_ROTATION,
+  disabled: boolean = MODE_ROTATION_DISABLED,
+): ModeDecision {
+  if (!disabled && !joinerRequeued) {
+    return { winCondition: 'timedKO', timeLimitTicks: TIMED_BRAWL_TIME_LIMIT_TICKS };
+  }
+  return decideMatchMode(matchNumber, cadenceOrRotation, disabled);
+}
+
 export function modeDisplayName(winCondition: WinCondition, timeLimitTicks?: number, startingStocks?: number): string {
   if (winCondition === 'timedKO') {
     const minutes = Math.round((timeLimitTicks ?? TIMED_BRAWL_TIME_LIMIT_TICKS) / 60 / 60);

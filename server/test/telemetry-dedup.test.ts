@@ -45,6 +45,16 @@ function startServer(port: number, statsPath: string, extraEnv: Record<string, s
         MATCH_MINIMUM: '2',
         MATCH_COUNTDOWN_SECONDS: '1',
         MATCH_SHRINK_FULLY_CLOSED_TICK: '100000',
+        // This file's tests all want a short, deterministic
+        // Last-Fighter-Standing match (one elimination ends it) so they can
+        // assert exactly one sessionEnd record without racing a 3-minute
+        // Timed Brawl clock. None of these clients set requeued on hello,
+        // so without this override the first-time-visitor rule
+        // (decideMatchModeForJoin, see mode-rotation.ts) would force
+        // timedKO and these tests would time out waiting for match end.
+        // Disabling rotation here is the explicit, documented override for
+        // that rule -- see MODE_ROTATION_DISABLED in mode-rotation.ts.
+        MATCH_MODE_ROTATION_DISABLED: 'true',
         ...extraEnv,
       },
       stdio: ['ignore', 'pipe', 'pipe'],

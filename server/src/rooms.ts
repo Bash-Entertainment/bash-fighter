@@ -5,7 +5,7 @@ import { Match, TICK_HZ, seedFromMatchId, type MatchEvents } from './match.ts';
 import { botName } from '@bash-fighter/sim/src/ai/bot.ts';
 import { seedRng, nextBounded } from '@bash-fighter/sim/src/math/prng.ts';
 import { ALL_CHARACTERS } from '@bash-fighter/content/src/characters.ts';
-import { decideMatchMode, MODE_ROTATION_CADENCE, MODE_ROTATION_DISABLED } from './mode-rotation.ts';
+import { decideMatchModeForJoin, MODE_ROTATION_CADENCE, MODE_ROTATION_DISABLED } from './mode-rotation.ts';
 
 export const DEFAULT_CAPACITY = 20;
 export const DEFAULT_MINIMUM = 2;
@@ -120,7 +120,7 @@ export class RoomManager {
    *  lobby another joiner has already pinned. Honoured only when the
    *  server opted in via MATCH_ARENA_OVERRIDE=1 (checked in
    *  Match.start(), not here) -- a production server ignores it. */
-  joinLobby(name: string, characterId?: string, qa = false, arena?: string): { match: Match; slot: number } {
+  joinLobby(name: string, characterId?: string, qa = false, arena?: string, requeued = false): { match: Match; slot: number } {
     let freshMatch = false;
     if (!this.filling || this.filling.phase !== 'lobby') {
       const matchNumber = this.nextId;
@@ -132,16 +132,22 @@ export class RoomManager {
       // the same mode. Logged here, at decision time, so a journalctl
       // read confirms the split independent of whether/when the match
       // ever starts.
-      const decision = decideMatchMode(matchNumber);
+      const decision = decideMatchModeForJoin(matchNumber, requeued);
       match.plannedWinCondition = decision.winCondition;
       match.plannedTimeLimitTicks = decision.timeLimitTicks;
       match.plannedStartingStocks = decision.startingStocks;
+      // forcedForFirstTimeVisitor: true when this match's mode was chosen
+      // by the first-time-visitor rule (decideMatchModeForJoin), not by
+      // the rotation -- distinguishes the two causes in the log rather
+      // than implying the rotation itself picked timedKO here.
+      const forcedForFirstTimeVisitor = !MODE_ROTATION_DISABLED && !requeued;
       console.log(`[modeRotation] ${JSON.stringify({
         matchId: id,
         matchNumber,
         cadence: MODE_ROTATION_CADENCE,
         disabled: MODE_ROTATION_DISABLED,
         winCondition: decision.winCondition,
+        forcedForFirstTimeVisitor,
       })}`);
       this.matches.set(id, match);
       this.filling = match;

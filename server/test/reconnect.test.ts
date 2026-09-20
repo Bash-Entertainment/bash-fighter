@@ -38,6 +38,12 @@ function startServer(port: number, extraEnv: Record<string, string>): ChildProce
         MATCH_MINIMUM: '3',
         MATCH_COUNTDOWN_SECONDS: '1',
         MATCH_SHRINK_FULLY_CLOSED_TICK: '100000', // effectively no arena-shrink elimination in these tests
+        // These tests join as non-requeued humans and expect a normal
+        // Last-Fighter-Standing match (elimination ends it quickly).
+        // Without this override the first-time-visitor rule
+        // (decideMatchModeForJoin, mode-rotation.ts) would force timedKO
+        // and matchEnd would never fire the way these tests expect.
+        MATCH_MODE_ROTATION_DISABLED: 'true',
         ...extraEnv,
       },
       stdio: ['ignore', 'pipe', 'pipe'],

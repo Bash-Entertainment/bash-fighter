@@ -95,8 +95,11 @@ test('RoomManager: match creation (not connection) decides the mode, following t
   for (let i = 0; i < 8; i++) {
     // Two joins fill and start a 2-capacity lobby immediately, so each
     // iteration creates exactly one fresh match.
-    const first = manager.joinLobby(`p${i}a`);
-    const second = manager.joinLobby(`p${i}b`);
+    // requeued: true on both seats -- this test is specifically about the
+    // rotation sequence, which only applies to requeued joins post the
+    // first-time-visitor rule (see rooms.test.ts for that rule itself).
+    const first = manager.joinLobby(`p${i}a`, undefined, false, undefined, true);
+    const second = manager.joinLobby(`p${i}b`, undefined, false, undefined, true);
     assert.equal(first.match.id, second.match.id, 'both seats landed in the same freshly created match');
     assert.ok(!seenMatchIds.has(first.match.id), 'each iteration created a genuinely new match');
     seenMatchIds.add(first.match.id);
