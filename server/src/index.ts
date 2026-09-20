@@ -108,6 +108,8 @@ interface PendingSessionEnd {
 }
 const pendingSessionEnds = new Map<string, PendingSessionEnd>();
 const emittedSessionEnds = new Set<string>();
+/** 20 seats x plenty of concurrent matches, with a wide margin. */
+const EMITTED_SESSION_END_KEYS_MAX = 4000;
 
 function seatKey(matchId: string, slot: number): string {
   return `${matchId}:${slot}`;
@@ -122,6 +124,11 @@ function emitSessionEndOnce(
 ): void {
   const key = seatKey(match.id, connLike.slot);
   if (emittedSessionEnds.has(key)) return;
+  // The de-dup set would otherwise grow for the process's whole lifetime
+  // (one entry per seat per match). Matches are reaped after a minute, so
+  // old keys can never come back; drop the lot once the set is far larger
+  // than any plausible set of live matches rather than tracking teardown.
+  if (emittedSessionEnds.size > EMITTED_SESSION_END_KEYS_MAX) emittedSessionEnds.clear();
   emittedSessionEnds.add(key);
   logSessionEnd(connLike, match);
   statsRecorder.recordSessionEnd(connLike, match);
