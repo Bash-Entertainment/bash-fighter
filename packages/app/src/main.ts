@@ -802,9 +802,14 @@ async function beginOnlineMatch(requeued = false): Promise<void> {
       touchControls.hide();
       lastEliminationContent = {
         title: `You finished ${placement} of ${totalFighters}`,
-        message: `You can jump straight into a new match${SPECTATE_OFFER}.`,
+        message: `A new match starts on its own in a few seconds${SPECTATE_OFFER}.`,
         actions: [
-          { label: 'Play again', onClick: () => void beginOnlineMatch(true) },
+          // The countdown, not just the button: 71% of real sessions ended
+          // right here at the player's own elimination with a median of 31s
+          // of play, so the default outcome of doing nothing should be
+          // another match rather than the end of the session. Pressing
+          // "Keep spectating" cancels it.
+          { label: 'Play again', autoAfterSec: 8, onClick: () => void beginOnlineMatch(true) },
           {
             label: 'Keep spectating',
             onClick: () => {

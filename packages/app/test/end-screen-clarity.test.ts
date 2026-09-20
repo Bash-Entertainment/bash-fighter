@@ -54,3 +54,24 @@ test('the connection chip stands down while an end screen is up', () => {
 test('Timed Brawl does not print the same clock twice', () => {
   assert.match(hud, /matchClockLine\.style\.display\s*=\s*matchInfo\.winCondition === 'timedKO' \? 'none' : ''/);
 });
+
+// 2026-09-19: the elimination overlay now re-queues on its own after 8s,
+// because doing nothing used to end the session.
+test('a counting-down action shows the seconds and stops at zero', async () => {
+  const { countdownLabel } = await import('../src/ui/match-overlay.ts');
+  assert.equal(countdownLabel('Play again', 8), 'Play again (8)');
+  assert.equal(countdownLabel('Play again', 1), 'Play again (1)');
+  assert.equal(countdownLabel('Play again', 0), 'Play again');
+});
+
+test('the elimination overlay arms the countdown and says so', () => {
+  const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  assert.match(main, /label: 'Play again', autoAfterSec: 8/);
+  assert.match(main, /A new match starts on its own in a few seconds/);
+});
+
+test('announcing a winner cancels the countdown', () => {
+  const overlay = readFileSync(new URL('../src/ui/match-overlay.ts', import.meta.url), 'utf8');
+  const announce = overlay.slice(overlay.indexOf('announceWinner('));
+  assert.match(announce, /cancelCountdown\(\)/);
+});

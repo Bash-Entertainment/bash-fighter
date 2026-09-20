@@ -13,6 +13,13 @@ export interface MatchOverlayAction {
   /** 'primary' (amber, the expected next click) or 'plain' (quiet text
    * link, an alternative). Defaults to 'primary'. */
   kind?: 'primary' | 'plain';
+  /** When set, this action fires on its own after this many seconds and
+   * its label counts down so the player can see it coming. Added
+   * 2026-09-19: 71% of real sessions end at the player's own
+   * elimination, median in-match time 31s, while the button that would
+   * have given them another match sat there unpressed. Any other action
+   * on the overlay cancels the countdown. */
+  autoAfterSec?: number;
 }
 
 export interface MatchOverlayContent {
@@ -67,6 +74,13 @@ export function winnerAnnouncementLine(
   return `The match ended -- ${label} won.`;
 }
 
+/** Label for an action that is counting itself down, e.g.
+ * "Play again (8)". Pure so the wording has coverage without a DOM. */
+export function countdownLabel(base: string, secondsLeft: number): string {
+  if (secondsLeft <= 0) return base;
+  return `${base} (${secondsLeft})`;
+}
+
 export class MatchOverlay {
   readonly root: HTMLDivElement;
   private readonly panel: HTMLDivElement;
@@ -74,6 +88,7 @@ export class MatchOverlay {
   private readonly titleEl: HTMLDivElement;
   private readonly messageEl: HTMLDivElement;
   private readonly actionsEl: HTMLDivElement;
+  private countdownTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(parent: HTMLElement) {
     this.root = document.createElement('div');
@@ -101,19 +116,48 @@ export class MatchOverlay {
     this.titleEl.textContent = content.title;
     this.messageEl.textContent = content.message;
     this.panel.dataset.tone = content.tone ?? 'default';
+    this.cancelCountdown();
     this.actionsEl.innerHTML = '';
     for (const action of content.actions) {
       const btn = document.createElement('button');
       btn.className = action.kind === 'plain' ? 'btn btn-plain' : 'btn btn-primary';
       btn.textContent = action.label;
-      btn.addEventListener('click', action.onClick);
+      btn.addEventListener('click', () => {
+        this.cancelCountdown();
+        action.onClick();
+      });
       this.actionsEl.appendChild(btn);
+      if (action.autoAfterSec && action.autoAfterSec > 0) {
+        this.startCountdown(btn, action);
+      }
     }
     this.root.classList.remove('hidden');
   }
 
   hide(): void {
+    this.cancelCountdown();
     this.root.classList.add('hidden');
+  }
+
+  private startCountdown(btn: HTMLButtonElement, action: MatchOverlayAction): void {
+    let left = Math.ceil(action.autoAfterSec as number);
+    btn.textContent = countdownLabel(action.label, left);
+    this.countdownTimer = setInterval(() => {
+      left -= 1;
+      if (left > 0) {
+        btn.textContent = countdownLabel(action.label, left);
+        return;
+      }
+      this.cancelCountdown();
+      btn.textContent = action.label;
+      action.onClick();
+    }, 1000);
+  }
+
+  private cancelCountdown(): void {
+    if (this.countdownTimer === null) return;
+    clearInterval(this.countdownTimer);
+    this.countdownTimer = null;
   }
 
   /** 2026-09-10: a spectator who was already eliminated (their own
@@ -141,6 +185,15 @@ export class MatchOverlay {
     // final frame with no way back. Drop it and leave "Play again" alone.
     for (const btn of Array.from(this.actionsEl.querySelectorAll('button'))) {
       if (btn.textContent === 'Keep spectating') btn.remove();
+    }
+    // The match has resolved, so stop any auto-requeue countdown: the
+    // action that would have cancelled it ("Keep spectating") has just
+    // been removed, and yanking the player out of the winner
+    // announcement they cannot opt out of would be a trap.
+    this.cancelCountdown();
+    for (const btn of Array.from(this.actionsEl.querySelectorAll('button'))) {
+      const stripped = btn.textContent?.replace(/\s*\(\d+\)$/, '');
+      if (stripped && stripped !== btn.textContent) btn.textContent = stripped;
     }
     this.root.classList.remove('hidden');
   }
