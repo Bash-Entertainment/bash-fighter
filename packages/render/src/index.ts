@@ -1035,8 +1035,13 @@ export class Renderer {
     if (this.adaptiveResolution && rawDtMs !== null) {
       const wanted = this.adaptiveResolution.sample(rawDtMs);
       if (this.app.renderer && this.app.renderer.resolution !== wanted) {
-        this.app.renderer.resolution = wanted;
-        this.app.renderer.resize(this.app.renderer.width, this.app.renderer.height);
+        // resize() must carry the resolution as its third argument. Setting
+        // renderer.resolution and then calling resize(w, h) reverts it to the
+        // app's autoDensity/resizeTo value -- measured live 2026-09-21:
+        // resolution = 2 followed by resize(w, h) left resolution at 1 and the
+        // canvas backing store untouched, so the governor would have been a
+        // silent no-op. resize(w, h, 2) moved the canvas to 2160x1440.
+        this.app.renderer.resize(this.app.renderer.width, this.app.renderer.height, wanted);
       }
     }
 
