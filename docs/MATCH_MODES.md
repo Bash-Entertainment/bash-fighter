@@ -79,6 +79,30 @@ identifiers). Kill switch: `MATCH_MODE_ROTATION_DISABLED=1` pins every
 match to Battle Royale (or whatever `MATCH_WIN_CONDITION` pins
 manually), same as before Timed Brawl shipped.
 
+## A first-time visitor's first match
+
+One exception overrides the rotation: if the player creating a match did
+not arrive via "Play again", that match is forced to Timed Brawl
+(`decideMatchModeForJoin` in `server/src/mode-rotation.ts`, fed by
+`ClientConn.requeuedAtJoin`). A newcomer's first match should not be able
+to end fifteen seconds in — in Timed Brawl a knockout respawns you, so
+their first three minutes are always playable. The `[modeRotation]` log
+line records this as `forcedForFirstTimeVisitor`.
+
+The override does not touch the rotation counter: `matchNumber` still
+increments once per created match and `decideMatchMode` stays pure over
+it, so forcing a mode never shifts the sequence for everyone else. The
+same kill switch (`MATCH_MODE_ROTATION_DISABLED`) also disables the
+override, which is how the server tests opt out of it.
+
+## Leaving a match
+
+Both end screens and the elimination overlay count themselves down and
+re-enter matchmaking on their own unless the player interacts
+(`packages/app/src/ui/auto-continue.ts`; 6s on the end screens, 4s on the
+elimination overlay). This is client-side only — the server sees an
+ordinary join with `requeued: true`.
+
 ## Local testing
 
 `?mode=stocks` (and `?stocks=<n>`) in the local crowd harness — see
