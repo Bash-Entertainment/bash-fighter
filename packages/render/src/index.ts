@@ -545,6 +545,9 @@ export class Renderer {
     if (!this.adaptiveResolutionDisabled) {
       this.adaptiveResolution = new AdaptiveResolutionGovernor(this.app.renderer.resolution);
     }
+    if (this.app.renderer) {
+      this.desiredResolution = this.app.renderer.resolution;
+    }
 
     // Must be attached to the real canvas element, not `this.app` --
     // that's what the browser actually fires these two events on.
@@ -593,7 +596,12 @@ export class Renderer {
       if (width <= 0 || height <= 0) return;
       const current = this.viewSize;
       if (current.width === width && current.height === height) return;
-      this.app.renderer.resize(width, height);
+      // Carry desiredResolution: Pixi's two-argument resize() drops back to
+      // the resolution the app was initialised with, so without this any
+      // parent resize (phone rotation, the HUD sidebar appearing) would
+      // silently undo the adaptive governor's choice. Measured live
+      // 2026-09-21: resolution 2 survived only until the next resize.
+      this.app.renderer.resize(width, height, this.desiredResolution);
     };
     syncToParent();
     // A fresh renderer means a fresh match: the camera must start framed
@@ -989,6 +997,11 @@ export class Renderer {
     return this.framesPresented;
   }
 
+  /** The resolution the renderer should be at: the device's clamped
+   *  value until the governor lowers it. Every resize path passes this so
+   *  a resize cannot revert it. */
+  private desiredResolution = 1;
+
   /** Current resolution the adaptive governor has settled on (or the
    *  device's static clamp if the governor is disabled/not yet
    *  constructed). Read-only debugging hook. */
@@ -1003,6 +1016,17 @@ export class Renderer {
       downgrades: this.adaptiveResolution?.downgrades ?? 0,
       upgrades: this.adaptiveResolution?.upgrades ?? 0,
     };
+  }
+
+  /** Dev/QA-only: force a render resolution and keep it through resizes,
+   *  so the adaptive path can be verified on a machine whose own DPR is 1. */
+  setDevResolution(value: number): void {
+    this.adaptiveResolution = null;
+    this.desiredResolution = value;
+    if (this.app.renderer) {
+      const { width, height } = this.viewSize;
+      this.app.renderer.resize(width, height, value);
+    }
   }
 
   /** Dev-only escape hatch: stops the governor from touching resolution
@@ -1034,7 +1058,8 @@ export class Renderer {
     // >2000ms backgrounded-tab gaps) happens inside the governor.
     if (this.adaptiveResolution && rawDtMs !== null) {
       const wanted = this.adaptiveResolution.sample(rawDtMs);
-      if (this.app.renderer && this.app.renderer.resolution !== wanted) {
+      if (this.app.renderer && this.desiredResolution !== wanted) {
+        this.desiredResolution = wanted;
         // resize() must carry the resolution as its third argument. Setting
         // renderer.resolution and then calling resize(w, h) reverts it to the
         // app's autoDensity/resizeTo value -- measured live 2026-09-21:
