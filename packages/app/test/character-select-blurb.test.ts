@@ -32,7 +32,7 @@ test('every character data file sets a non-empty blurb', () => {
     );
     const match = data.match(/blurb:\s*'([^']+)'/);
     assert.ok(match, `expected ${folder}/data.ts to set a blurb`);
-    assert.ok(match[1].trim().length > 0, `expected ${folder} blurb to be non-empty`);
+    assert.ok((match?.[1] ?? '').trim().length > 0, `expected ${folder} blurb to be non-empty`);
   }
 });
 

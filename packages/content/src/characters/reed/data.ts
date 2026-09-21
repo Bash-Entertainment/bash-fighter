@@ -140,7 +140,7 @@ const downAir: MoveDef = {
 
 export const REED_CHARACTER: CharacterData = {
   name: 'Reed',
-  blurb: 'zoner · long reach, big commitment',
+  blurb: 'zoner · long reach',
   weight: fromFloat(90),
   hurtboxWidth: fromFloat(10),
   hurtboxHeight: fromFloat(36),

@@ -129,7 +129,7 @@ const downAir: MoveDef = {
 
 export const SCRAPPER_CHARACTER: CharacterData = {
   name: 'Scrapper',
-  blurb: 'brawler · fastest jab, short reach',
+  blurb: 'brawler · fastest jab',
   weight: fromFloat(95),
   hurtboxWidth: fromFloat(18),
   hurtboxHeight: fromFloat(28),

@@ -135,7 +135,7 @@ const downAir: MoveDef = {
 
 export const ZEPHYR_CHARACTER: CharacterData = {
   name: 'Zephyr',
-  blurb: 'acrobat · fast aerials, light',
+  blurb: 'acrobat · fast aerials',
   weight: fromFloat(75),
   hurtboxWidth: fromFloat(13),
   hurtboxHeight: fromFloat(24),

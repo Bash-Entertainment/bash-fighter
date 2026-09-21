@@ -122,7 +122,7 @@ export const PLACEHOLDER_CHARACTER: CharacterData = {
   // screen. Keep in step with ANIMATION_BY_CHARACTER_NAME, which is keyed
   // by this string -- animation-registry.test.ts enforces that.
   name: 'Slate',
-  blurb: 'all-rounder · no strong weakness',
+  blurb: 'all-rounder · no weakness',
   weight: fromFloat(100),
   hurtboxWidth: fromFloat(16),
   hurtboxHeight: fromFloat(32),

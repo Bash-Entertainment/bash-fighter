@@ -130,7 +130,7 @@ const downAir: MoveDef = {
 
 export const ANCHOR_CHARACTER: CharacterData = {
   name: 'Anchor',
-  blurb: 'fortress · slowest, hardest to launch',
+  blurb: 'fortress · hard to launch',
   weight: fromFloat(170),
   hurtboxWidth: fromFloat(24),
   hurtboxHeight: fromFloat(34),

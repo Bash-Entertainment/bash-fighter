@@ -136,7 +136,7 @@ const downAir: MoveDef = {
 
 export const VOLTLING_CHARACTER: CharacterData = {
   name: 'Voltling',
-  blurb: 'glass cannon · fast, fragile',
+  blurb: 'glass cannon · fragile',
   weight: fromFloat(70),
   hurtboxWidth: fromFloat(12),
   hurtboxHeight: fromFloat(26),
