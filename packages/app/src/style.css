@@ -386,6 +386,19 @@ html, body {
   font-weight: 700;
 }
 
+.roster-blurb {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-dim);
+  font-family: var(--font-ui);
+  text-align: center;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .roster-weight {
   font-size: 11px;
   color: var(--ink-dim);

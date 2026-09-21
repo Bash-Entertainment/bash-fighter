@@ -143,6 +143,7 @@ const downAir: MoveDef = {
 
 export const WISP_CHARACTER: CharacterData = {
   name: 'Wisp',
+  blurb: 'poker · quickest pokes, feeble damage',
   weight: fromFloat(65),
   hurtboxWidth: fromFloat(11),
   hurtboxHeight: fromFloat(30),

@@ -39,6 +39,8 @@ export interface MoveDef {
 
 export interface CharacterData {
   name: string;
+  /** Short newcomer-facing archetype line shown on the character select card. */
+  blurb?: string;
   weight: Fixed;
   hurtboxWidth: Fixed;
   hurtboxHeight: Fixed;

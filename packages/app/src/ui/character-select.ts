@@ -71,11 +71,21 @@ export class CharacterSelect {
       name.className = 'roster-name';
       name.textContent = entry.character.name;
 
+      const blurb = document.createElement('div');
+      blurb.className = 'roster-blurb';
+      blurb.textContent = entry.character.blurb ?? '';
+
       const weight = document.createElement('div');
       weight.className = 'roster-weight';
       weight.textContent = `weight ${Math.round(entry.character.weight / 65536)}`;
 
-      card.append(swatch, name, weight);
+      card.append(swatch, name, blurb, weight);
+      card.setAttribute(
+        'aria-label',
+        entry.character.blurb
+          ? `${entry.character.name}: ${entry.character.blurb}`
+          : entry.character.name,
+      );
       card.addEventListener('click', () => this.select(entry.id, onChange));
       // Preview updates on hover/keyboard-focus without changing the pick,
       // so a player can flip through movesets before committing. Falls

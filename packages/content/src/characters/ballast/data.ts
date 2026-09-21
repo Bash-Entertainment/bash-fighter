@@ -130,6 +130,7 @@ const downAir: MoveDef = {
 
 export const BALLAST_CHARACTER: CharacterData = {
   name: 'Ballast',
+  blurb: 'heavyweight · slow, hits hard',
   weight: fromFloat(140),
   hurtboxWidth: fromFloat(20),
   hurtboxHeight: fromFloat(30),
