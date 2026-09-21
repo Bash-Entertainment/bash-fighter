@@ -3,6 +3,7 @@
 // overlay -- a player who has just lost and a player who has just won
 // should not feel like they are looking at two different games.
 import { PALETTE } from '@bash-fighter/render';
+import { AutoContinue } from './auto-continue.ts';
 
 const PLAYER_HEX = PALETTE.playerColors.map((c) => `#${c.toString(16).padStart(6, '0')}`);
 
@@ -10,6 +11,11 @@ export class WinScreen {
   readonly root: HTMLDivElement;
   private readonly headline: HTMLDivElement;
   private readonly subtitle: HTMLDivElement;
+  /** Set by main.ts: only an online match should roll into another one
+   * on its own; the local harness is something the player chose to open. */
+  autoContinueEnabled = false;
+  private readonly autoContinue!: AutoContinue;
+  private readonly onRematch: () => void;
   private lastResult: 'won' | 'eliminated' | 'no_survivor' = 'no_survivor';
 
   // Feedback block for the moment a player has just formed an opinion
@@ -32,7 +38,13 @@ export class WinScreen {
     parent.appendChild(this.root);
     this.headline = this.root.querySelector('#win-headline') as HTMLDivElement;
     this.subtitle = this.root.querySelector('#win-subtitle') as HTMLDivElement;
-    (this.root.querySelector('#rematch-btn') as HTMLButtonElement).addEventListener('click', onRematch);
+    const rematchBtn = this.root.querySelector('#rematch-btn') as HTMLButtonElement;
+    rematchBtn.addEventListener('click', () => {
+      this.autoContinue.cancel();
+      onRematch();
+    });
+    this.autoContinue = new AutoContinue(this.root, rematchBtn);
+    this.onRematch = onRematch;
     (this.root.querySelector('#win-feedback-btn') as HTMLButtonElement).addEventListener('click', () =>
       onOpenFeedback?.(this.lastResult),
     );
@@ -73,10 +85,12 @@ export class WinScreen {
     }
     if (winnerIndex === null) this.lastResult = 'no_survivor';
     this.root.classList.remove('hidden');
+    if (this.autoContinueEnabled) this.autoContinue.start(this.onRematch);
     document.body.classList.add('end-screen-open');
   }
 
   hide(): void {
+    this.autoContinue.cancel();
     this.root.classList.add('hidden');
     document.body.classList.remove('end-screen-open');
   }

@@ -6,6 +6,7 @@
 // to speak both makes neither reading clear. Same voice, same "screen"
 // shell, same one-button way forward as WinScreen and MatchOverlay.
 import { PALETTE } from '@bash-fighter/render';
+import { AutoContinue } from './auto-continue.ts';
 import { buildStandings, placementOf, tiedHeadline, type TimedBrawlScore } from '../timed-brawl.ts';
 
 const PLAYER_HEX = PALETTE.playerColors.map((c) => `#${c.toString(16).padStart(6, '0')}`);
@@ -17,6 +18,11 @@ export class TimedBrawlEndScreen {
   private readonly subtitle: HTMLDivElement;
   private readonly list: HTMLDivElement;
 
+  /** Set by main.ts: only an online match should roll into another one
+   * on its own; the local harness is something the player chose to open. */
+  autoContinueEnabled = false;
+  private readonly autoContinue!: AutoContinue;
+  private readonly onRematch: () => void;
   private lastResult: 'won' | 'lost' | 'tied' = 'tied';
 
   // Same feedback block as WinScreen (see feedback-panel.ts, 2026-09-13):
@@ -41,7 +47,13 @@ export class TimedBrawlEndScreen {
     this.winnerSwatch = this.root.querySelector('#tb-winner-swatch') as HTMLSpanElement;
     this.subtitle = this.root.querySelector('#tb-subtitle') as HTMLDivElement;
     this.list = this.root.querySelector('#tb-standings') as HTMLDivElement;
-    (this.root.querySelector('#tb-rematch-btn') as HTMLButtonElement).addEventListener('click', onRematch);
+    const rematchBtn = this.root.querySelector('#tb-rematch-btn') as HTMLButtonElement;
+    rematchBtn.addEventListener('click', () => {
+      this.autoContinue.cancel();
+      onRematch();
+    });
+    this.autoContinue = new AutoContinue(this.root, rematchBtn);
+    this.onRematch = onRematch;
     (this.root.querySelector('#tb-feedback-btn') as HTMLButtonElement).addEventListener('click', () =>
       onOpenFeedback?.(this.lastResult),
     );
@@ -119,10 +131,12 @@ export class TimedBrawlEndScreen {
       this.list.appendChild(el);
     }
     this.root.classList.remove('hidden');
+    if (this.autoContinueEnabled) this.autoContinue.start(this.onRematch);
     document.body.classList.add('end-screen-open');
   }
 
   hide(): void {
+    this.autoContinue.cancel();
     this.root.classList.add('hidden');
     document.body.classList.remove('end-screen-open');
   }

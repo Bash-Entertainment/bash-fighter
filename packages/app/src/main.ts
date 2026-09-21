@@ -780,8 +780,10 @@ async function beginOnlineMatch(requeued = false): Promise<void> {
           koCount: s.koCount,
           deathCount: s.deathCount,
         }));
+        timedBrawlEndScreen.autoContinueEnabled = true;
         timedBrawlEndScreen.show(winnerIndex, leaderboard, scores, netMatch?.localSlot(), netMatch ? (slot) => netMatch!.nameFor(slot) : undefined);
       } else {
+        winScreen.autoContinueEnabled = true;
         winScreen.show(winnerIndex, netMatch?.localSlot(), netMatch ? (slot) => netMatch!.nameFor(slot) : undefined);
       }
     },
@@ -1042,6 +1044,7 @@ async function beginMatch(): Promise<void> {
         const scores = localMatch.currentSnapshots().map((s, slot) => ({ slot, koCount: s.koCount, deathCount: s.deathCount }));
         timedBrawlEndScreen.show(winnerIndex, leaderboard, scores, 0, (slot) => localMatch.nameFor(slot));
       } else {
+        winScreen.autoContinueEnabled = false;
         winScreen.show(winnerIndex, 0, (slot) => localMatch.nameFor(slot));
       }
       match?.stop();
