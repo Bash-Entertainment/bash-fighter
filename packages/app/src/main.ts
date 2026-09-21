@@ -870,7 +870,7 @@ async function beginOnlineMatch(requeued = false): Promise<void> {
         announcedStart = true;
         pauseLobbyMusic();
         audio.play('match_start');
-        controlsHint.maybeShow();
+        controlsHint.maybeShow(touchCapable);
       }
       hud.show();
       inMatchMovesButton.classList.remove('hidden');
@@ -960,7 +960,7 @@ async function beginMatch(): Promise<void> {
       inMatchSettingsButton.classList.remove('hidden');
       inMatchFeedbackButton.classList.remove('hidden');
   if (touchCapable) touchControls.show();
-  controlsHint.maybeShow();
+  controlsHint.maybeShow(touchCapable);
   const generation = ++matchGeneration;
   lastFrameTimeMs = null;
 

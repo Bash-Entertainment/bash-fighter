@@ -836,6 +836,15 @@ html, body {
   pointer-events: none;
 }
 
+/* On a phone the touch buttons own the bottom of the screen, so the hint
+   sits under the heading instead. */
+.controls-hint.touch {
+  bottom: auto;
+  top: 62px;
+  max-width: 78vw;
+  text-align: center;
+}
+
 .controls-hint.fading {
   opacity: 0;
 }
