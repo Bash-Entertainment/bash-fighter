@@ -51,6 +51,18 @@ export class StartScreen {
   private readonly p2BindingsEl: HTMLPreElement;
   private readonly nameInput: HTMLInputElement;
 
+  /** Swap the keyboard control list for touch wording. Called from main.ts,
+   *  which is where touch capability is decided once at load: a phone player
+   *  reading "A/D move / Space jump" has been told nothing at all. */
+  useTouchControls(): void {
+    const row = this.root.querySelector('.how-to-play-controls');
+    if (!row) return;
+    row.textContent = '';
+    const span = document.createElement('span');
+    span.textContent = 'Drag the stick to move, tap Jump, Attack, Special or Shield.';
+    row.append(span);
+  }
+
   constructor(parent: HTMLElement, onStart: () => void, onWatchReplay?: () => void) {
     this.root = document.createElement('div');
     this.root.className = 'screen';

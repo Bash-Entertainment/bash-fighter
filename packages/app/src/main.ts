@@ -287,6 +287,7 @@ const startScreen = new StartScreen(
     replayScreen.show();
   },
 );
+if (touchCapable) startScreen.useTouchControls();
 
 const replayScreen = new ReplayScreen(appRoot, () => {
   startScreen.show();
