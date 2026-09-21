@@ -594,3 +594,60 @@ test('hello accepts requeued only as a strict boolean', () => {
   assert.equal(hello({ requeued: 'yes' })?.requeued, undefined);
   assert.equal(hello({})?.requeued, undefined);
 });
+
+// 2026-09-21. Render-resolution telemetry (adaptive-resolution governor,
+// packages/render/src/adaptive-resolution.ts): renderResolution follows
+// devicePixelRatio's drop-rather-than-clamp treatment, and
+// resolutionDowngrades is a small clamped non-negative count. A report
+// with neither field must still validate exactly as before.
+test('sessionReport: renderResolution is kept when sane and dropped when not', () => {
+  const sessionReportWith = (extra: Record<string, unknown>) =>
+    JSON.stringify({ t: 'sessionReport', firstInputMs: 100, inputTicks: 10, frameMedianMs: 16, frameP95Ms: 20, ...extra });
+  const kept = parseClientControl(sessionReportWith({ renderResolution: 1.5 }));
+  assert.equal(kept?.t, 'sessionReport');
+  assert.equal((kept as { renderResolution?: number }).renderResolution, 1.5);
+
+  for (const bad of [0, -1, Number.NaN, 'two', null, 1e9]) {
+    const parsed = parseClientControl(sessionReportWith({ renderResolution: bad })) as
+      | { renderResolution?: number }
+      | null;
+    assert.equal(parsed?.renderResolution, undefined, `renderResolution ${String(bad)} must be dropped`);
+  }
+
+  assert.ok(
+    sessionReportWith({ renderResolution: 2 }).length < MAX_SESSION_REPORT_BYTES,
+    'a report carrying the field must stay under the session-report cap',
+  );
+});
+
+test('sessionReport: resolutionDowngrades is clamped to a sane non-negative count', () => {
+  const sessionReportWith = (extra: Record<string, unknown>) =>
+    JSON.stringify({ t: 'sessionReport', firstInputMs: 100, inputTicks: 10, frameMedianMs: 16, frameP95Ms: 20, ...extra });
+  const kept = parseClientControl(sessionReportWith({ resolutionDowngrades: 3 }));
+  assert.equal((kept as { resolutionDowngrades?: number }).resolutionDowngrades, 3);
+
+  const capped = parseClientControl(sessionReportWith({ resolutionDowngrades: 999 })) as {
+    resolutionDowngrades?: number;
+  } | null;
+  assert.equal(capped?.resolutionDowngrades, 64);
+
+  const negative = parseClientControl(sessionReportWith({ resolutionDowngrades: -1 })) as {
+    resolutionDowngrades?: number;
+  } | null;
+  assert.equal(negative?.resolutionDowngrades, 0, 'a negative count clamps to 0, same as every other clamped-not-dropped count field');
+
+  for (const bad of [Number.NaN, 'many', null]) {
+    const parsed = parseClientControl(sessionReportWith({ resolutionDowngrades: bad })) as
+      | { resolutionDowngrades?: number }
+      | null;
+    assert.equal(parsed?.resolutionDowngrades, undefined, `resolutionDowngrades ${String(bad)} must be dropped`);
+  }
+});
+
+test('sessionReport: still validates with neither renderResolution nor resolutionDowngrades present', () => {
+  const msg = parseClientControl(
+    JSON.stringify({ t: 'sessionReport', firstInputMs: null, inputTicks: 0, frameMedianMs: 16, frameP95Ms: 20 }),
+  ) as SessionReportMessage;
+  assert.equal('renderResolution' in msg, false);
+  assert.equal('resolutionDowngrades' in msg, false);
+});

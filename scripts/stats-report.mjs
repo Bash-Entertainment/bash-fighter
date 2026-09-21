@@ -328,6 +328,21 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
     }
     const uaFamily = stringCounts('uaFamily');
 
+    // Render-resolution telemetry (2026-09-21) -- whether the adaptive-
+    // resolution governor (packages/render/src/adaptive-resolution.ts)
+    // actually fired on real devices, and what resolution sessions ended
+    // at. renderResolution is a small fixed set of values (2, 1.5, 1), so
+    // bucketCounts works the same as the device-capability tags above.
+    const renderResolution = bucketCounts('renderResolution');
+    let resolutionDowngradesKnown = 0;
+    let sessionsWithDowngrade = 0;
+    for (const s of group) {
+      const v = s.resolutionDowngrades;
+      if (typeof v !== 'number') continue;
+      resolutionDowngradesKnown += 1;
+      if (v > 0) sessionsWithDowngrade += 1;
+    }
+
     // Frame-time histogram (2026-09-14): summed across every session in
     // this group, bucket-by-bucket, in the same fixed order as
     // packages/net/src/protocol.ts's FRAME_HISTOGRAM_BOUNDARIES_MS
@@ -478,6 +493,12 @@ function buildReport({ storeLines, extraLines, feedbackCount, since }) {
         screenWidthBucket: screenWidth,
         screenHeightBucket: screenHeight,
         uaFamily,
+      },
+      renderResolution: {
+        counts: renderResolution.counts,
+        knownDenominator: renderResolution.known,
+        sessionsWithDowngrade,
+        downgradesKnownDenominator: resolutionDowngradesKnown,
       },
       frameHistogram: {
         buckets: frameHistogramSum,
@@ -784,6 +805,25 @@ function printReport(report) {
     for (const deviceClass of ['touch', 'nonTouch']) {
       const row = classes[deviceClass];
       if (row) w(`  dpr ${dpr}, ${deviceClass === 'nonTouch' ? 'non-touch' : 'touch'}: sessions ${row.sessions}, median of medians ${fmt(row.medianOfMedianFrameMs)}, median of p95s ${fmt(row.medianOfP95FrameMs)}`);
+    }
+  }
+  w();
+
+  // Render-resolution telemetry (2026-09-21) -- whether the adaptive-
+  // resolution governor (packages/render/src/adaptive-resolution.ts)
+  // actually fires on real devices, non-QA sessions only.
+  w('render resolution (sessions NOT marked QA)');
+  const rr = report.humanSessions.notQa.renderResolution;
+  if (rr.knownDenominator === 0) {
+    w('  (no sessions with render-resolution telemetry yet -- older client build)');
+  } else {
+    const entries = Object.keys(rr.counts).map(Number).sort((a, b) => b - a);
+    const parts = entries.map((k) => `${k}: ${rr.counts[k]} (${pct(rr.counts[k], rr.knownDenominator)})`);
+    w(`  ended session at resolution (n=${rr.knownDenominator} known): ${parts.join(', ')}`);
+    if (rr.downgradesKnownDenominator > 0) {
+      w(`  sessions with >=1 governor downgrade: ${rr.sessionsWithDowngrade}/${rr.downgradesKnownDenominator} known (${pct(rr.sessionsWithDowngrade, rr.downgradesKnownDenominator)})`);
+    } else {
+      w('  no sessions with downgrade-count telemetry yet');
     }
   }
   w();

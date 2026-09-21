@@ -409,3 +409,34 @@ test('[sessionEnd]: requeued (Play again vs start screen) logs through as true/f
   const absentRecord = JSON.parse(absentLines.find((l) => l.startsWith('[sessionEnd]'))!.slice('[sessionEnd] '.length));
   assert.equal(absentRecord.requeued, null);
 });
+
+// 2026-09-21. Render-resolution telemetry (adaptive-resolution governor,
+// packages/render/src/adaptive-resolution.ts) must carry through into
+// the [sessionEnd] record unchanged, and stay null when absent -- same
+// "?? null means not tracked" convention as every other optional field.
+test('[sessionEnd]: renderResolution and resolutionDowngrades log through when present, null when absent', () => {
+  const match = realMatch();
+  const report = parseClientControl(
+    JSON.stringify({
+      t: 'sessionReport',
+      firstInputMs: 100,
+      inputTicks: 5,
+      frameMedianMs: 71,
+      frameP95Ms: 90,
+      renderResolution: 1.5,
+      resolutionDowngrades: 2,
+    }),
+  ) as SessionReportMessage;
+  const conn = fakeConn({ slot: 0, lastReport: report });
+  const lines = captureLogs(() => logSessionEnd(conn, match));
+  const record = JSON.parse(lines.find((l) => l.startsWith('[sessionEnd]'))!.slice('[sessionEnd] '.length));
+  assert.equal(record.renderResolution, 1.5);
+  assert.equal(record.resolutionDowngrades, 2);
+
+  const absentMatch = realMatch();
+  const absentConn = fakeConn({ slot: 0, profile: null, lastReport: null });
+  const absentLines = captureLogs(() => logSessionEnd(absentConn, absentMatch));
+  const absentRecord = JSON.parse(absentLines.find((l) => l.startsWith('[sessionEnd]'))!.slice('[sessionEnd] '.length));
+  assert.equal(absentRecord.renderResolution, null);
+  assert.equal(absentRecord.resolutionDowngrades, null);
+});

@@ -169,6 +169,12 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
       // computeDerivedPlayMetrics's doc comment.
       visibleMs: report?.visibleMs ?? null,
       hiddenMs: report?.hiddenMs ?? null,
+      // Render-resolution telemetry (2026-09-21) -- whether the
+      // adaptive-resolution governor (packages/render/src/adaptive-resolution.ts)
+      // actually fired for this seat's client, and what resolution it
+      // ended the session at. Same "?? null means not tracked" convention.
+      renderResolution: report?.renderResolution ?? null,
+      resolutionDowngrades: report?.resolutionDowngrades ?? null,
       matchAgeAtLeaveSec: derived.matchAgeAtLeaveSec,
       activePlayMs: derived.activePlayMs,
       spectatingMs: derived.spectatingMs,

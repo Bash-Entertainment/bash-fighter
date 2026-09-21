@@ -504,6 +504,11 @@ export function buildSessionReportMessage(input: {
   visibleMs?: number;
   /** See SessionReportMessage.hiddenMs. Same convention. */
   hiddenMs?: number;
+  /** See SessionReportMessage.renderResolution. Same "absent means no
+   *  renderer existed" convention. */
+  renderResolution?: number;
+  /** See SessionReportMessage.resolutionDowngrades. Same convention. */
+  resolutionDowngrades?: number;
 }): SessionReportMessage {
   const msg: SessionReportMessage = {
     t: 'sessionReport',
@@ -534,5 +539,7 @@ export function buildSessionReportMessage(input: {
   if (input.slowFrameTransitionCoincidentCount !== undefined) msg.slowFrameTransitionCoincidentCount = input.slowFrameTransitionCoincidentCount;
   if (input.visibleMs !== undefined) msg.visibleMs = input.visibleMs;
   if (input.hiddenMs !== undefined) msg.hiddenMs = input.hiddenMs;
+  if (input.renderResolution !== undefined) msg.renderResolution = input.renderResolution;
+  if (input.resolutionDowngrades !== undefined) msg.resolutionDowngrades = input.resolutionDowngrades;
   return msg;
 }

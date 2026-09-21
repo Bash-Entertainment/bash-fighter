@@ -356,6 +356,24 @@ export interface SessionReportMessage {
    *  left open, not a player who stepped away for a few seconds mid-
    *  match. Optional/absent means "not tracked". */
   hiddenMs?: number;
+  /** The renderer's resolution scale (`Renderer.currentResolution`,
+   *  `packages/render/src/adaptive-resolution.ts`) this seat's client
+   *  finished the session at -- lets telemetry tell whether the
+   *  adaptive-resolution governor actually fired on real devices, not
+   *  just in synthetic frame-time replays. Same range as
+   *  `devicePixelRatio` (real screens/backing stores are between 0.5
+   *  and 8) and the same drop-rather-than-clamp treatment for the same
+   *  reason: a clamped nonsense value would look like a plausible
+   *  resolution. Optional/absent means no renderer existed this
+   *  session (e.g. spectator-only or a render init failure). */
+  renderResolution?: number;
+  /** Cumulative count of times the adaptive-resolution governor
+   *  stepped resolution down this session
+   *  (`Renderer.adaptiveResolutionCounters.downgrades`). A plain
+   *  count, same treatment as `contextLostCount` -- clamped to a sane
+   *  ceiling rather than trusted. Optional/absent means "not
+   *  tracked". */
+  resolutionDowngrades?: number;
 }
 
 /** Frame-delta threshold (ms) at which a rendered frame counts toward
@@ -963,7 +981,18 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   // clamped rather than trusted like every other numeric field here.
   const visibleMs = clampFiniteNumber(obj.visibleMs, 0, 21_600_000);
   const hiddenMs = clampFiniteNumber(obj.hiddenMs, 0, 21_600_000);
-  if ([firstInputMs, inputTicks, frameMedianMs, frameP95Ms, devicePixelRatio, requeued, contextLostCount, renderStalled, frameHistogram, hiddenFrames, networkHitchCount, keyboardInputTicks, touchInputTicks, gamepadInputTicks, slowFrameCount, slowFrameFightersAliveBuckets, slowFrameFightersOnScreenBuckets, slowFrameEffectsLoadBuckets, slowFrameHitchCoincidentCount, slowFrameTransitionCoincidentCount, visibleMs, hiddenMs].every((v) => v === undefined)) return null;
+  // Same drop-rather-than-clamp treatment as devicePixelRatio above --
+  // a clamped nonsense value would look like a plausible resolution.
+  const renderResolutionRaw = obj.renderResolution;
+  const renderResolution =
+    typeof renderResolutionRaw === 'number' &&
+    Number.isFinite(renderResolutionRaw) &&
+    renderResolutionRaw >= 0.5 &&
+    renderResolutionRaw <= 8
+      ? renderResolutionRaw
+      : undefined;
+  const resolutionDowngrades = clampFiniteNumber(obj.resolutionDowngrades, 0, 64);
+  if ([firstInputMs, inputTicks, frameMedianMs, frameP95Ms, devicePixelRatio, requeued, contextLostCount, renderStalled, frameHistogram, hiddenFrames, networkHitchCount, keyboardInputTicks, touchInputTicks, gamepadInputTicks, slowFrameCount, slowFrameFightersAliveBuckets, slowFrameFightersOnScreenBuckets, slowFrameEffectsLoadBuckets, slowFrameHitchCoincidentCount, slowFrameTransitionCoincidentCount, visibleMs, hiddenMs, renderResolution, resolutionDowngrades].every((v) => v === undefined)) return null;
   const out: SessionReportMessage = {
     t: 'sessionReport',
     firstInputMs: firstInputMs === undefined ? null : firstInputMs,
@@ -989,6 +1018,8 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   if (slowFrameTransitionCoincidentCount !== undefined) out.slowFrameTransitionCoincidentCount = Math.round(slowFrameTransitionCoincidentCount);
   if (visibleMs !== undefined) out.visibleMs = Math.round(visibleMs);
   if (hiddenMs !== undefined) out.hiddenMs = Math.round(hiddenMs);
+  if (renderResolution !== undefined) out.renderResolution = Math.round(renderResolution * 100) / 100;
+  if (resolutionDowngrades !== undefined) out.resolutionDowngrades = Math.round(resolutionDowngrades);
   return out;
 }
 

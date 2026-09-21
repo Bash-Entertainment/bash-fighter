@@ -402,6 +402,8 @@ export class NetMatch {
       slowFrameTransitionCoincidentCount: this.slowFrameTracker.getTransitionCoincidentCount(),
       visibleMs: this.frameTimeTracker.getVisibleMs(),
       hiddenMs: this.frameTimeTracker.getHiddenMs(),
+      renderResolution: this.renderer?.currentResolution,
+      resolutionDowngrades: this.renderer?.adaptiveResolutionCounters.downgrades,
     });
     ws.send(JSON.stringify(report));
   }
