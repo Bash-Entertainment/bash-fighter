@@ -6,6 +6,7 @@ import { Application, CanvasTextMetrics, Container, Graphics, Text, TextStyle } 
 import { fixed as fx, FighterStateId, findMove, windowAtFrame, type CharacterData, type FighterStateValue } from '@bash-fighter/sim';
 import { PALETTE, FONT_FAMILY } from './palette.ts';
 import { clampRenderResolution } from './resolution.ts';
+import { AdaptiveResolutionGovernor } from './adaptive-resolution.ts';
 import {
   computeCamera,
   resetCameraSmoothing,
@@ -62,6 +63,7 @@ export { computeFollowCamera, computeOverviewCamera, SmoothedCamera, type Follow
 export { setLocalReadoutBottomInset } from './badge-layout.ts';
 export { PALETTE, FONT_FAMILY, UI_FONT_FAMILY } from './palette.ts';
 export { clampRenderResolution } from './resolution.ts';
+export { AdaptiveResolutionGovernor } from './adaptive-resolution.ts';
 export { renderCharacterIcon } from './character-icon.ts';
 
 /** One fighter's render-ready state: world-space floats, already
@@ -443,6 +445,15 @@ export class Renderer {
   private stageBounds: StageBounds;
   private readonly effects = new EffectsLayer();
   private lastFrameTimeMs: number | null = null;
+  // Frame-time-driven adaptive resolution governor (2026-09-21, see
+  // wiki: Real Player Measurements 2026-09-14 -- 82% of real sessions
+  // are touch, p95 client frame time 71ms, and MAX_RESOLUTION's static
+  // clamp to 2 cannot help a phone still too slow at resolution 2).
+  // Constructed once `init()` knows this device's initial (already
+  // clamped) resolution; null until then, and left null entirely if a
+  // caller disables it via disableAdaptiveResolution().
+  private adaptiveResolution: AdaptiveResolutionGovernor | null = null;
+  private adaptiveResolutionDisabled = false;
   // Slow-frame attribution counters (2026-09-15, see
   // docs/MEASUREMENT.md "Slow-frame attribution"): recomputed every
   // render() call from data already being iterated for sprite placement
@@ -528,6 +539,12 @@ export class Renderer {
       autoDensity: true,
     });
     parent.appendChild(this.app.canvas);
+
+    // Governor starts capped at this device's own clamped resolution --
+    // it only ever steps at or below that, never above it.
+    if (!this.adaptiveResolutionDisabled) {
+      this.adaptiveResolution = new AdaptiveResolutionGovernor(this.app.renderer.resolution);
+    }
 
     // Must be attached to the real canvas element, not `this.app` --
     // that's what the browser actually fires these two events on.
@@ -972,6 +989,30 @@ export class Renderer {
     return this.framesPresented;
   }
 
+  /** Current resolution the adaptive governor has settled on (or the
+   *  device's static clamp if the governor is disabled/not yet
+   *  constructed). Read-only debugging hook. */
+  get currentResolution(): number {
+    return this.adaptiveResolution?.resolution ?? this.app.renderer?.resolution ?? 1;
+  }
+
+  /** Debugging/QA counters for how many times the governor has changed
+   *  its mind this session. */
+  get adaptiveResolutionCounters(): { downgrades: number; upgrades: number } {
+    return {
+      downgrades: this.adaptiveResolution?.downgrades ?? 0,
+      upgrades: this.adaptiveResolution?.upgrades ?? 0,
+    };
+  }
+
+  /** Dev-only escape hatch: stops the governor from touching resolution
+   *  any further (e.g. a QA harness that wants a fixed resolution for
+   *  screenshot comparisons). Safe to call before or after init(). */
+  disableAdaptiveResolution(): void {
+    this.adaptiveResolutionDisabled = true;
+    this.adaptiveResolution = null;
+  }
+
   render(frame: RenderFrame): void {
     if (!this.ready || this.contextLost) return;
 
@@ -983,8 +1024,21 @@ export class Renderer {
     if (this.hasLiveGlContext()) this.framesPresented++;
 
     const now = performance.now();
-    const dtMs = this.lastFrameTimeMs === null ? 16.6667 : Math.min(50, now - this.lastFrameTimeMs);
+    const rawDtMs = this.lastFrameTimeMs === null ? null : now - this.lastFrameTimeMs;
+    const dtMs = rawDtMs === null ? 16.6667 : Math.min(50, rawDtMs);
     this.lastFrameTimeMs = now;
+
+    // Feed the *unclamped* raw delta -- dtMs above is clamped to 50ms
+    // for sim/effects timing and would hide exactly the slow frames
+    // this governor exists to notice. Bogus-sample filtering (<=0ms,
+    // >2000ms backgrounded-tab gaps) happens inside the governor.
+    if (this.adaptiveResolution && rawDtMs !== null) {
+      const wanted = this.adaptiveResolution.sample(rawDtMs);
+      if (this.app.renderer && this.app.renderer.resolution !== wanted) {
+        this.app.renderer.resolution = wanted;
+        this.app.renderer.resize(this.app.renderer.width, this.app.renderer.height);
+      }
+    }
 
     const { width: vw, height: vh } = this.viewSize;
     const liveFighters = frame.fighters.filter((f) => !f.eliminated);
