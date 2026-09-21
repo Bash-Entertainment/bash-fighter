@@ -54,6 +54,17 @@ export class StartScreen {
   /** Swap the keyboard control list for touch wording. Called from main.ts,
    *  which is where touch capability is decided once at load: a phone player
    *  reading "A/D move / Space jump" has been told nothing at all. */
+  /** Hide the attract window and its caption when attract mode will not
+   *  run (narrow viewports skip it for performance). Otherwise a phone
+   *  visitor sees an empty bordered box captioned "A live match, played by
+   *  bots", which is both dead space and untrue. */
+  setAttractVisible(visible: boolean): void {
+    const frame = this.root.querySelector<HTMLElement>('#attract-frame');
+    const caption = this.root.querySelector<HTMLElement>('.attract-caption');
+    if (frame) frame.hidden = !visible;
+    if (caption) caption.hidden = !visible;
+  }
+
   useTouchControls(): void {
     const row = this.root.querySelector('.how-to-play-controls');
     if (!row) return;

@@ -446,7 +446,9 @@ const attractMode = new AttractMode(attractRoot, () => reducedMotionPref);
 let startScreenActive = true;
 
 function refreshAttractMode(): void {
-  const shouldRun = startScreenActive && !document.hidden && !AttractMode.isNarrowViewport();
+  const supported = !AttractMode.isNarrowViewport();
+  startScreen.setAttractVisible(supported);
+  const shouldRun = startScreenActive && !document.hidden && supported;
   if (shouldRun) void attractMode.start();
   else attractMode.stop();
 }
