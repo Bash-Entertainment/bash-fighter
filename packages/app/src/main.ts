@@ -10,7 +10,7 @@ import { Hud } from './ui/hud.ts';
 import { SpectatorBanner } from './ui/spectator-banner.ts';
 import { SimMatchAdapter } from './spectator/sim-adapter.ts';
 import { SpectatorController } from './spectator/controller.ts';
-import { NetMatch, type ConnectionState } from './net-match.ts';
+import { NetMatch, clearStoredResumeToken, type ConnectionState } from './net-match.ts';
 import { SpectateChip } from './ui/spectate-chip.ts';
 import { MatchIntro } from './ui/match-intro.ts';
 import { MatchOverlay, SPECTATE_OFFER, type MatchOverlayContent } from './ui/match-overlay.ts';
@@ -290,6 +290,7 @@ const startScreen = new StartScreen(
   },
   () => {
     const code = generateJoinCode();
+    clearStoredResumeToken();
     // Put the code in the address bar too, so the host's own URL is a
     // working invite link: reloading rejoins the same lobby, and copying
     // straight out of the address bar works as well as the Copy button.
@@ -1208,6 +1209,7 @@ window.addEventListener('keydown', (e) => {
     if (!sanitised) {
       setNetStatus('connecting', "That link's code wasn't valid — joining the next public match");
     }
+    clearStoredResumeToken();
     void beginOnlineMatch(false, sanitised);
   }
 }

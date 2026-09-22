@@ -80,6 +80,22 @@ function loadResumeToken(): string | null {
     return null; // sessionStorage unavailable (privacy mode, SSR, etc.)
   }
 }
+/**
+ *  Throw away any stored resume token.
+ *
+ *  Used by the shareable-lobby-link entry paths: a player who played a
+ *  few minutes ago still holds a resume token, and the server honours a
+ *  resume over anything else in the hello, so clicking a friend's
+ *  ?join=CODE link silently dropped them back into their OWN old match
+ *  instead of the friend's lobby (observed on production 2026-09-22,
+ *  `resume_succeeded` where a `[codedLobby] joined` was expected).
+ *  Following an invite link is an explicit request to go somewhere new,
+ *  so the link wins over the old seat.
+ */
+export function clearStoredResumeToken(): void {
+  saveResumeToken(null);
+}
+
 function saveResumeToken(token: string | null): void {
   try {
     if (token) sessionStorage.setItem(RESUME_TOKEN_KEY, token);
