@@ -1022,3 +1022,36 @@ screenshots of the iframe region are not reliably to scale, so trust the
 measured rectangles. This is how the 2026-09-19 phone-width defects (a
 128px-wide canvas, the stick sitting on the action buttons, a 220x414
 elimination panel) were found.
+
+
+## `scripts/ko-distribution-metrics.mjs`: what it does and does not reproduce
+
+Fixed 2026-09-21: this headless KO-distribution harness originally built its
+`Sim` directly (`new Sim(seed, N, characters, undefined, { winCondition })`),
+leaving the arena argument `undefined`. That defaults to `packages/sim`'s
+`DEFAULT_ARENA` -- a minimal single-platform stage with only 2 spawn points,
+built for 2-fighter physics unit tests, not for a 20-fighter match. Cramming
+20 bots onto that 400-unit-wide platform (instead of a real stage's several
+hundred units and 20 spread-out spawn points across multiple chambers)
+produced roughly 4x too many knockouts in `timedKO`: a top-seat mean of 49.45
+KOs (p90 68) versus production's actual per-match top seat (18 KOs, in a real
+`the-foundry` timedKO match, 2026-09-21 17:52 PDT, `matchId: m1`, `totalKOs:
+61`). The fix switches to `createMatchSim` (`packages/content`), the same
+builder the server uses, with `pickArenaId(seed)` choosing the real stage the
+same way `server/src/match.ts` does. After the fix the harness's top-seat
+mean for `timedKO` is 13.5 (p90 21) -- in production's range.
+
+**What this harness still does not reproduce, so do not balance off it
+alone:**
+- It never passes a human seat to any `BotController`, so EASY's
+  beginner-protection targeting penalty (`protectedIndices` in
+  `packages/sim/src/ai/bot.ts`, wired from `server/src/match.ts`'s
+  `humanSlots`) never engages. A real match with a human seat redistributes
+  some KO share away from that seat; this harness cannot show that.
+- It runs bot-only matches. Production `timedKO` matches typically carry one
+  real (or QA) connection whose presence affects nothing mechanically beyond
+  the point above, but whose session can end the match early via
+  disconnect/abandonment logic this harness does not model at all.
+- It picks the stage id itself the same way the server does
+  (`pickArenaId(seed)`), so a single run only samples whichever stage that
+  seed maps to -- it is not a per-stage breakdown across all six stages.

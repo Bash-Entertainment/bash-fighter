@@ -11,9 +11,9 @@
 // with cause 'knockout' (see packages/sim/src/sim.ts EliminationEvent).
 //
 // Run: node --experimental-strip-types scripts/ko-distribution-metrics.mjs
-import { Sim } from '../packages/sim/src/sim.ts';
 import { BotController, BotDifficulty, deriveBotSeed } from '../packages/sim/src/ai/bot.ts';
 import { assignServerCharacters } from './lib/bot-character-assignment.mjs';
+import { createMatchSim, pickArenaId } from '../packages/content/src/index.ts';
 
 const N = 20;
 const TICKS_CAP = 10800; // 3 min @ 60hz, matches bot-brawl-metrics.mjs cap
@@ -22,7 +22,18 @@ const MODES = ['battleRoyale', 'timedKO'];
 
 function runMatch(seed, winCondition) {
   const characters = assignServerCharacters(seed, N);
-  const sim = new Sim(seed, N, characters, undefined, { winCondition });
+  // Use createMatchSim (packages/content), not the bare Sim constructor, so this
+  // harness gets production's real arena geometry (via pickArenaId, same seed ->
+  // same stage the server would choose) and production's item/hazard sets instead
+  // of Sim's tiny 2-fighter DEFAULT_ARENA and DEFAULT_ITEM_SET/DEFAULT_HAZARD_CONFIG.
+  // Found 2026-09-21: the bare-constructor version crammed 20 fighters onto a
+  // 400-unit-wide, 2-spawn-point platform meant for physics unit tests, which
+  // inflated timedKO knockout counts roughly 4x versus real production matches.
+  const arenaId = pickArenaId(seed);
+  const sim = createMatchSim(seed, N, { winCondition }, characters, arenaId);
+  // No human seats in this harness, so no protectedIndices set -- matches a bot-only
+  // production match; real matches with a human seat pass that seat's slot here too
+  // (see server/src/match.ts), which this harness does not model.
   const bots = Array.from({ length: N }, (_, i) => new BotController(i, BotDifficulty.EASY, deriveBotSeed(seed, i)));
   const kos = new Array(N).fill(0);
 
