@@ -289,7 +289,12 @@ const startScreen = new StartScreen(
     replayScreen.show();
   },
   () => {
-    void beginOnlineMatch(false, generateJoinCode());
+    const code = generateJoinCode();
+    // Put the code in the address bar too, so the host's own URL is a
+    // working invite link: reloading rejoins the same lobby, and copying
+    // straight out of the address bar works as well as the Copy button.
+    history.replaceState(null, '', `${location.pathname}?join=${code}${location.hash}`);
+    void beginOnlineMatch(false, code);
   },
 );
 if (touchCapable) startScreen.useTouchControls();
