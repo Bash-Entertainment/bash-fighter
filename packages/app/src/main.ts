@@ -469,7 +469,9 @@ settingsButton.addEventListener('click', () => settingsPanel.show());
 const inMatchSettingsButton = document.createElement('button');
 inMatchSettingsButton.id = 'in-match-settings-btn';
 inMatchSettingsButton.className = 'in-match-moves-btn hidden';
-inMatchSettingsButton.textContent = 'Controls (C)';
+// On a touch device the (C)/(M) hints name keys the player has no way
+// to press, so the label is just noise taking up scarce width.
+inMatchSettingsButton.textContent = touchCapable ? 'Controls' : 'Controls (C)';
 inMatchSettingsButton.addEventListener('click', () => settingsPanel.show());
 topRightControls.appendChild(inMatchSettingsButton);
 
@@ -504,7 +506,7 @@ movesButton.addEventListener('click', () => movesPanel.show(startScreen.selected
 const inMatchMovesButton = document.createElement('button');
 inMatchMovesButton.id = 'in-match-moves-btn';
 inMatchMovesButton.className = 'in-match-moves-btn hidden';
-inMatchMovesButton.textContent = 'Moves (M)';
+inMatchMovesButton.textContent = touchCapable ? 'Moves' : 'Moves (M)';
 inMatchMovesButton.addEventListener('click', () => movesPanel.show());
 topRightControls.appendChild(inMatchMovesButton);
 window.addEventListener('keydown', (e) => {
