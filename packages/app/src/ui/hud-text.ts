@@ -46,9 +46,17 @@ export function winConditionText(winCondition: 'battleRoyale' | 'timedKO' | 'sto
  * match-status block already used -- rather than a fresh hardcoded
  * string per mode, so this line can never drift from what the sidebar
  * mode/win-condition text already says. */
-export function objectiveLineText(winCondition: 'battleRoyale' | 'timedKO' | 'stocks'): string {
+export function objectiveLineText(
+  winCondition: 'battleRoyale' | 'timedKO' | 'stocks',
+  /** A spectator (?watch=CODE) holds no seat, so "you respawn" is simply
+   *  untrue for them -- 2026-09-22, seen while watching a live match. */
+  spectating = false,
+): string {
   const mode = modeLabelText(winCondition);
   if (winCondition === 'timedKO') {
+    if (spectating) {
+      return `${mode}: fighters respawn when knocked out, and most knockouts when the clock runs out wins.`;
+    }
     // The respawn clause matters more than the win condition for a
     // newcomer: Timed Brawl is now the first match a first-time visitor
     // gets (server/src/mode-rotation.ts) precisely because being knocked

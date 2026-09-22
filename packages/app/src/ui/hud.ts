@@ -233,7 +233,7 @@ export class Hud {
       return;
     }
     this.matchStatus.style.display = '';
-    this.matchModeLine.textContent = objectiveLineText(matchInfo.winCondition);
+    this.matchModeLine.textContent = objectiveLineText(matchInfo.winCondition, localIndex < 0);
     this.matchClockLine.textContent = matchInfo.clockText;
     // Timed Brawl already gets the big amber .hud-clock-line at the top
     // of the HUD, so showing the same countdown again here printed the

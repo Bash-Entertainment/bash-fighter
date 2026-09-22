@@ -22,3 +22,10 @@ test('main wires spectating from the seatless local slot', () => {
   assert.match(main, /waitingScreen\.setSpectating\(watching\);/);
   assert.match(main, /!watching && currentJoinCode \? buildShareLink/);
 });
+
+test('the Timed Brawl objective line does not say "you" to a spectator', async () => {
+  const { objectiveLineText } = await import('../src/ui/hud-text.ts');
+  assert.match(objectiveLineText('timedKO', true), /fighters respawn when knocked out/);
+  assert.doesNotMatch(objectiveLineText('timedKO', true), /\byou\b/);
+  assert.match(objectiveLineText('timedKO'), /you respawn when knocked out/);
+});
