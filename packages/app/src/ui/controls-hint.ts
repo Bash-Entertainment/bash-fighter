@@ -6,16 +6,23 @@
 // people who should still get the hint next time.
 const STORAGE_KEY = 'bash-fighter:seen-controls-hint';
 const MAX_VISIBLE_MS = 20000;
+// Real sessions load the game, watch a match for ten or fifteen seconds and
+// leave without ever pressing anything. The quiet strip at the bottom is easy
+// to read past, so if nothing has been pressed by this point it gets louder.
+const URGENT_AFTER_MS = 5000;
 const LINGER_AFTER_INPUT_MS = 1200;
 const FADE_MS = 600;
 
 const KEYBOARD_TEXT = 'A/D move · Space jump · F attack · G special · Shift shield';
 const TOUCH_TEXT = 'Drag the stick to move · tap Jump and Attack';
+const KEYBOARD_URGENT = 'You are in the match — A/D to move, Space to jump, F to attack';
+const TOUCH_URGENT = 'You are in the match — drag the stick to move, tap Attack';
 
 export class ControlsHint {
   private readonly el: HTMLDivElement;
   private timers: ReturnType<typeof setTimeout>[] = [];
   private listening = false;
+  private touch = false;
   private readonly onInput = (): void => this.acknowledge();
 
   constructor(parent: HTMLElement) {
@@ -31,6 +38,7 @@ export class ControlsHint {
    * know the controls are never nagged. */
   maybeShow(touch = false): void {
     if (this.hasPlayed()) return;
+    this.touch = touch;
     this.el.textContent = touch ? TOUCH_TEXT : KEYBOARD_TEXT;
     this.el.classList.toggle('touch', touch);
     this.show();
@@ -47,13 +55,21 @@ export class ControlsHint {
 
   private show(): void {
     this.clearTimers();
-    this.el.classList.remove('hidden', 'fading');
+    this.el.classList.remove('hidden', 'fading', 'urgent');
     if (!this.listening) {
       this.listening = true;
       window.addEventListener('keydown', this.onInput);
       window.addEventListener('pointerdown', this.onInput);
     }
+    this.timers.push(setTimeout(() => this.escalate(), URGENT_AFTER_MS));
     this.timers.push(setTimeout(() => this.fade(), MAX_VISIBLE_MS));
+  }
+
+  /** Nothing pressed yet: say so plainly instead of listing keys quietly. */
+  private escalate(): void {
+    if (this.el.classList.contains('hidden')) return;
+    this.el.classList.add('urgent');
+    this.el.textContent = this.touch ? TOUCH_URGENT : KEYBOARD_URGENT;
   }
 
   /** The player did something: remember that, then get out of the way. */
@@ -65,6 +81,7 @@ export class ControlsHint {
     }
     this.stopListening();
     this.clearTimers();
+    this.el.classList.remove('urgent');
     this.timers.push(setTimeout(() => this.fade(), LINGER_AFTER_INPUT_MS));
   }
 

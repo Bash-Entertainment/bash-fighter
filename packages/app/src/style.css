@@ -862,6 +862,26 @@ html, body {
   opacity: 0;
 }
 
+.controls-hint.urgent {
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  border-color: var(--accent);
+  border-left-width: 3px;
+  background: #14171bf2;
+  bottom: 84px;
+}
+
+@media (max-width: 480px) {
+  .controls-hint.urgent {
+    font-size: 14px;
+    bottom: 200px;
+    max-width: 88vw;
+    text-align: center;
+  }
+}
+
 .controls-hint.hidden {
   display: none;
 }
