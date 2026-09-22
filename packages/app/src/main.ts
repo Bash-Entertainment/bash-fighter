@@ -758,7 +758,11 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
         netModeLine.classList.add('hidden');
       }
       waitingScreen.setMode(modeName);
-      waitingScreen.setShareLink(currentJoinCode ? buildShareLink(location.origin, currentJoinCode) : null);
+      const watching = (netMatch?.localSlot() ?? 0) < 0;
+      waitingScreen.setSpectating(watching);
+      waitingScreen.setShareLink(
+        !watching && currentJoinCode ? buildShareLink(location.origin, currentJoinCode) : null,
+      );
       waitingScreen.setCount(players, capacity, countdownTicks);
       waitingScreen.show();
     },

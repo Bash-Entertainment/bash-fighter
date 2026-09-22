@@ -44,6 +44,7 @@ export class WaitingScreen {
   // True between "Play online" being clicked and the server's first
   // lobby message. See showConnecting().
   private connecting = false;
+  private spectating = false;
 
   constructor(parent: HTMLElement, touchCapable: boolean, onStartNow: () => void) {
     this.root = document.createElement('div');
@@ -108,6 +109,7 @@ export class WaitingScreen {
   show(): void {
     this.root.classList.remove('hidden');
     this.startBtn.disabled = false;
+    if (this.spectating) this.startBtn.classList.add('hidden');
     if (this.tickHandle === null) {
       this.tickHandle = window.setInterval(() => this.renderCountdown(), 250);
     }
@@ -158,6 +160,21 @@ export class WaitingScreen {
     }
   }
 
+  /** A spectator (?watch=CODE, welcome.slot < 0) holds no seat, so the
+   *  host-only parts of this screen are wrong for them: found on
+   *  production 2026-09-22, a watcher was shown the share link, "Copy
+   *  link" and a "Start now" button that would have started someone
+   *  else's match. They get an honest "Spectating" line instead, and no
+   *  controls at all. */
+  setSpectating(spectating: boolean): void {
+    this.spectating = spectating;
+    if (!spectating) return;
+    this.setShareLink(null);
+    (this.root.querySelector('#waiting-explain') as HTMLDivElement).textContent =
+      'Spectating. The match begins when the lobby fills or its host starts it.';
+    this.startBtn.classList.add('hidden');
+  }
+
   setMode(modeName: string | undefined): void {
     this.modeLine.textContent = modeName ?? '';
     this.modeLine.classList.toggle('hidden', !modeName);
@@ -174,7 +191,7 @@ export class WaitingScreen {
     // The first lobby message ends the connecting state: there is a real
     // lobby now, so the count and "Start now" become meaningful again.
     this.connecting = false;
-    this.startBtn.classList.remove('hidden');
+    if (!this.spectating) this.startBtn.classList.remove('hidden');
     this.countLine.textContent = `${players} / ${capacity} players`;
     this.lastServerTicks = countdownTicks;
     this.lastServerAt = Date.now();
