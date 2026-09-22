@@ -96,6 +96,13 @@ export interface HelloMessage {
    *  untouched. Sanitised like every other client-supplied string and
    *  validated against the registry server-side. */
   arena?: string;
+  /** Shareable-lobby-link join code (see [[Shareable lobby links]]), e.g.
+   *  "ABCD". Client-generated -- there is no server allocation handshake --
+   *  and sanitised the same way as everything else at this boundary:
+   *  uppercased, restricted to JOIN_CODE_ALPHABET, and dropped entirely
+   *  (never truncated or padded) unless exactly JOIN_CODE_LENGTH characters
+   *  survive. Absent for a normal public-lobby join. */
+  joinCode?: string;
 }
 
 /** See HelloMessage.profile. Match-scoped, non-identifying: whether a
@@ -422,6 +429,14 @@ export interface WelcomeMessage {
    *  disconnected seat via a resume token, so the client knows to treat
    *  this as "you're back" rather than "you're new". */
   resumed: boolean;
+  /** Echoes the join code of the coded lobby this seat actually landed in
+   *  (see HelloMessage.joinCode), so the client can display the code truly
+   *  in play -- e.g. a stale/expired code lands the joiner in a fresh
+   *  coded lobby under the same code, or a code collision lands two
+   *  unrelated groups in one lobby -- rather than assuming its own
+   *  requested code was honoured verbatim. Absent for an uncoded public
+   *  lobby. */
+  joinCode?: string;
 }
 
 /** Sent while a match is filling, so the client can show something honest
@@ -809,6 +824,7 @@ export function parseClientControl(text: string): ClientControlMessage | null {
       // absent or unusable, never trusted beyond the length clamp --
       // registry validation happens server-side.
       const arena = clampCappedString(obj.arena, 64);
+      const joinCode = sanitiseJoinCode(obj.joinCode);
       return {
         t: 'hello',
         protocolVersion: obj.protocolVersion,
@@ -818,6 +834,7 @@ export function parseClientControl(text: string): ClientControlMessage | null {
         ...(profile ? { profile } : {}),
         ...(arena ? { arena } : {}),
         ...(typeof obj.requeued === 'boolean' ? { requeued: obj.requeued } : {}),
+        ...(joinCode ? { joinCode } : {}),
       };
     }
     case 'spectate':
@@ -1048,6 +1065,33 @@ export const MAX_NAME_LENGTH = 16;
  *  name" and fall back to the slot label ("#7") instead, which stays
  *  distinct per-seat for free. A forced non-empty fallback would instead
  *  make every anonymous player collide on the exact same string. */
+/** Alphabet for shareable-lobby-link join codes: excludes I/O/0/1, which
+ *  are the characters most often misread or mis-typed when a code is read
+ *  aloud or copied by hand. See [[Shareable lobby links]]. */
+export const JOIN_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const JOIN_CODE_LENGTH = 4;
+/** Raw input is capped at this length before sanitising, so a hostile
+ *  client cannot make sanitisation itself expensive by sending a huge
+ *  string of near-miss characters. */
+const JOIN_CODE_RAW_CAP = 8;
+
+/** Sanitises a client-supplied join code: uppercase, keep only
+ *  JOIN_CODE_ALPHABET characters, and require exactly JOIN_CODE_LENGTH of
+ *  them to survive. Never throws; returns undefined (drop the field
+ *  entirely) for anything else -- a malformed code must never be treated
+ *  as "no code" turned into an error, and never silently truncated or
+ *  padded into something the sender didn't type. */
+export function sanitiseJoinCode(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const cleaned = value
+    .slice(0, JOIN_CODE_RAW_CAP)
+    .toUpperCase()
+    .split('')
+    .filter((ch) => JOIN_CODE_ALPHABET.includes(ch))
+    .join('');
+  return cleaned.length === JOIN_CODE_LENGTH ? cleaned : undefined;
+}
+
 export function sanitiseName(name: string): string {
   return name
     .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')

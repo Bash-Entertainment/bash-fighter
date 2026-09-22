@@ -24,20 +24,36 @@ export const BOT_FILL_SECONDS = Number(process.env.MATCH_BOT_FILL_SECONDS ?? 8);
 // Defaults to full capacity: fill the whole 20-slot battle royale so one
 // early player still gets the intended chaotic-FFA experience.
 export const BOT_FILL_TARGET = Number(process.env.MATCH_BOT_FILL_TARGET ?? DEFAULT_CAPACITY);
+// A coded (shareable-link) lobby waits far longer than the public lobby's
+// short grace period, because waiting for friends to click the link is
+// the entire point of this feature -- see [[Shareable lobby links]]. The
+// public-lobby countdown-on-minimum behaviour never applies to a coded
+// lobby at all (see joinLobby below); this timer, plus the "Start now"
+// button, are the only ways a coded lobby ever starts on its own.
+export const PRIVATE_BOT_FILL_SECONDS = Number(process.env.MATCH_PRIVATE_BOT_FILL_SECONDS ?? 60);
+
+interface LobbyTimers {
+  countdownTimer: NodeJS.Timeout | null;
+  botFillTimer: NodeJS.Timeout | null;
+  displayTicker: NodeJS.Timeout | null;
+}
 
 export class RoomManager {
   private matches = new Map<string, Match>();
   private filling: Match | null = null;
   private nextId = 1;
-  private countdownTimer: NodeJS.Timeout | null = null;
-  private botFillTimer: NodeJS.Timeout | null = null;
-  // Broadcasts the lobby message once a second purely so a waiting
-  // client's countdown display stays fresh even when nothing else about
-  // the lobby has changed (no join, no elimination) -- otherwise the last
-  // number a client saw would sit frozen until the next real event.
-  // Started alongside the bot-fill timer (which runs for every fresh
-  // lobby) and cleared with it.
-  private displayTicker: NodeJS.Timeout | null = null;
+  // A coded lobby is never the public `filling` room -- it's reachable
+  // only by presenting the exact code, so strangers can never land in it.
+  // Keyed by the sanitised 4-character code. Entries are removed the
+  // moment their match leaves the lobby phase (start()) so codes never
+  // leak memory across a match's whole lifetime, not just its lobby
+  // phase. See [[Shareable lobby links]].
+  private readonly coded = new Map<string, Match>();
+  // Per-match lobby timer state. A public lobby and any number of coded
+  // lobbies can all be in the lobby phase at once, so these can no longer
+  // be single fields on the manager the way they were before coded
+  // lobbies existed -- each match's timers are independent.
+  private readonly timers = new Map<string, LobbyTimers>();
   readonly capacity: number;
   readonly minimum: number;
   private readonly makeEvents: (matchId: string) => MatchEvents;
@@ -109,6 +125,37 @@ export class RoomManager {
     return undefined;
   }
 
+  private createMatch(requeued: boolean): Match {
+    const matchNumber = this.nextId;
+    const id = `m${this.nextId++}`;
+    const match = new Match(id, this.capacity, this.minimum, this.makeEvents(id));
+    // Mode rotation (2026-09-11, Timed Brawl launch, see
+    // server/src/mode-rotation.ts): decided once per created match, not
+    // per connecting player -- every seat that joins this match sees
+    // the same mode. Logged here, at decision time, so a journalctl
+    // read confirms the split independent of whether/when the match
+    // ever starts.
+    const decision = decideMatchModeForJoin(matchNumber, requeued);
+    match.plannedWinCondition = decision.winCondition;
+    match.plannedTimeLimitTicks = decision.timeLimitTicks;
+    match.plannedStartingStocks = decision.startingStocks;
+    // forcedForFirstTimeVisitor: true when this match's mode was chosen
+    // by the first-time-visitor rule (decideMatchModeForJoin), not by
+    // the rotation -- distinguishes the two causes in the log rather
+    // than implying the rotation itself picked timedKO here.
+    const forcedForFirstTimeVisitor = !MODE_ROTATION_DISABLED && !requeued;
+    console.log(`[modeRotation] ${JSON.stringify({
+      matchId: id,
+      matchNumber,
+      cadence: MODE_ROTATION_CADENCE,
+      disabled: MODE_ROTATION_DISABLED,
+      winCondition: decision.winCondition,
+      forcedForFirstTimeVisitor,
+    })}`);
+    this.matches.set(id, match);
+    return match;
+  }
+
   /** Finds or creates the match currently filling, adds a seat to it, and
    *  returns both. Starting the match (full, or countdown reaching zero) is
    *  handled here too so callers don't need to poll.
@@ -119,99 +166,137 @@ export class RoomManager {
    *  one neither claims nor blocks, and a later joiner never retargets a
    *  lobby another joiner has already pinned. Honoured only when the
    *  server opted in via MATCH_ARENA_OVERRIDE=1 (checked in
-   *  Match.start(), not here) -- a production server ignores it. */
-  joinLobby(name: string, characterId?: string, qa = false, arena?: string, requeued = false): { match: Match; slot: number } {
+   *  Match.start(), not here) -- a production server ignores it.
+   *
+   *  `joinCode` (see HelloMessage.joinCode / [[Shareable lobby links]]):
+   *  when present and already sanitised by the caller, this joiner lands
+   *  in the coded lobby for that exact code -- reusing it while it's
+   *  still in the lobby phase, or creating and registering a fresh one
+   *  otherwise. A coded lobby is never the public `filling` room and
+   *  never runs the post-minimum countdown; it starts only via its own
+   *  (longer) bot-fill grace period or an explicit "Start now". */
+  joinLobby(
+    name: string,
+    characterId?: string,
+    qa = false,
+    arena?: string,
+    requeued = false,
+    joinCode?: string,
+  ): { match: Match; slot: number } {
     let freshMatch = false;
-    if (!this.filling || this.filling.phase !== 'lobby') {
-      const matchNumber = this.nextId;
-      const id = `m${this.nextId++}`;
-      const match = new Match(id, this.capacity, this.minimum, this.makeEvents(id));
-      // Mode rotation (2026-09-11, Timed Brawl launch, see
-      // server/src/mode-rotation.ts): decided once per created match, not
-      // per connecting player -- every seat that joins this match sees
-      // the same mode. Logged here, at decision time, so a journalctl
-      // read confirms the split independent of whether/when the match
-      // ever starts.
-      const decision = decideMatchModeForJoin(matchNumber, requeued);
-      match.plannedWinCondition = decision.winCondition;
-      match.plannedTimeLimitTicks = decision.timeLimitTicks;
-      match.plannedStartingStocks = decision.startingStocks;
-      // forcedForFirstTimeVisitor: true when this match's mode was chosen
-      // by the first-time-visitor rule (decideMatchModeForJoin), not by
-      // the rotation -- distinguishes the two causes in the log rather
-      // than implying the rotation itself picked timedKO here.
-      const forcedForFirstTimeVisitor = !MODE_ROTATION_DISABLED && !requeued;
-      console.log(`[modeRotation] ${JSON.stringify({
-        matchId: id,
-        matchNumber,
-        cadence: MODE_ROTATION_CADENCE,
-        disabled: MODE_ROTATION_DISABLED,
-        winCondition: decision.winCondition,
-        forcedForFirstTimeVisitor,
-      })}`);
-      this.matches.set(id, match);
-      this.filling = match;
-      freshMatch = true;
+    let match: Match;
+
+    if (joinCode) {
+      const existing = this.coded.get(joinCode);
+      if (existing && existing.phase === 'lobby') {
+        match = existing;
+      } else {
+        match = this.createMatch(requeued);
+        match.joinCode = joinCode;
+        this.coded.set(joinCode, match);
+        freshMatch = true;
+      }
+    } else {
+      if (!this.filling || this.filling.phase !== 'lobby') {
+        match = this.createMatch(requeued);
+        this.filling = match;
+        freshMatch = true;
+      } else {
+        match = this.filling;
+      }
     }
-    const match = this.filling;
+
     if (arena !== undefined && match.arenaRequest === undefined) match.arenaRequest = arena;
     const seat = match.addSeat(name, false, characterId, qa);
-    if (freshMatch) this.startBotFillTimer(match);
+
+    if (joinCode) {
+      console.log(`[codedLobby] ${JSON.stringify({
+        matchId: match.id,
+        code: joinCode,
+        filledSlots: match.filledSlots,
+        event: freshMatch ? 'created' : 'joined',
+      })}`);
+    }
+
+    if (freshMatch) this.startBotFillTimer(match, joinCode !== undefined);
 
     if (match.filledSlots >= match.capacity) {
-      this.clearCountdown();
-      this.clearBotFillTimer();
+      this.clearTimersFor(match.id);
       match.start();
-      this.filling = null;
-    } else if (match.filledSlots >= match.minimum && !this.countdownTimer) {
+      this.onLobbyLeft(match);
+    } else if (!joinCode && match.filledSlots >= match.minimum && !this.timersFor(match.id).countdownTimer) {
+      // Coded lobbies deliberately never run this countdown: two friends
+      // meeting the public minimum should not be forced to start 15
+      // seconds later just because a public lobby would have. See
+      // [[Shareable lobby links]].
       this.startCountdown(match);
     }
     return { match, slot: seat.slot };
   }
 
+  private timersFor(matchId: string): LobbyTimers {
+    let t = this.timers.get(matchId);
+    if (!t) {
+      t = { countdownTimer: null, botFillTimer: null, displayTicker: null };
+      this.timers.set(matchId, t);
+    }
+    return t;
+  }
+
+  /** Called whenever a match stops being an open lobby (starts, or is
+   *  force-started): detaches it from whichever "open lobby" index was
+   *  holding it (the public `filling` slot, or its `coded` entry) and
+   *  drops its timer bookkeeping, so codes and timers never outlive the
+   *  lobby phase they existed for. */
+  private onLobbyLeft(match: Match): void {
+    if (this.filling === match) this.filling = null;
+    if (match.joinCode !== undefined && this.coded.get(match.joinCode) === match) {
+      this.coded.delete(match.joinCode);
+    }
+    this.timers.delete(match.id);
+  }
+
   private startCountdown(match: Match): void {
+    const t = this.timersFor(match.id);
     let ticksLeft = COUNTDOWN_SECONDS * TICK_HZ;
     match.countdownTicksRemaining = ticksLeft;
     match.noteStartDeadline(Date.now() + COUNTDOWN_SECONDS * 1000);
-    this.countdownTimer = setInterval(() => {
+    t.countdownTimer = setInterval(() => {
       ticksLeft -= TICK_HZ / 5;
       match.countdownTicksRemaining = Math.max(0, ticksLeft);
       match.events.onLobbyUpdate?.();
       if (ticksLeft <= 0) {
-        this.clearCountdown();
-        this.clearBotFillTimer();
+        this.clearTimersFor(match.id);
         if (match.phase === 'lobby') {
           match.start();
-          if (this.filling === match) this.filling = null;
+          this.onLobbyLeft(match);
         }
       }
     }, 200);
-  }
-
-  private clearCountdown(): void {
-    if (this.countdownTimer) clearInterval(this.countdownTimer);
-    this.countdownTimer = null;
   }
 
   /** Started once per newly-created lobby. If nobody else has joined by
    *  the time it fires and the lobby is still open, fills every remaining
    *  slot (up to BOT_FILL_TARGET) with bots and starts immediately —
    *  a human alone in a 20-slot lobby should not have to wait for 19
-   *  strangers, or wait at all beyond this short grace period. */
-  private startBotFillTimer(match: Match): void {
-    this.clearBotFillTimer();
-    match.noteStartDeadline(Date.now() + Math.max(0, BOT_FILL_SECONDS) * 1000);
-    this.botFillTimer = setTimeout(() => {
-      this.botFillTimer = null;
+   *  strangers, or wait at all beyond this short grace period. A coded
+   *  lobby uses the much longer PRIVATE_BOT_FILL_SECONDS instead, since
+   *  waiting for friends to click the link is the point. */
+  private startBotFillTimer(match: Match, isCoded: boolean): void {
+    const t = this.timersFor(match.id);
+    const fillSeconds = isCoded ? PRIVATE_BOT_FILL_SECONDS : BOT_FILL_SECONDS;
+    match.noteStartDeadline(Date.now() + Math.max(0, fillSeconds) * 1000);
+    t.botFillTimer = setTimeout(() => {
+      t.botFillTimer = null;
       if (match.phase !== 'lobby') return;
       this.fillWithBots(match);
-      this.clearCountdown();
+      this.clearTimersFor(match.id);
       match.start();
-      if (this.filling === match) this.filling = null;
-    }, Math.max(0, BOT_FILL_SECONDS) * 1000);
-    this.displayTicker = setInterval(() => {
+      this.onLobbyLeft(match);
+    }, Math.max(0, fillSeconds) * 1000);
+    t.displayTicker = setInterval(() => {
       if (match.phase !== 'lobby') {
-        this.clearBotFillTimer();
+        this.clearTimersFor(match.id);
         return;
       }
       match.events.onLobbyUpdate?.();
@@ -254,19 +339,20 @@ export class RoomManager {
    *  a single Match object via the caller's own seat lookup. */
   startNow(match: Match): boolean {
     if (match.phase !== 'lobby') return false;
-    this.clearCountdown();
-    this.clearBotFillTimer();
+    this.clearTimersFor(match.id);
     this.fillWithBots(match);
     match.start();
-    if (this.filling === match) this.filling = null;
+    this.onLobbyLeft(match);
     return true;
   }
 
-  private clearBotFillTimer(): void {
-    if (this.botFillTimer) clearTimeout(this.botFillTimer);
-    this.botFillTimer = null;
-    if (this.displayTicker) clearInterval(this.displayTicker);
-    this.displayTicker = null;
+  private clearTimersFor(matchId: string): void {
+    const t = this.timers.get(matchId);
+    if (!t) return;
+    if (t.countdownTimer) clearInterval(t.countdownTimer);
+    if (t.botFillTimer) clearTimeout(t.botFillTimer);
+    if (t.displayTicker) clearInterval(t.displayTicker);
+    this.timers.delete(matchId);
   }
 
   /** Drop matches that ended a while ago, so memory doesn't grow forever. */
@@ -275,6 +361,14 @@ export class RoomManager {
     for (const [id, m] of this.matches) {
       if (m.phase === 'ended' && m.endedAt !== null && now - m.endedAt > maxAgeMs) {
         this.matches.delete(id);
+        // Belt-and-suspenders: a coded entry should already have been
+        // removed the moment this match left the lobby phase (see
+        // onLobbyLeft), but never leave a dangling code pointing at a
+        // deleted match if that cleanup was ever missed.
+        if (m.joinCode !== undefined && this.coded.get(m.joinCode) === m) {
+          this.coded.delete(m.joinCode);
+        }
+        this.timers.delete(id);
       }
     }
   }

@@ -786,7 +786,14 @@ function handleText(conn: ClientConn, text: string): void {
       }
 
       const name = sanitiseName(msg.name);
-      const { match, slot } = manager.joinLobby(name, msg.characterId, msg.profile?.qa === true, msg.arena, conn.requeuedAtJoin);
+      const { match, slot } = manager.joinLobby(
+        name,
+        msg.characterId,
+        msg.profile?.qa === true,
+        msg.arena,
+        conn.requeuedAtJoin,
+        msg.joinCode,
+      );
       conn.match = match;
       conn.slot = slot;
       watcherSet(match.id).add(conn.id);
@@ -800,6 +807,7 @@ function handleText(conn: ClientConn, text: string): void {
         matchId: match.id,
         resumeToken: match.seats[slot].resumeToken,
         resumed: false,
+        ...(match.joinCode ? { joinCode: match.joinCode } : {}),
       });
       if (match.phase === 'lobby') {
         broadcastLobby(match);

@@ -245,6 +245,13 @@ export class Match {
    *  constructs a Match directly keeps the seeded pick. */
   arenaRequest?: string;
 
+  /** Join code of the coded lobby this match was created for/registered
+   *  under (see RoomManager.coded, [[Shareable lobby links]]), or
+   *  undefined for a normal public-lobby match. Set once, at creation or
+   *  first coded join, and read back for the welcome message and log
+   *  lines -- never mutated after. */
+  joinCode?: string;
+
   /** Resolves the dev-only arena pin against the server-side opt-in --
    *  the single precedence point start() and any caller that wants to
    *  preview the pick both use: the request only wins when
