@@ -1055,3 +1055,44 @@ alone:**
 - It picks the stage id itself the same way the server does
   (`pickArenaId(seed)`), so a single run only samples whichever stage that
   seed maps to -- it is not a per-stage breakdown across all six stages.
+
+## Adaptive resolution governor (2026-09-22)
+
+Modern phones report device-pixel ratios (DPR) of 2–3, meaning a single CSS pixel spans 2–3 physical pixels in each dimension. Pixi's default is to render at the unclamped DPR — fine on desktop (DPR 1–2), but on DPR-3 phones every pixel shader invocation runs 9× the samples. The client's static clamp (set in `packages/render/src/index.ts` as `MAX_RESOLUTION = 2`) already caps this to at most 2, but that is still too slow: real player measurements show p95 frame time of 71ms on DPR-3 phones at resolution 2.
+
+The adaptive governor (`packages/render/src/adaptive-resolution.ts`) watches real frame durations and auto-downsamples when frames stay slow, then cautiously re-upgrades when they stay fast. It is purely presentation: camera/world math reads `app.renderer.width/height` (CSS space), unaffected by resolution.
+
+### Resolution steps
+
+The governor steps only among three resolutions: `[2, 1.5, 1]`. A downgrade to 1.5 avoids a cliff from 2 directly to 1 on DPR-2 phones.
+
+### Downgrade threshold and window
+
+- Downgrade window: 120 consecutive valid frames. Sample real frame duration (unclamped, but bogus samples ≤0ms or >2000ms ignored).
+- P95 threshold: 45ms. If p95 frame time in the last 120 samples exceeds 45ms, downgrade one step.
+- Cooldown: 180 samples must pass before the next downgrade attempt. Prevents hunting between adjacent steps.
+
+### Upgrade threshold and window
+
+- Upgrade window: 240 consecutive valid frames.
+- P95 threshold: 22ms. If p95 frame time in all 240 samples is below 22ms, upgrade one step (toward device cap).
+- Limit: at most 2 total upgrades per session. Once upgraded, subsequent fast streaks do not re-upgrade.
+
+### Telemetry
+
+The client reports two optional fields (absent if no renderer existed):
+
+- `renderResolution` (number): The final resolution the session ended at (e.g. 2, 1.5, or 1).
+- `resolutionDowngrades` (number): Count of downgrade events during the session (0 if the governor never fired).
+
+Both fields are captured in `packages/app/src/net-match.ts` by reading `this.renderer?.currentResolution` and `this.renderer?.adaptiveResolutionCounters.downgrades` at session end, then wired into `SessionReportMessage` and forwarded to the server (`server/src/session-telemetry.ts`). The server logs these per seat in its `[sessionEnd]` line and records them in the durable stats store, queryable via `scripts/stats-report.mjs`.
+
+### Dev/QA escape hatches
+
+- `renderer.setDevResolution(value)`: Force a fixed resolution for the remainder of the session (e.g. testing a specific DPR on a desktop machine), disabling the governor.
+- `renderer.disableAdaptiveResolution()`: Stop the governor from any further changes (e.g. a QA harness needing consistent resolution for screenshot comparisons). Safe to call before or after renderer init.
+
+### Debug view
+
+Press F3 in-match to show the live debug overlay (tick, hash, per-fighter state). The overlay does not currently display current resolution, but `this.renderer.currentResolution` and `this.renderer.adaptiveResolutionCounters` are always readable in the browser console while in-match.
+
