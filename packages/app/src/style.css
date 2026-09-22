@@ -1636,6 +1636,10 @@ body.end-screen-open #net-mode-line {
   display: none;
 }
 
+.waiting-hint.hidden {
+  display: none;
+}
+
 .waiting-share.hidden {
   display: none;
 }

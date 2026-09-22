@@ -16,3 +16,7 @@ test('hiding the generic waiting explanation actually hides it', () => {
 test('the share panel itself can be hidden', () => {
   assert.match(css, /\.waiting-share\.hidden\s*\{\s*display:\s*none;/);
 });
+
+test('hiding the control hint for spectators actually hides it', () => {
+  assert.match(css, /\.waiting-hint\.hidden\s*\{\s*display:\s*none;/);
+});

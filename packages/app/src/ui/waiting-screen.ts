@@ -170,6 +170,9 @@ export class WaitingScreen {
     this.spectating = spectating;
     if (!spectating) return;
     this.setShareLink(null);
+    // The control hint is for someone about to fight; a watcher has no
+    // fighter, so it is just noise (and a lie on a touch device).
+    (this.root.querySelector('#waiting-hint') as HTMLDivElement).classList.add('hidden');
     (this.root.querySelector('#waiting-explain') as HTMLDivElement).textContent =
       'Spectating. The match begins when the lobby fills or its host starts it.';
     this.startBtn.classList.add('hidden');
