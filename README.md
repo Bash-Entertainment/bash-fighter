@@ -45,6 +45,19 @@ the primary design target.
 See `docs/ARCHITECTURE.md` for how the simulation, rendering, and netcode
 fit together.
 
+### Playing with people you know
+
+There are no accounts, so an invite is just a URL. Pressing **Play with a
+friend** on the start screen puts a four-character code in your address bar
+(`https://bashfighter.com/?join=ABCD`); anyone who opens that link joins your
+lobby. A private lobby waits a minute before filling the empty seats with
+bots, and you can press **Start now** at any point. Match-end screens offer
+the same link for your next match.
+
+Swap `join` for `watch` (`?watch=ABCD`) to spectate instead: no seat is taken,
+`TAB` cycles survivors and `O` shows the whole arena. Protocol details are in
+`docs/PROTOCOL.md`.
+
 ## Feedback
 
 We want to know how the game actually feels to play — combat weight, camera

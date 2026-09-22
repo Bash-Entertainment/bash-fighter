@@ -93,6 +93,28 @@ out of their match.
 | `matchEnd` | `winner`, `leaderboard`, `tick` | Final result. `winner` is `null` only for a genuine simultaneous final KO. |
 | `error` | `code`, `message` | `protocol_mismatch`, `bad_message`, `match_full`, or `server_error`. Connection is closed after this is sent. |
 
+## Join codes and spectating (2026-09-22)
+
+`hello` may carry a `joinCode`: four characters from
+`ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (no `I`, `O`, `0`, `1`, so a code survives
+being read aloud). The client mints it; `sanitiseJoinCode` in
+`packages/net/src/protocol.ts` is the single validator — uppercase, filter to
+the alphabet, and require exactly four surviving characters, otherwise the
+field is dropped. `welcome` echoes the lobby's real code, which is not
+necessarily the requested one.
+
+A coded lobby never becomes the public `filling` room and never runs the
+minimum-players countdown; it waits `MATCH_PRIVATE_BOT_FILL_SECONDS`
+(default 60) before bots fill it.
+
+`hello.spectate` asks for a seatless connection. The server resolves
+`joinCode` against lobbies and in-progress matches, falls back to the current
+public match when the code is unknown or its match has ended, and replies with
+`welcome.slot = -1`. A client following either kind of link discards any stored
+resume token first: the server honours `resume` above everything else in the
+hello, so without that a returning player was silently put back in their own
+old match instead of the lobby the link pointed at.
+
 ## Player names
 
 `hello.name` is the client's requested display name (typed on the start
