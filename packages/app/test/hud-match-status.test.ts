@@ -154,7 +154,7 @@ test('koStandingLineText reports own KOs and rank, omitting the redundant leader
 test('the persistent objective line is derived from the mode via objectiveLineText, not hardcoded per call site', () => {
   assert.match(
     hudSrc,
-    /matchModeLine\.textContent\s*=\s*objectiveLineText\(matchInfo\.winCondition\)/,
+    /matchModeLine\.textContent\s*=\s*objectiveLineText\(matchInfo\.winCondition[,)]/,
     'hud.ts must build the objective line from objectiveLineText(matchInfo.winCondition) so it can never drift from the sidebar mode/win-condition source of truth',
   );
 });
