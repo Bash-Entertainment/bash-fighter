@@ -19,6 +19,8 @@
 // fix: an honest countdown (falls back to an indeterminate state if the
 // server hasn't told us a deadline yet, never a fake timer), the bots/
 // other-humans explanation, and Start now.
+import { copyToClipboard } from '../join-link.ts';
+
 export class WaitingScreen {
   // 3-2-1-GO, not 5-4-3-2-1 as the player literally asked for: a casual
   // browser match should not make someone wait out a five-second ritual
@@ -61,7 +63,15 @@ export class WaitingScreen {
       <div class="waiting-mode" id="waiting-mode"></div>
       <div class="waiting-countdown" id="waiting-countdown">Waiting for players&hellip;</div>
       <div class="waiting-count" id="waiting-count"></div>
-      <div class="waiting-explain">Empty seats fill with bots, so a match always starts. Other players join this same lobby when they're around.</div>
+      <div class="waiting-explain" id="waiting-explain">Empty seats fill with bots, so a match always starts. Other players join this same lobby when they're around.</div>
+      <div class="waiting-share hidden" id="waiting-share">
+        <div class="waiting-share-label">Send this link to your friends</div>
+        <div class="waiting-share-row">
+          <span class="waiting-share-link" id="waiting-share-link"></span>
+          <button type="button" class="btn btn-plain" id="waiting-share-copy">Copy link</button>
+        </div>
+        <div class="waiting-explain">Waiting for friends. Bots fill the rest in 60 seconds.</div>
+      </div>
       <button type="button" class="waiting-start-btn" id="waiting-start-btn">Start now</button>
       <div class="waiting-hint" id="waiting-hint"></div>
     `;
@@ -73,6 +83,17 @@ export class WaitingScreen {
     // textContent, not innerHTML -- consistent with every other
     // player-facing string in this file even though this one is static.
     (this.root.querySelector('#waiting-hint') as HTMLDivElement).textContent = hint;
+    const shareCopyBtn = this.root.querySelector('#waiting-share-copy') as HTMLButtonElement;
+    shareCopyBtn.addEventListener('click', () => {
+      const link = (this.root.querySelector('#waiting-share-link') as HTMLSpanElement).textContent ?? '';
+      void copyToClipboard(link).then((ok) => {
+        if (!ok) return;
+        shareCopyBtn.textContent = 'Copied';
+        window.setTimeout(() => {
+          shareCopyBtn.textContent = 'Copy link';
+        }, 2000);
+      });
+    });
     this.startBtn.addEventListener('click', () => {
       // Disabled, not hidden, right after the click: the server may take
       // a tick or two to actually start the match, and repeat clicks must
@@ -120,6 +141,23 @@ export class WaitingScreen {
 
   /** modeName is the same plain-language string the lobby chip already
    * shows (e.g. "Battle Royale — last fighter standing wins"). */
+  /** Shows the share-link panel in place of the normal bots-fill-in
+   *  explanation, for the host of a "Play with a friend" lobby -- link
+   *  is null to hide it again (e.g. a later match that was not started
+   *  via a friend link). */
+  setShareLink(link: string | null): void {
+    const share = this.root.querySelector('#waiting-share') as HTMLDivElement;
+    const explain = this.root.querySelector('#waiting-explain') as HTMLDivElement;
+    if (link) {
+      (this.root.querySelector('#waiting-share-link') as HTMLSpanElement).textContent = link;
+      share.classList.remove('hidden');
+      explain.classList.add('hidden');
+    } else {
+      share.classList.add('hidden');
+      explain.classList.remove('hidden');
+    }
+  }
+
   setMode(modeName: string | undefined): void {
     this.modeLine.textContent = modeName ?? '';
     this.modeLine.classList.toggle('hidden', !modeName);

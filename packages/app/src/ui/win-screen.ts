@@ -4,6 +4,7 @@
 // should not feel like they are looking at two different games.
 import { PALETTE } from '@bash-fighter/render';
 import { AutoContinue } from './auto-continue.ts';
+import { copyToClipboard } from '../join-link.ts';
 
 const PLAYER_HEX = PALETTE.playerColors.map((c) => `#${c.toString(16).padStart(6, '0')}`);
 
@@ -17,6 +18,15 @@ export class WinScreen {
   private readonly autoContinue!: AutoContinue;
   private readonly onRematch: () => void;
   private lastResult: 'won' | 'eliminated' | 'no_survivor' = 'no_survivor';
+  private inviteLink: string | null = null;
+
+  /** Same shareable-lobby-link code as the waiting screen (see
+   *  join-link.ts) -- lets a group stay together into their next match.
+   *  null hides the button (this match was not a coded lobby). */
+  setInviteLink(link: string | null): void {
+    this.inviteLink = link;
+    (this.root.querySelector('#win-invite-btn') as HTMLButtonElement).classList.toggle('hidden', !link);
+  }
 
   // Feedback block for the moment a player has just formed an opinion
   // (2026-09-13, see feedback-panel.ts) -- prominent but not pushy: a
@@ -34,6 +44,7 @@ export class WinScreen {
         <div class="feedback-end-screen-copy">Got a minute? Tell us what felt off.</div>
         <button type="button" class="feedback-link-btn" id="win-feedback-btn">Feedback</button>
       </div>
+      <button type="button" class="btn btn-plain hidden" id="win-invite-btn">Copy invite link</button>
     `;
     parent.appendChild(this.root);
     this.headline = this.root.querySelector('#win-headline') as HTMLDivElement;
@@ -48,6 +59,17 @@ export class WinScreen {
     (this.root.querySelector('#win-feedback-btn') as HTMLButtonElement).addEventListener('click', () =>
       onOpenFeedback?.(this.lastResult),
     );
+      const inviteBtn = this.root.querySelector('#win-invite-btn') as HTMLButtonElement;
+    inviteBtn.addEventListener('click', () => {
+      if (!this.inviteLink) return;
+      void copyToClipboard(this.inviteLink).then((ok) => {
+        if (!ok) return;
+        inviteBtn.textContent = 'Copied';
+        window.setTimeout(() => {
+          inviteBtn.textContent = 'Copy invite link';
+        }, 2000);
+      });
+    });
   }
 
   /**

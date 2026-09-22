@@ -21,6 +21,8 @@ import { FeedbackPanel } from './ui/feedback-panel.ts';
 import { TouchControls } from './ui/touch-controls.ts';
 import { WaitingScreen } from './ui/waiting-screen.ts';
 import { AttractMode } from './attract-mode.ts';
+import { generateJoinCode, buildShareLink, copyToClipboard } from './join-link.ts';
+import { sanitiseJoinCode } from '@bash-fighter/net';
 import {
   isTouchCapable,
   loadPersistedBindings,
@@ -286,6 +288,9 @@ const startScreen = new StartScreen(
     attractMode.stop();
     replayScreen.show();
   },
+  () => {
+    void beginOnlineMatch(false, generateJoinCode());
+  },
 );
 if (touchCapable) startScreen.useTouchControls();
 
@@ -459,6 +464,7 @@ window.addEventListener('resize', refreshAttractMode);
 // start screen is the first thing shown.
 refreshAttractMode();
 
+
 const settingsButton = document.createElement('button');
 settingsButton.className = 'btn btn-plain';
 settingsButton.id = 'settings-btn';
@@ -522,6 +528,25 @@ onlineButton.addEventListener('click', () => {
 });
 
 let netMatch: NetMatch | null = null;
+// Shareable lobby links (see wiki "Shareable lobby links"). requestedJoinCode
+// is what THIS client asked to join/host with on the next hello;
+// currentJoinCode is what the server actually echoed back in 'welcome'
+// for the match now in progress, which is the only value ever shown or
+// put in a link -- see NetMatchEvents.onJoinCode's doc comment.
+let requestedJoinCode: string | undefined;
+let currentJoinCode: string | null = null;
+
+function inviteLinkAction(): { label: string; onClick: () => void; kind: 'plain' } | null {
+  if (!currentJoinCode) return null;
+  const code = currentJoinCode;
+  return {
+    label: 'Copy invite link',
+    kind: 'plain',
+    onClick: () => {
+      void copyToClipboard(buildShareLink(location.origin, code));
+    },
+  };
+}
 // Set the moment our own seat is eliminated online, cleared at the start
 // of each new online match. Distinguishes "the match ended for everyone,
 // I was still playing" from "I was already out and spectating" so
@@ -616,8 +641,10 @@ function serverUrl(): string {
 // overlay, match-end overlay, win screen, timed-brawl end screen, or the
 // spectate-stall chip) rather than the start screen's "Play online"
 // button -- feeds the requeued session-report field (see net-match.ts).
-async function beginOnlineMatch(requeued = false): Promise<void> {
+async function beginOnlineMatch(requeued = false, joinCode?: string): Promise<void> {
   lastMatchWasOnline = true;
+  requestedJoinCode = joinCode;
+  currentJoinCode = null;
   eliminatedThisOnlineMatch = false;
   lastEliminationContent = null;
   clearSpectateStallTimer();
@@ -689,6 +716,9 @@ async function beginOnlineMatch(requeued = false): Promise<void> {
         matchOverlay.hide();
       }
     },
+    onJoinCode: (joinCode) => {
+      currentJoinCode = joinCode ?? null;
+    },
     onLobby: (players, capacity, countdownTicks, modeName) => {
       const countdown = countdownTicks >= 0 ? ` — starting in ${Math.ceil(countdownTicks / 60)}s` : '';
       setNetStatus('waiting', `${players}/${capacity} players${countdown}`);
@@ -699,6 +729,7 @@ async function beginOnlineMatch(requeued = false): Promise<void> {
         netModeLine.classList.add('hidden');
       }
       waitingScreen.setMode(modeName);
+      waitingScreen.setShareLink(currentJoinCode ? buildShareLink(location.origin, currentJoinCode) : null);
       waitingScreen.setCount(players, capacity, countdownTicks);
       waitingScreen.show();
     },
@@ -786,9 +817,11 @@ async function beginOnlineMatch(requeued = false): Promise<void> {
           deathCount: s.deathCount,
         }));
         timedBrawlEndScreen.autoContinueEnabled = true;
+        timedBrawlEndScreen.setInviteLink(currentJoinCode ? buildShareLink(location.origin, currentJoinCode) : null);
         timedBrawlEndScreen.show(winnerIndex, leaderboard, scores, netMatch?.localSlot(), netMatch ? (slot) => netMatch!.nameFor(slot) : undefined);
       } else {
         winScreen.autoContinueEnabled = true;
+        winScreen.setInviteLink(currentJoinCode ? buildShareLink(location.origin, currentJoinCode) : null);
         winScreen.show(winnerIndex, netMatch?.localSlot(), netMatch ? (slot) => netMatch!.nameFor(slot) : undefined);
       }
     },
@@ -817,6 +850,7 @@ async function beginOnlineMatch(requeued = false): Promise<void> {
           // another match rather than the end of the session. Pressing
           // "Keep spectating" cancels it.
           { label: 'Play again', autoAfterSec: 4, onClick: () => void beginOnlineMatch(true) },
+          ...(inviteLinkAction() ? [inviteLinkAction()!] : []),
           {
             label: 'Keep spectating',
             onClick: () => {
@@ -856,7 +890,7 @@ async function beginOnlineMatch(requeued = false): Promise<void> {
     onContextLost: onRendererContextLost,
     onContextRestored: onRendererContextRestored,
     onRenderStalled: onRendererRenderStalled,
-  }, audio, isQaSession(), requestedArenaId(), requeued);
+  }, audio, isQaSession(), requestedArenaId(), requeued, requestedJoinCode);
   netMatch = net;
   net.input.setBinding(0, currentBindings.p1);
   net.input.setBinding(1, currentBindings.p2);
@@ -1155,3 +1189,20 @@ window.addEventListener('keydown', (e) => {
     spectator.toggleOverview();
   }
 });
+
+// Shareable lobby links: a friend's ?join=CODE URL should drop them
+// straight into the lobby, with no extra click, same as pasting a real
+// invite link ever should. A malformed code (edited by hand, truncated
+// by a chat client) still starts an online match -- just an ordinary
+// public one -- rather than showing an error for a link that mostly
+// worked. See sanitiseJoinCode in packages/net/src/protocol.ts.
+{
+  const rawJoin = new URLSearchParams(location.search).get('join');
+  if (rawJoin !== null) {
+    const sanitised = sanitiseJoinCode(rawJoin);
+    if (!sanitised) {
+      setNetStatus('connecting', "That link's code wasn't valid — joining the next public match");
+    }
+    void beginOnlineMatch(false, sanitised);
+  }
+}

@@ -74,7 +74,7 @@ export class StartScreen {
     row.append(span);
   }
 
-  constructor(parent: HTMLElement, onStart: () => void, onWatchReplay?: () => void) {
+  constructor(parent: HTMLElement, onStart: () => void, onWatchReplay?: () => void, onPlayWithFriend?: () => void) {
     this.root = document.createElement('div');
     this.root.className = 'screen';
     this.root.id = 'start-screen';
@@ -110,6 +110,7 @@ export class StartScreen {
           />
         </div>
         <div id="primary-actions"></div>
+        <button type="button" class="btn btn-plain" id="play-with-friend-btn">Play with a friend</button>
       </div>
       <div class="below-fold">
         <section class="fighter-select">
@@ -146,6 +147,9 @@ export class StartScreen {
     (this.root.querySelector('#start-btn') as HTMLButtonElement).addEventListener('click', onStart);
     if (onWatchReplay) {
       (this.root.querySelector('#watch-replay-btn') as HTMLButtonElement).addEventListener('click', onWatchReplay);
+    }
+    if (onPlayWithFriend) {
+      (this.root.querySelector('#play-with-friend-btn') as HTMLButtonElement).addEventListener('click', onPlayWithFriend);
     }
 
     this.nameInput = this.root.querySelector('#player-name-input') as HTMLInputElement;

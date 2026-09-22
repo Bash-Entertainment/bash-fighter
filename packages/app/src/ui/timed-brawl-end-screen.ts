@@ -8,6 +8,7 @@
 import { PALETTE } from '@bash-fighter/render';
 import { AutoContinue } from './auto-continue.ts';
 import { buildStandings, placementOf, tiedHeadline, type TimedBrawlScore } from '../timed-brawl.ts';
+import { copyToClipboard } from '../join-link.ts';
 
 const PLAYER_HEX = PALETTE.playerColors.map((c) => `#${c.toString(16).padStart(6, '0')}`);
 
@@ -24,6 +25,13 @@ export class TimedBrawlEndScreen {
   private readonly autoContinue!: AutoContinue;
   private readonly onRematch: () => void;
   private lastResult: 'won' | 'lost' | 'tied' = 'tied';
+  private inviteLink: string | null = null;
+
+  /** Same shareable-lobby-link code as WinScreen/WaitingScreen. */
+  setInviteLink(link: string | null): void {
+    this.inviteLink = link;
+    (this.root.querySelector('#tb-invite-btn') as HTMLButtonElement).classList.toggle('hidden', !link);
+  }
 
   // Same feedback block as WinScreen (see feedback-panel.ts, 2026-09-13):
   // this is the Timed Brawl equivalent of "the moment a player has an
@@ -41,6 +49,7 @@ export class TimedBrawlEndScreen {
         <div class="feedback-end-screen-copy">Got a minute? Tell us what felt off.</div>
         <button type="button" class="feedback-link-btn" id="tb-feedback-btn">Feedback</button>
       </div>
+      <button type="button" class="btn btn-plain hidden" id="tb-invite-btn">Copy invite link</button>
     `;
     parent.appendChild(this.root);
     this.headline = this.root.querySelector('#tb-headline') as HTMLDivElement;
@@ -57,6 +66,17 @@ export class TimedBrawlEndScreen {
     (this.root.querySelector('#tb-feedback-btn') as HTMLButtonElement).addEventListener('click', () =>
       onOpenFeedback?.(this.lastResult),
     );
+      const inviteBtn = this.root.querySelector('#tb-invite-btn') as HTMLButtonElement;
+    inviteBtn.addEventListener('click', () => {
+      if (!this.inviteLink) return;
+      void copyToClipboard(this.inviteLink).then((ok) => {
+        if (!ok) return;
+        inviteBtn.textContent = 'Copied';
+        window.setTimeout(() => {
+          inviteBtn.textContent = 'Copy invite link';
+        }, 2000);
+      });
+    });
   }
 
   /**
