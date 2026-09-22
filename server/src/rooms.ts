@@ -89,6 +89,38 @@ export class RoomManager {
     return this.matches.get(id);
   }
 
+  /** Finds the match a spectate-by-link code refers to (see [[Spectate by
+   *  link]]), whether it's still in its lobby (via `coded`, the fast
+   *  path) or already in progress -- `coded` is cleared the moment a
+   *  match starts (onLobbyLeft), but `Match.joinCode` itself is never
+   *  cleared, so a started match is still found by the fallback scan.
+   *  Never returns an ended match: callers should fall back to
+   *  currentPublicMatch() for that case, same as an unknown code. */
+  findMatchByCode(code: string): Match | undefined {
+    const lobby = this.coded.get(code);
+    if (lobby && lobby.phase !== 'ended') return lobby;
+    for (const match of this.matches.values()) {
+      if (match.joinCode === code && match.phase !== 'ended') return match;
+    }
+    return undefined;
+  }
+
+  /** The match a spectator with no code (or an unknown/ended one) should
+   *  fall back to watching: the public lobby currently filling, or else
+   *  the most recently created still-live match that was never a coded
+   *  (private) lobby. Returns undefined only when there is truly nothing
+   *  public to watch. */
+  currentPublicMatch(): Match | undefined {
+    if (this.filling && this.filling.phase !== 'ended') return this.filling;
+    let best: Match | undefined;
+    for (const match of this.matches.values()) {
+      if (match.joinCode !== undefined) continue;
+      if (match.phase === 'ended') continue;
+      best = match;
+    }
+    return best;
+  }
+
   /** Finds the match/seat a resume token reclaims, across every match this
    *  manager still knows about (a client does not know its old matchId is
    *  still needed, so it just presents the token). Not indexed separately

@@ -103,6 +103,12 @@ export interface HelloMessage {
    *  (never truncated or padded) unless exactly JOIN_CODE_LENGTH characters
    *  survive. Absent for a normal public-lobby join. */
   joinCode?: string;
+  /** True when this connection is a pure spectate-by-link request (see
+   *  [[Spectate by link]], ?watch=CODE): never creates or occupies a
+   *  seat. `joinCode` above is then read as "the coded match to watch",
+   *  not "the coded lobby to join" -- the server never calls joinLobby
+   *  for a spectate hello. Absent/false for every ordinary join. */
+  spectate?: boolean;
 }
 
 /** See HelloMessage.profile. Match-scoped, non-identifying: whether a
@@ -835,6 +841,7 @@ export function parseClientControl(text: string): ClientControlMessage | null {
         ...(arena ? { arena } : {}),
         ...(typeof obj.requeued === 'boolean' ? { requeued: obj.requeued } : {}),
         ...(joinCode ? { joinCode } : {}),
+        ...(obj.spectate === true ? { spectate: true } : {}),
       };
     }
     case 'spectate':

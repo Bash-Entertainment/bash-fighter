@@ -10,10 +10,12 @@ const net = readFileSync(new URL('../src/net-match.ts', import.meta.url), 'utf8'
 
 test('both join-link entry paths drop the stored resume token first', () => {
   const calls = main.match(/clearStoredResumeToken\(\)/g) ?? [];
-  // One for hosting ("Play with a friend"), one for arriving on ?join=CODE.
-  assert.equal(calls.length, 2);
+  // One for hosting ("Play with a friend"), one for arriving on ?join=CODE,
+  // one for arriving on ?watch=CODE (see [[Spectate by link]]).
+  assert.equal(calls.length, 3);
   assert.match(main, /clearStoredResumeToken\(\);\s*\n\s*void beginOnlineMatch\(false, sanitised\)/);
   assert.match(main, /const code = generateJoinCode\(\);\s*\n\s*clearStoredResumeToken\(\)/);
+  assert.match(main, /clearStoredResumeToken\(\);\s*\n\s*void beginOnlineMatch\(false, sanitised, true\)/);
 });
 
 test('clearStoredResumeToken is exported and clears the stored token', () => {

@@ -541,6 +541,17 @@ let netMatch: NetMatch | null = null;
 // put in a link -- see NetMatchEvents.onJoinCode's doc comment.
 let requestedJoinCode: string | undefined;
 let currentJoinCode: string | null = null;
+// Spectate-by-link (see [[Spectate by link]], ?watch=CODE): true for the
+// whole lifetime of a beginOnlineMatch() call started from a watch link,
+// false for every ordinary join -- read once, at NetMatch construction,
+// same convention as requestedJoinCode above.
+let requestedSpectate = false;
+// Set by onJoinCode just before onStateChange('spectating') fires for
+// the same welcome (see handleControl's 'welcome' case in net-match.ts,
+// which calls them in that order) -- lets the 'spectating' branch below
+// show the fallback explanation instead of the generic "Spectating"
+// label, exactly once per welcome.
+let spectateFallbackNotice: string | undefined;
 
 function inviteLinkAction(): { label: string; onClick: () => void; kind: 'plain' } | null {
   if (!currentJoinCode) return null;
@@ -647,9 +658,10 @@ function serverUrl(): string {
 // overlay, match-end overlay, win screen, timed-brawl end screen, or the
 // spectate-stall chip) rather than the start screen's "Play online"
 // button -- feeds the requeued session-report field (see net-match.ts).
-async function beginOnlineMatch(requeued = false, joinCode?: string): Promise<void> {
+async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = false): Promise<void> {
   lastMatchWasOnline = true;
   requestedJoinCode = joinCode;
+  requestedSpectate = spectate;
   currentJoinCode = null;
   eliminatedThisOnlineMatch = false;
   lastEliminationContent = null;
@@ -691,7 +703,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string): Promise<vo
   const characterId = startScreen.selectedCharacterId;
   const net = new NetMatch(serverUrl(), {
     onStateChange: (state, detail) => {
-      setNetStatus(state, detail);
+      setNetStatus(state, state === 'spectating' ? spectateFallbackNotice ?? detail : detail);
       if (state !== 'waiting') netModeLine.classList.add('hidden');
       // The composed waiting screen (packages/app/src/ui/waiting-screen.ts)
       // owns this same moment: show it exactly while 'waiting', hide it for
@@ -724,6 +736,17 @@ async function beginOnlineMatch(requeued = false, joinCode?: string): Promise<vo
     },
     onJoinCode: (joinCode) => {
       currentJoinCode = joinCode ?? null;
+      // Spectate-by-link fallback (see [[Spectate by link]]): a
+      // requested watch code that the server didn't actually land us
+      // on (unknown code, or its match already ended) means we're
+      // watching the current public match instead -- say so once, via
+      // the 'spectating' onStateChange branch that fires right after
+      // this, rather than silently spectating something the player
+      // didn't ask for.
+      spectateFallbackNotice =
+        requestedSpectate && requestedJoinCode && joinCode !== requestedJoinCode
+          ? "That link's match wasn't found — spectating the current match instead"
+          : undefined;
     },
     onLobby: (players, capacity, countdownTicks, modeName) => {
       const countdown = countdownTicks >= 0 ? ` — starting in ${Math.ceil(countdownTicks / 60)}s` : '';
@@ -896,7 +919,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string): Promise<vo
     onContextLost: onRendererContextLost,
     onContextRestored: onRendererContextRestored,
     onRenderStalled: onRendererRenderStalled,
-  }, audio, isQaSession(), requestedArenaId(), requeued, requestedJoinCode);
+  }, audio, isQaSession(), requestedArenaId(), requeued, requestedJoinCode, requestedSpectate);
   netMatch = net;
   net.input.setBinding(0, currentBindings.p1);
   net.input.setBinding(1, currentBindings.p2);
@@ -920,10 +943,16 @@ async function beginOnlineMatch(requeued = false, joinCode?: string): Promise<vo
         controlsHint.maybeShow(touchCapable);
       }
       hud.show();
-      inMatchMovesButton.classList.remove('hidden');
+      // A spectator (?watch=CODE, or any pure-spectate seat) holds no
+      // fighter: touch controls have nothing to control, and the move
+      // reference / feedback nag are prompts aimed at someone playing --
+      // see [[Spectate by link]].
+      const holdingASeat = netMatch.localSlot() >= 0;
+      inMatchMovesButton.classList.toggle('hidden', !holdingASeat);
       inMatchSettingsButton.classList.remove('hidden');
-      inMatchFeedbackButton.classList.remove('hidden');
-      if (touchCapable) touchControls.show();
+      inMatchFeedbackButton.classList.toggle('hidden', !holdingASeat);
+      if (touchCapable && holdingASeat) touchControls.show();
+      else touchControls.hide();
       const onlineSettings = netMatch.getMatchSettings();
       hud.update(
         netMatch.currentSnapshots(),
@@ -1211,5 +1240,24 @@ window.addEventListener('keydown', (e) => {
     }
     clearStoredResumeToken();
     void beginOnlineMatch(false, sanitised);
+  }
+}
+
+// Spectate by link (see [[Spectate by link]], design section 1):
+// ?watch=CODE never takes a seat -- the server is told this is a pure
+// spectate hello (NetMatch's spectateRequest), so it either attaches to
+// the named coded match or, if the code is unknown/its match has ended,
+// falls back to the current public match with a one-line status
+// message (see the onJoinCode handler above). Also clears any stored
+// resume token first, same as ?join=, so a stale seat can never hijack
+// a watch link into taking over a real fighter slot instead of
+// spectating. A malformed code still starts spectating -- of the
+// current public match -- rather than erroring.
+{
+  const rawWatch = new URLSearchParams(location.search).get('watch');
+  if (rawWatch !== null) {
+    const sanitised = sanitiseJoinCode(rawWatch);
+    clearStoredResumeToken();
+    void beginOnlineMatch(false, sanitised, true);
   }
 }

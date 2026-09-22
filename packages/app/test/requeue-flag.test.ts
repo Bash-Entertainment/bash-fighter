@@ -12,7 +12,7 @@ const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
 const netMatch = readFileSync(new URL('../src/net-match.ts', import.meta.url), 'utf8');
 
 test('beginOnlineMatch defaults requeued to false for the start-screen path', () => {
-  assert.match(main, /async function beginOnlineMatch\(requeued = false, joinCode\?: string\): Promise<void>/);
+  assert.match(main, /async function beginOnlineMatch\(requeued = false, joinCode\?: string, spectate = false\): Promise<void>/);
   const startScreenIdx = main.indexOf("void beginOnlineMatch();");
   assert.notEqual(startScreenIdx, -1, 'start screen must call beginOnlineMatch() with no argument');
 });
@@ -32,11 +32,11 @@ test('every "Play again" style action passes requeued=true into beginOnlineMatch
 });
 
 test('beginOnlineMatch forwards requeued into the NetMatch constructor', () => {
-  assert.match(main, /}, audio, isQaSession\(\), requestedArenaId\(\), requeued, requestedJoinCode\);/);
+  assert.match(main, /}, audio, isQaSession\(\), requestedArenaId\(\), requeued, requestedJoinCode, requestedSpectate\);/);
 });
 
 test('NetMatch accepts a requeued constructor param and carries it into the session report', () => {
-  assert.match(netMatch, /requeued = false,\s*\n\s*joinCodeRequest\?: string,\s*\n\s*\)\s*{/);
+  assert.match(netMatch, /requeued = false,\s*\n\s*joinCodeRequest\?: string,\s*\n\s*spectateRequest = false,\s*\n\s*\)\s*{/);
   assert.match(netMatch, /this\.requeued = requeued;/);
   assert.match(netMatch, /requeued: this\.requeued,/);
 });

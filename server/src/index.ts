@@ -608,6 +608,59 @@ function retireConn(conn: ClientConn): void {
   }
 }
 
+/** Spectate-by-link (see [[Spectate by link]], ?watch=CODE): never
+ *  creates or occupies a seat. `code` (sanitised HelloMessage.joinCode,
+ *  read here as "the coded match to watch") is looked up across lobby
+ *  and in-progress matches alike; an unknown/ended code, or no code at
+ *  all, falls back to the current public match so the link never dead-
+ *  ends in a blank screen. Only truly no live match anywhere closes the
+ *  connection with an error. */
+function handleSpectateHello(conn: ClientConn, code: string | undefined): void {
+  let match = code ? manager.findMatchByCode(code) : undefined;
+  const fellBack = !match;
+  if (!match) match = manager.currentPublicMatch();
+  if (!match) {
+    closeWithError(conn, 'no_match_to_spectate', 'no match is currently available to spectate');
+    return;
+  }
+  conn.match = match;
+  conn.slot = -1;
+  conn.spectating = true;
+  watcherSet(match.id).add(conn.id);
+  syncWatcherCount(match);
+  logConn(conn, 'spectate_joined', { matchId: match.id, requestedCode: code, fellBack });
+  send(conn, {
+    t: 'welcome',
+    protocolVersion: PROTOCOL_VERSION,
+    clientId: conn.id,
+    slot: -1,
+    matchId: match.id,
+    resumeToken: null,
+    resumed: false,
+    ...(match.joinCode ? { joinCode: match.joinCode } : {}),
+  });
+  if (match.phase === 'lobby') {
+    broadcastLobby(match);
+  } else {
+    // Mirrors handleResume's rejoin-into-started-match path below: a
+    // fresh spectator arriving mid-match needs the same one-time
+    // matchStart snapshot everyone else got at the real start, sent
+    // directly rather than waiting for a broadcast that already
+    // happened before this connection existed.
+    send(conn, {
+      t: 'matchStart',
+      matchId: match.id,
+      seed: match.seed,
+      numFighters: match.seats.length,
+      slot: -1,
+      settings: match.getClientSettings() ?? {},
+      arenaId: match.arenaId,
+      names: match.seats.map((s) => s.name),
+      characterIds: match.seats.map((s) => s.characterId),
+    });
+  }
+}
+
 function handleResume(conn: ClientConn, token: string): void {
   let found = manager.findReclaim(token);
   if (!found) {
@@ -782,6 +835,11 @@ function handleText(conn: ClientConn, text: string): void {
 
       if (msg.resume) {
         handleResume(conn, msg.resume);
+        return;
+      }
+
+      if (msg.spectate === true) {
+        handleSpectateHello(conn, msg.joinCode);
         return;
       }
 

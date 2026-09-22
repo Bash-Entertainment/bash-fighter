@@ -310,6 +310,13 @@ export class NetMatch {
   // by join code, so it is never resent on a later openSocket() call.
   private readonly joinCodeRequest?: string;
 
+  // Spectate-by-link (see [[Spectate by link]], ?watch=CODE, main.ts):
+  // true means this hello asks the server to attach as a pure
+  // spectator -- never addSeat/joinLobby -- watching the coded match
+  // named by joinCodeRequest, or the current public match if that code
+  // is unknown/ended or absent. Never combined with a resume.
+  private readonly spectateRequest: boolean;
+
   // Engagement telemetry only (see docs/MEASUREMENT.md) -- presentation/
   // reporting, never read by tick()'s sim advance and never part of
   // localSim/renderSim state. Reset at the start of every match so a
@@ -374,6 +381,7 @@ export class NetMatch {
     arenaRequest?: string,
     requeued = false,
     joinCodeRequest?: string,
+    spectateRequest = false,
   ) {
     this.url = url;
     this.events = events;
@@ -384,6 +392,7 @@ export class NetMatch {
     this.arenaRequest = arenaRequest;
     this.requeued = requeued;
     this.joinCodeRequest = joinCodeRequest;
+    this.spectateRequest = spectateRequest;
   }
 
   async init(parent: HTMLElement): Promise<void> {
@@ -509,6 +518,7 @@ export class NetMatch {
       // Shareable-lobby-link join code -- only on the fresh hello, never
       // alongside a resume (see joinCodeRequest's doc comment above).
       if (this.joinCodeRequest && !this.resumeToken) hello.joinCode = this.joinCodeRequest;
+      if (this.spectateRequest && !this.resumeToken) hello.spectate = true;
       // Engagement telemetry only (see docs/MEASUREMENT.md) -- small,
       // non-identifying environment snapshot, sent once per connection.
       hello.profile = buildClientProfile({
