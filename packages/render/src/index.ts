@@ -1340,7 +1340,13 @@ export class Renderer {
           character: frame.characters[i] as CharacterData,
         }));
       drawDebugBoxes(this.debugLayer, debugInputs, cam, vw, vh);
-      this.debugText.text = formatDebugText(debugInputs, frame.tick, frame.hash);
+      this.debugText.text = formatDebugText(
+        debugInputs,
+        frame.tick,
+        frame.hash,
+        this.currentResolution,
+        this.adaptiveResolutionCounters.downgrades,
+      );
     } else {
       this.debugLayer.clear();
     }

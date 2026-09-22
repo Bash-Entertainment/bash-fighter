@@ -106,8 +106,13 @@ export function formatDebugText(
   fighters: readonly DebugFighterInput[],
   tick: number,
   hash: string,
+  resolution: number,
+  downgrades: number,
 ): string {
-  const lines: string[] = [`tick ${tick}  hash ${hash}`];
+  const lines: string[] = [
+    `tick ${tick}  hash ${hash}`,
+    `res ${resolution}x  downgrades ${downgrades}`,
+  ];
   for (let i = 0; i < fighters.length; i++) {
     const f = fighters[i] as DebugFighterInput;
     const move = f.moveId >= 0 ? findMove(f.character, f.moveId as never) : undefined;
