@@ -25,6 +25,7 @@ const STATE_NAMES: Record<number, string> = {
   [FighterStateId.SHIELD]: 'SHIELD',
   [FighterStateId.LEDGE]: 'LEDGE',
   [FighterStateId.DEAD]: 'DEAD',
+  [FighterStateId.RESPAWN]: 'RESPAWN',
 };
 
 export interface DebugFighterInput {
@@ -119,7 +120,7 @@ export function formatDebugText(
     const win = move ? windowAtFrame(move, f.moveFrame - 1) : null;
     const winDesc = win ? `${win.window.kind}:${win.frameInWindow}/${win.window.duration}` : '-';
     lines.push(
-      `P${i + 1} ${STATE_NAMES[f.state]}  move=${move ? move.name : '-'} win=${winDesc}  pct=${(f.percent / 65536).toFixed(1)}`,
+      `P${i + 1} ${STATE_NAMES[f.state] ?? `STATE${f.state}`}  move=${move ? move.name : '-'} win=${winDesc}  pct=${(f.percent / 65536).toFixed(1)}`,
     );
   }
   return lines.join('\n');
