@@ -19,12 +19,16 @@ export class WinScreen {
   private readonly onRematch: () => void;
   private lastResult: 'won' | 'eliminated' | 'no_survivor' = 'no_survivor';
   private inviteLink: string | null = null;
+  private onInviteCopied: (() => void) | undefined;
 
   /** Same shareable-lobby-link code as the waiting screen (see
    *  join-link.ts) -- lets a group stay together into their next match.
    *  null hides the button (this match was not a coded lobby). */
-  setInviteLink(link: string | null): void {
+  setInviteLink(link: string | null, onCopy?: () => void): void {
     this.inviteLink = link;
+    // Only a real copy commits this client to the private lobby behind the
+    // link -- see nextMatchInviteLink in main.ts.
+    this.onInviteCopied = onCopy;
     (this.root.querySelector('#win-invite-btn') as HTMLButtonElement).classList.toggle('hidden', !link);
   }
 
@@ -62,6 +66,7 @@ export class WinScreen {
       const inviteBtn = this.root.querySelector('#win-invite-btn') as HTMLButtonElement;
     inviteBtn.addEventListener('click', () => {
       if (!this.inviteLink) return;
+      this.onInviteCopied?.();
       void copyToClipboard(this.inviteLink).then((ok) => {
         if (!ok) return;
         inviteBtn.textContent = 'Copied';

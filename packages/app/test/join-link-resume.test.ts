@@ -28,4 +28,8 @@ test('the end-screen invite mints a fresh code for the next match', () => {
   assert.match(main, /function nextMatchInviteLink\(\): string \| null \{/);
   assert.match(main, /if \(requeued && !joinCode && pendingInviteCode\) \{/);
   assert.doesNotMatch(main, /setInviteLink\(currentJoinCode/);
+  // Showing the link must not commit this client to the private lobby:
+  // only an actual copy does, or every requeue leaves the public lobby.
+  assert.match(main, /function commitInvite\(\): void \{\s*\n\s*pendingInviteCode = reservedInviteCode;/);
+  assert.match(main, /setInviteLink\(nextMatchInviteLink\(\), commitInvite\)/);
 });
