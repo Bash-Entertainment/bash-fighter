@@ -553,14 +553,29 @@ let requestedSpectate = false;
 // label, exactly once per welcome.
 let spectateFallbackNotice: string | undefined;
 
+// The end-screen invite ("Copy invite link") must not hand out the code of
+// the match that has just finished: that lobby is gone, and this client
+// auto-requeues seconds later, so a friend following it would sit alone in a
+// dead private lobby. Instead the button mints a code for THIS client's next
+// match and holds it here; beginOnlineMatch consumes it on the requeue, so
+// the friend arrives into the match we are actually playing.
+let pendingInviteCode: string | null = null;
+
+/** Link for "invite a friend to my next match": a fresh code, minted once
+ *  and reused until it is consumed by the requeue. */
+function nextMatchInviteLink(): string | null {
+  if (!lastMatchWasOnline) return null;
+  if (!pendingInviteCode) pendingInviteCode = generateJoinCode();
+  return buildShareLink(location.origin, pendingInviteCode);
+}
+
 function inviteLinkAction(): { label: string; onClick: () => void; kind: 'plain' } | null {
-  if (!currentJoinCode) return null;
-  const code = currentJoinCode;
   return {
     label: 'Copy invite link',
     kind: 'plain',
     onClick: () => {
-      void copyToClipboard(buildShareLink(location.origin, code));
+      if (!pendingInviteCode) pendingInviteCode = generateJoinCode();
+      void copyToClipboard(buildShareLink(location.origin, pendingInviteCode));
     },
   };
 }
@@ -659,6 +674,10 @@ function serverUrl(): string {
 // spectate-stall chip) rather than the start screen's "Play online"
 // button -- feeds the requeued session-report field (see net-match.ts).
 async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = false): Promise<void> {
+  if (requeued && !joinCode && pendingInviteCode) {
+    joinCode = pendingInviteCode;
+  }
+  pendingInviteCode = null;
   lastMatchWasOnline = true;
   requestedJoinCode = joinCode;
   requestedSpectate = spectate;
@@ -850,11 +869,11 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
           deathCount: s.deathCount,
         }));
         timedBrawlEndScreen.autoContinueEnabled = true;
-        timedBrawlEndScreen.setInviteLink(currentJoinCode ? buildShareLink(location.origin, currentJoinCode) : null);
+        timedBrawlEndScreen.setInviteLink(nextMatchInviteLink());
         timedBrawlEndScreen.show(winnerIndex, leaderboard, scores, netMatch?.localSlot(), netMatch ? (slot) => netMatch!.nameFor(slot) : undefined);
       } else {
         winScreen.autoContinueEnabled = true;
-        winScreen.setInviteLink(currentJoinCode ? buildShareLink(location.origin, currentJoinCode) : null);
+        winScreen.setInviteLink(nextMatchInviteLink());
         winScreen.show(winnerIndex, netMatch?.localSlot(), netMatch ? (slot) => netMatch!.nameFor(slot) : undefined);
       }
     },

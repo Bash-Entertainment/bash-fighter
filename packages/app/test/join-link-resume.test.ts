@@ -21,3 +21,11 @@ test('both join-link entry paths drop the stored resume token first', () => {
 test('clearStoredResumeToken is exported and clears the stored token', () => {
   assert.match(net, /export function clearStoredResumeToken\(\): void \{\s*saveResumeToken\(null\);/);
 });
+
+test('the end-screen invite mints a fresh code for the next match', () => {
+  // Handing out the finished match's code sent the friend into a dead
+  // private lobby while we had already requeued elsewhere.
+  assert.match(main, /function nextMatchInviteLink\(\): string \| null \{/);
+  assert.match(main, /if \(requeued && !joinCode && pendingInviteCode\) \{/);
+  assert.doesNotMatch(main, /setInviteLink\(currentJoinCode/);
+});
