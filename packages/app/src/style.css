@@ -1628,6 +1628,14 @@ body.end-screen-open #net-mode-line {
   gap: 6px;
 }
 
+/* The generic "empty seats fill with bots" line is replaced by the share
+   panel for a friend lobby, not stacked above it: WaitingScreen.setShareLink
+   toggles .hidden on it, and without this rule the class did nothing, so a
+   host saw both explanations at once. Found by playing the flow locally. */
+.waiting-explain.hidden {
+  display: none;
+}
+
 .waiting-share.hidden {
   display: none;
 }
