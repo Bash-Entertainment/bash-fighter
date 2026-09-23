@@ -54,6 +54,8 @@ export interface StoredSessionEndRecord {
   eliminated: boolean;
   endReason: string;
   sessionDurationSec: number;
+  koCount: number | null;
+  deathCount: number | null;
   touchActive: boolean | null;
   firstInputMs: number | null;
   inputTicks: number | null;
@@ -216,6 +218,8 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       eliminated: seat.eliminated,
       endReason,
       sessionDurationSec: Number(((now() - seat.joinedAt) / 1000).toFixed(1)),
+      koCount: match.sim ? match.sim.getFighter(conn.slot).koCount : null,
+      deathCount: match.sim ? match.sim.getFighter(conn.slot).deathCount : null,
       touchActive: profile?.touchActive ?? null,
       firstInputMs: report?.firstInputMs ?? null,
       inputTicks: report?.inputTicks ?? null,

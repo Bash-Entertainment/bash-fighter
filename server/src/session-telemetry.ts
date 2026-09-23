@@ -114,6 +114,10 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
       eliminated: seat.eliminated,
       endReason,
       sessionDurationSec: Number(((Date.now() - seat.joinedAt) / 1000).toFixed(1)),
+      // Added 2026-09-23: does a real newcomer ever land a knockout before
+      // leaving? Bots were visibly racking up 6-9 KOs a minute around them.
+      koCount: match.sim ? match.sim.getFighter(conn.slot).koCount : null,
+      deathCount: match.sim ? match.sim.getFighter(conn.slot).deathCount : null,
       touchActive: profile?.touchActive ?? null,
       viewportWidth: profile?.viewportWidth ?? null,
       viewportHeight: profile?.viewportHeight ?? null,

@@ -259,6 +259,14 @@ test('[sessionEnd]: endReason is "disconnected" when the match ended because eve
   assert.equal(record.endReason, 'disconnected');
 });
 
+test('[sessionEnd]: carries the seat\'s koCount and deathCount', () => {
+  const match = realMatch();
+  const conn = fakeConn({ slot: 0 });
+  const lines = captureLogs(() => logSessionEnd(conn, match));
+  const record = JSON.parse(lines.find((l) => l.startsWith('[sessionEnd]'))!.slice('[sessionEnd] '.length));
+  assert.ok('koCount' in record && 'deathCount' in record);
+});
+
 test('[sessionEnd]: a missing profile/report never crashes -- fields log as null, not throw', () => {
   const match = realMatch();
   const conn = fakeConn({ slot: 0, profile: null, lastReport: null });
