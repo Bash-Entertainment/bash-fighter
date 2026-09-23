@@ -204,7 +204,7 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
     const profile = conn.profile;
     const endReason: 'eliminated' | 'matchEnded' | 'disconnected' = seat.eliminated
       ? 'eliminated'
-      : match.phase === 'ended'
+      : match.phase === 'ended' && match.endCause !== 'abandoned_by_humans'
         ? 'matchEnded'
         : 'disconnected';
     const derived = computeDerivedPlayMetrics(conn, match);

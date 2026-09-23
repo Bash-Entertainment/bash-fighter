@@ -207,6 +207,9 @@ export class Match {
   readonly capacity: number;
   readonly minimum: number;
   phase: MatchPhase = 'lobby';
+  /** Why the match ended. 'abandoned_by_humans' means every human left,
+   *  so a seat's session did NOT end by playing to the finish. */
+  endCause: 'resolved' | 'abandoned_by_humans' | 'max_duration' | null = null;
   seats: Seat[] = [];
   sim: Sim | null = null;
   seed = 0;
@@ -861,6 +864,7 @@ export class Match {
    *  every seat's koCount) and maxKoCount as a truthful, mode-agnostic
    *  combat-happened signal that IS populated in every mode. */
   private logMatchSummary(endReason: 'resolved' | 'abandoned_by_humans' | 'max_duration'): void {
+    this.endCause = endReason;
     const durationSec = ((this.tick - this.matchStartedAtTick) / 60).toFixed(1);
     const humanSlots = this.seats.filter((s) => !s.isBot).map((s) => s.slot);
     const koCounts = this.sim

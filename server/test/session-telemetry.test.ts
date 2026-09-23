@@ -246,6 +246,19 @@ test('[sessionEnd]: endReason is "matchEnded" when the match already ended and t
   assert.equal(record.endReason, 'matchEnded');
 });
 
+// Found in production 2026-09-23: a lone human closing the tab ends the match as
+// abandoned_by_humans, and that was logged as "matchEnded" -- as if they had
+// played to the finish. Every 20-45s Timed Brawl "matchEnded" was a tab close.
+test('[sessionEnd]: endReason is "disconnected" when the match ended because every human left', () => {
+  const match = realMatch();
+  (match as unknown as { phase: string }).phase = 'ended';
+  match.endCause = 'abandoned_by_humans';
+  const conn = fakeConn({ slot: 0 });
+  const lines = captureLogs(() => logSessionEnd(conn, match));
+  const record = JSON.parse(lines.find((l) => l.startsWith('[sessionEnd]'))!.slice('[sessionEnd] '.length));
+  assert.equal(record.endReason, 'disconnected');
+});
+
 test('[sessionEnd]: a missing profile/report never crashes -- fields log as null, not throw', () => {
   const match = realMatch();
   const conn = fakeConn({ slot: 0, profile: null, lastReport: null });

@@ -102,7 +102,7 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
     const profile = conn.profile;
     const endReason: 'eliminated' | 'matchEnded' | 'disconnected' = seat.eliminated
       ? 'eliminated'
-      : match.phase === 'ended'
+      : match.phase === 'ended' && match.endCause !== 'abandoned_by_humans'
         ? 'matchEnded'
         : 'disconnected';
     const derived = computeDerivedPlayMetrics(conn, match);
