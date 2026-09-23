@@ -425,7 +425,11 @@ export class Match {
     // fighters are never indistinguishable by name alone in the HUD, the
     // win screen, or the elimination log. Empty names (no name chosen)
     // are left alone -- see dedupeName's own comment.
-    const dedupedName = dedupeName(name, this.seats.map((s) => s.name));
+    // A human who leaves the name field empty used to show as a bare slot
+    // number ("1") while every bot beside them had a name, so a first-time
+    // player looked like the one anonymous fighter on screen (2026-09-23).
+    const chosenName = !isBot && name === '' ? `Fighter ${slot + 1}` : name;
+    const dedupedName = dedupeName(chosenName, this.seats.map((s) => s.name));
     const seat: Seat = {
       slot,
       name: dedupedName,

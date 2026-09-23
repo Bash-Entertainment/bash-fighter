@@ -125,7 +125,10 @@ test('hostile and colliding hello.name values are sanitised, capped, and de-dupl
   }
 });
 
-test('an all-whitespace name falls back to empty (slot-label display), not a forced placeholder', async () => {
+// Changed 2026-09-23: an empty name used to stay empty and render as a bare
+// slot number, the only unnamed fighter among 19 named bots. It now becomes
+// "Fighter <slot+1>".
+test('an all-whitespace name becomes "Fighter <slot+1>", never a bare slot number', async () => {
   const PORT2 = PORT + 1;
   const serverProc: ChildProcess = spawn(
     process.execPath,
@@ -164,7 +167,7 @@ test('an all-whitespace name falls back to empty (slot-label display), not a for
       });
       ws.on('error', reject);
     });
-    assert.equal(name, '');
+    assert.equal(name, 'Fighter 1');
     ws.close();
   } finally {
     serverProc.kill();

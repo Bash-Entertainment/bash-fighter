@@ -104,7 +104,7 @@ export class StartScreen {
             id="player-name-input"
             type="text"
             maxlength="${MAX_NAME_LENGTH}"
-            placeholder="Fighter #7"
+            placeholder="Optional"
             autocomplete="off"
             spellcheck="false"
           />
