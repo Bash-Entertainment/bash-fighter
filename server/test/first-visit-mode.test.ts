@@ -61,6 +61,8 @@ test('RoomManager: a fresh match created for a non-requeued join runs Timed Braw
   const second = manager.joinLobby('b', undefined, false, undefined, false);
   assert.equal(first.match.id, second.match.id);
   assert.equal(first.match.winCondition, 'timedKO');
+  // First-match knockout boost: both non-requeued humans are rookies.
+  assert.deepEqual(first.match.getClientSettings()?.rookieSlots, [0, 1]);
   first.match.stop();
 });
 
@@ -71,6 +73,7 @@ test('RoomManager: a fresh match created for a requeued join follows the rotatio
   const second = manager.joinLobby('b', undefined, false, undefined, true);
   assert.equal(first.match.id, second.match.id);
   assert.equal(first.match.winCondition, 'battleRoyale');
+  assert.deepEqual(first.match.getClientSettings()?.rookieSlots, []);
   first.match.stop();
 });
 

@@ -239,7 +239,7 @@ export class RoomManager {
     }
 
     if (arena !== undefined && match.arenaRequest === undefined) match.arenaRequest = arena;
-    const seat = match.addSeat(name, false, characterId, qa);
+    const seat = match.addSeat(name, false, characterId, qa, !MODE_ROTATION_DISABLED && !requeued);
 
     if (joinCode) {
       console.log(`[codedLobby] ${JSON.stringify({

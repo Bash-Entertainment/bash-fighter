@@ -337,6 +337,8 @@ export class Sim {
   private readonly characters: readonly CharacterData[];
   private readonly arena: ArenaData;
   private readonly settings: MatchSettings;
+  private readonly rookieFlag: Uint8Array;
+  private readonly botFlag: Uint8Array;
   private readonly grid: SpatialGrid;
   // Scratch arrays reused every tick inside resolveHits, preallocated once
   // so the hot path never allocates.
@@ -379,6 +381,10 @@ export class Sim {
     }
     this.arena = arena;
     this.settings = resolveMatchSettings(matchSettings);
+    this.rookieFlag = new Uint8Array(numFighters);
+    this.botFlag = new Uint8Array(numFighters);
+    for (const i of this.settings.rookieSlots) if (i >= 0 && i < numFighters) this.rookieFlag[i] = 1;
+    for (const i of this.settings.botSlots) if (i >= 0 && i < numFighters) this.botFlag[i] = 1;
     this.blastMinX = arena.blastMinX;
     this.blastMaxX = arena.blastMaxX;
     this.blastMinY = arena.blastMinY;
@@ -1384,7 +1390,7 @@ export class Sim {
     // passed through untouched, so a fighter already damaged still flies
     // further per hit, exactly as in a 1v1 duel -- only the *raw damage*
     // term of the formula is decoupled from the crowd scale.
-    const magnitude = computeKnockbackMagnitude(
+    const baseMagnitude = computeKnockbackMagnitude(
       hb.damage,
       percentAfter,
       hb.baseKnockback,
@@ -1392,6 +1398,10 @@ export class Sim {
       defenderChar.weight,
       this.tick,
     );
+    const magnitude =
+      this.rookieFlag[attacker] === 1 && this.botFlag[defender] === 1
+        ? fx.mul(baseMagnitude, this.settings.rookieKnockbackScale)
+        : baseMagnitude;
     const attackerBase = attacker * FighterField.FIELD_COUNT;
     const attackerFacing = d[attackerBase + FighterField.FACING] as number;
     const angleIdx = attackerFacing < 0 ? mirrorAngleIdx(hb.angleIdx) : hb.angleIdx;

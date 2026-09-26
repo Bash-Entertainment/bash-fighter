@@ -2,7 +2,7 @@
 // or spectating it. Matches are fully isolated: no shared mutable state
 // between matches, no global game instance.
 import { randomBytes } from 'node:crypto';
-import { Sim, makeInputFrame, type InputFrame, type MatchSettings, type WinCondition } from '@bash-fighter/sim/src/index.ts';
+import { Sim, makeInputFrame, ROOKIE_KNOCKBACK_SCALE, type InputFrame, type MatchSettings, type WinCondition } from '@bash-fighter/sim/src/index.ts';
 import { BotController, BotDifficulty, deriveBotSeed, type BotDifficultyValue } from '@bash-fighter/sim/src/ai/bot.ts';
 import { createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID, pickArenaId, isKnownArenaId } from '@bash-fighter/content/src/index.ts';
 import { SNAPSHOT_HZ, dedupeName } from '@bash-fighter/net/src/protocol.ts';
@@ -84,6 +84,9 @@ export interface Seat {
    *  A bot seat has no ClientConn/websocket, is never a broadcast watcher,
    *  and its input comes from a BotController rather than the network. */
   isBot: boolean;
+  /** First-time visitor's first match (2026-09-26): this human's hits on
+   *  bots get extra knockback, see ROOKIE_KNOCKBACK_SCALE. */
+  rookie: boolean;
   /** Requested character id (from @bash-fighter/content's roster),
    *  resolved to CharacterData when the sim is built in start(). Defaults
    *  to DEFAULT_CHARACTER_ID for bots and for any client that didn't send
@@ -417,7 +420,7 @@ export class Match {
     return this.seats.length;
   }
 
-  addSeat(name: string, isBot = false, characterId: string = DEFAULT_CHARACTER_ID, qa = false): Seat {
+  addSeat(name: string, isBot = false, characterId: string = DEFAULT_CHARACTER_ID, qa = false, rookie = false): Seat {
     const slot = this.seats.length;
     // De-duplicate against every name already in this match (human or
     // bot -- a human called "Rex" showing up alongside a bot already
@@ -444,6 +447,7 @@ export class Match {
       disconnectedAt: null,
       joinedAt: Date.now(),
       qa: !isBot && qa,
+      rookie: !isBot && rookie,
     };
     this.seats.push(seat);
     return seat;
@@ -611,6 +615,9 @@ export class Match {
     if (timeLimitOverride) settingsOverride.timeLimitTicks = Number(timeLimitOverride);
     const stocksOverride = process.env.MATCH_STARTING_STOCKS;
     if (stocksOverride) settingsOverride.startingStocks = Number(stocksOverride);
+    settingsOverride.rookieSlots = this.seats.filter((s) => s.rookie).map((s) => s.slot);
+    settingsOverride.botSlots = this.seats.filter((s) => s.isBot).map((s) => s.slot);
+    settingsOverride.rookieKnockbackScale = ROOKIE_KNOCKBACK_SCALE;
     this.sim = createMatchSim(this.seed, this.seats.length, settingsOverride, characters, this.arenaId);
     this.lastPercent = new Array(this.seats.length).fill(0);
     this.lastDamageTick = new Array(this.seats.length).fill(-Match.COMBAT_WINDOW_TICKS - 1);
