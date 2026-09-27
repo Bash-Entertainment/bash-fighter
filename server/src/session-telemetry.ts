@@ -118,6 +118,19 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
       // leaving? Bots were visibly racking up 6-9 KOs a minute around them.
       koCount: match.sim ? match.sim.getFighter(conn.slot).koCount : null,
       deathCount: match.sim ? match.sim.getFighter(conn.slot).deathCount : null,
+      // Added 2026-09-27, same "does a newcomer ever land anything"
+      // question as koCount/deathCount above but one level earlier: did
+      // they even try (attackPresses, counted server-side from applied
+      // input rising edges in Match.setInput), and if they tried, did it
+      // connect (hitsLanded/damageDealt, derived server-side in
+      // Match.tickOnce from the sim's own lastAttacker/percent fields).
+      // seat is guaranteed non-null here (checked above); null only if
+      // this session's slot has no seat record at all, which cannot
+      // happen once we're past the `if (!seat) return` guard, but kept
+      // null-safe like every other optional field in this line.
+      attackPresses: seat.attackPresses ?? null,
+      hitsLanded: seat.hitsLanded ?? null,
+      damageDealt: seat.damageDealt ?? null,
       touchActive: profile?.touchActive ?? null,
       viewportWidth: profile?.viewportWidth ?? null,
       viewportHeight: profile?.viewportHeight ?? null,

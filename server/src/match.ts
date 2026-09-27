@@ -2,7 +2,7 @@
 // or spectating it. Matches are fully isolated: no shared mutable state
 // between matches, no global game instance.
 import { randomBytes } from 'node:crypto';
-import { Sim, makeInputFrame, rookieScaleForMatchesPlayed, type InputFrame, type MatchSettings, type WinCondition } from '@bash-fighter/sim/src/index.ts';
+import { Sim, makeInputFrame, rookieScaleForMatchesPlayed, BUTTON_ATTACK, type InputFrame, type MatchSettings, type WinCondition } from '@bash-fighter/sim/src/index.ts';
 import { BotController, BotDifficulty, deriveBotSeed, type BotDifficultyValue } from '@bash-fighter/sim/src/ai/bot.ts';
 import { createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID, pickArenaId, isKnownArenaId } from '@bash-fighter/content/src/index.ts';
 import { SNAPSHOT_HZ, dedupeName } from '@bash-fighter/net/src/protocol.ts';
@@ -134,6 +134,28 @@ export interface Seat {
    *  only to populate MatchSummary.qaSeats; never affects matchmaking,
    *  bot fill, or anything sim-visible. */
   qa: boolean;
+  /** Rising-edge count of the attack button (any source: keyboard/touch/
+   *  gamepad, whichever won the input-priority chain client-side) across
+   *  every input this seat's connection sent that the server actually
+   *  applied. Counted here, not by adding sim state, so it survives
+   *  elimination/respawn and needs no FIELD_COUNT change (task: learn why
+   *  a newcomer who presses keys for 70s lands 0 KOs, 2026-09-27). null-safe
+   *  by construction -- starts at 0, only ever incremented in setInput. */
+  attackPresses: number;
+  /** True if the most recent input applied via setInput had the attack
+   *  button held, used only to detect the next rising edge for
+   *  attackPresses above. Not meaningful on its own. */
+  attackHeldLast: boolean;
+  /** Hits this seat's fighter landed on another fighter, and total %
+   *  damage dealt doing so -- derived every tick in tickOnce by watching
+   *  each *victim's* percent rise alongside their lastAttacker snapshot
+   *  field, credited to whichever seat/bot slot lastAttacker names (see
+   *  tickOnce). Counts hits on bots too (there is no cheaper way to tell
+   *  "landed a hit on a bot" from "landed a hit on a human" without
+   *  re-deriving victim identity), which is fine: the metric this exists
+   *  for is "did this human ever land anything", not "against whom". */
+  hitsLanded: number;
+  damageDealt: number;
 }
 
 export type MatchPhase = 'lobby' | 'playing' | 'ended';
@@ -453,6 +475,10 @@ export class Match {
       characterId,
       pendingInput: makeInputFrame(),
       lastInputTick: -1,
+      attackPresses: 0,
+      attackHeldLast: false,
+      hitsLanded: 0,
+      damageDealt: 0,
       resumeToken: isBot ? null : generateResumeToken(),
       disconnectedAt: null,
       joinedAt: Date.now(),
@@ -553,6 +579,14 @@ export class Match {
     // anything beyond bookkeeping (it always applies the latest input on
     // its own next tick regardless of what tick the client claims).
     if (tick < 0) return;
+    // attackPresses: count a rising edge (was not held, now held) of any
+    // attack source in the input the server is about to apply for this
+    // seat -- exactly what koCount/deathCount already do for combat
+    // outcomes, but for "did they even try". Held-across-multiple-inputs
+    // (a client repeating the same still-held state) must not recount.
+    const attackHeldNow = (input.buttons & BUTTON_ATTACK) !== 0;
+    if (attackHeldNow && !seat.attackHeldLast) seat.attackPresses++;
+    seat.attackHeldLast = attackHeldNow;
     seat.pendingInput = input;
     seat.lastInputTick = Math.max(seat.lastInputTick, tick);
   }
@@ -717,7 +751,23 @@ export class Match {
       if (seat.eliminated) continue;
       const snap = sim.getFighter(seat.slot);
       const pct = snap.percent;
-      if (pct > this.lastPercent[seat.slot]) this.lastDamageTick[seat.slot] = this.tick;
+      if (pct > this.lastPercent[seat.slot]) {
+        this.lastDamageTick[seat.slot] = this.tick;
+        // Credit whoever the sim says last hit this fighter for the %
+        // gain this tick (see FighterSnapshot.lastAttacker) -- exact when
+        // only one hit lands on a fighter per tick, which is the normal
+        // case; a fighter hit by two attackers on the exact same tick has
+        // the whole tick's damage credited to only the most recent of the
+        // two (sim.ts applies hits in attacker-index order and overwrites
+        // LAST_ATTACKER each time), an acceptable approximation for a
+        // "did they land anything" newcomer metric, not a scoreboard.
+        const attackerSlot = snap.lastAttacker;
+        const attackerSeat = attackerSlot >= 0 ? this.seats[attackerSlot] : undefined;
+        if (attackerSeat) {
+          attackerSeat.hitsLanded++;
+          attackerSeat.damageDealt += pct - this.lastPercent[seat.slot];
+        }
+      }
       this.lastPercent[seat.slot] = pct;
       // Stocks-mode ground truth (2026-09-12): a death that only consumes a
       // stock (DEATH_COUNT increments, ELIMINATED does not get set) was

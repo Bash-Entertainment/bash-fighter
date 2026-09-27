@@ -56,6 +56,11 @@ export interface StoredSessionEndRecord {
   sessionDurationSec: number;
   koCount: number | null;
   deathCount: number | null;
+  /** See session-telemetry.ts logSessionEnd's matching fields for how
+   *  these are computed (added 2026-09-27). */
+  attackPresses: number | null;
+  hitsLanded: number | null;
+  damageDealt: number | null;
   touchActive: boolean | null;
   firstInputMs: number | null;
   inputTicks: number | null;
@@ -220,6 +225,9 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       sessionDurationSec: Number(((now() - seat.joinedAt) / 1000).toFixed(1)),
       koCount: match.sim ? match.sim.getFighter(conn.slot).koCount : null,
       deathCount: match.sim ? match.sim.getFighter(conn.slot).deathCount : null,
+      attackPresses: seat.attackPresses ?? null,
+      hitsLanded: seat.hitsLanded ?? null,
+      damageDealt: seat.damageDealt ?? null,
       touchActive: profile?.touchActive ?? null,
       firstInputMs: report?.firstInputMs ?? null,
       inputTicks: report?.inputTicks ?? null,

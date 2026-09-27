@@ -276,6 +276,7 @@ export interface FighterSnapshot {
   jumpsUsed: number; // jumps taken since last grounded (0..MAX_JUMPS)
   inRingDanger: boolean; // taking ring (out-of-bounds) damage this tick -- presentation hook
   hitstopTicks: number; // ticks remaining of an active impact freeze, 0 = not frozen (see HITSTOP_* in knockback.ts)
+  lastAttacker: number; // index of last fighter who damaged us, -1 if none (server-side hitsLanded/damageDealt telemetry, 2026-09-27)
 }
 
 export interface ItemSnapshot {
@@ -653,6 +654,7 @@ export class Sim {
       placement: d[base + FighterField.PLACEMENT] as number,
       jumpsUsed: d[base + FighterField.JUMPS_USED] as number,
       hitstopTicks: d[base + FighterField.HITSTOP_TICKS] as number,
+      lastAttacker: d[base + FighterField.LAST_ATTACKER] as number,
       // Presentation-only flag (see the field comment above): "did this
       // fighter take ring pressure on the tick that was just simulated".
       // RING_DAMAGE_TICK is written inside checkBlastZone using the

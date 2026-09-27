@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { parseClientControl, PROTOCOL_VERSION, type HelloMessage, type SessionReportMessage } from '@bash-fighter/net/src/protocol.ts';
 import { logSessionEnd, type SessionEndConnLike } from '../src/session-telemetry.ts';
 import { Match, type MatchEvents } from '../src/match.ts';
+import { makeInputFrame, BUTTON_ATTACK } from '@bash-fighter/sim/src/index.ts';
 
 function captureLogs(run: () => void): string[] {
   const lines: string[] = [];
@@ -265,6 +266,40 @@ test('[sessionEnd]: carries the seat\'s koCount and deathCount', () => {
   const lines = captureLogs(() => logSessionEnd(conn, match));
   const record = JSON.parse(lines.find((l) => l.startsWith('[sessionEnd]'))!.slice('[sessionEnd] '.length));
   assert.ok('koCount' in record && 'deathCount' in record);
+});
+
+// Task: learn why newcomers who press keys for 70s land 0 KOs -- these
+// three fields are the "did they even try, did it connect" answer.
+test('setInput: counts attack rising edges, not held ticks', () => {
+  const match = realMatch();
+  const held = makeInputFrame(BUTTON_ATTACK);
+  const neutral = makeInputFrame();
+  match.setInput(0, held, 1); // press 1: edge
+  match.setInput(0, held, 2); // still held: no new edge
+  match.setInput(0, held, 3); // still held: no new edge
+  match.setInput(0, neutral, 4); // released
+  match.setInput(0, held, 5); // press 2: edge
+  assert.equal(match.seats[0]!.attackPresses, 2);
+});
+
+test('setInput: never counts attack presses once the seat is eliminated', () => {
+  const match = realMatch();
+  match.seats[0]!.eliminated = true;
+  match.setInput(0, makeInputFrame(BUTTON_ATTACK), 1);
+  assert.equal(match.seats[0]!.attackPresses, 0);
+});
+
+test('[sessionEnd]: carries the seat\'s attackPresses, hitsLanded, and damageDealt', () => {
+  const match = realMatch();
+  match.setInput(0, makeInputFrame(BUTTON_ATTACK), 1);
+  match.seats[0]!.hitsLanded = 3;
+  match.seats[0]!.damageDealt = 42;
+  const conn = fakeConn({ slot: 0 });
+  const lines = captureLogs(() => logSessionEnd(conn, match));
+  const record = JSON.parse(lines.find((l) => l.startsWith('[sessionEnd]'))!.slice('[sessionEnd] '.length));
+  assert.equal(record.attackPresses, 1);
+  assert.equal(record.hitsLanded, 3);
+  assert.equal(record.damageDealt, 42);
 });
 
 test('[sessionEnd]: a missing profile/report never crashes -- fields log as null, not throw', () => {
