@@ -32,6 +32,7 @@ import {
 } from '@bash-fighter/render';
 import { currentArenaBounds, previewArenaBounds } from './arena-preview.ts';
 import { resyncLocalTickAfterSnapshot } from './reconnect-resync.ts';
+import { getMatchesPlayed, recordMatchPlayed } from './matches-played.ts';
 
 // See packages/app/src/match.ts for why these mirror the sim's private
 // ItemState enum and the stylized hazard marker size instead of importing
@@ -509,6 +510,13 @@ export class NetMatch {
       // Stated at join as well as in the end report: an auto-requeued player
       // may never unload the page, so the report can be missing.
       if (this.requeued) hello.requeued = true;
+      // Tapered first-matches knockout boost (2026-09-26, see
+      // matches-played.ts): tells the server how many matches this
+      // browser has already played, so it can taper the rookie
+      // knockback scale down over several matches instead of dropping
+      // straight to 1.0x after the first. Absent/garbage is treated
+      // server-side as the pre-existing requeued-based behaviour.
+      hello.matchesPlayed = getMatchesPlayed();
       // Dev-only stage pin (issue #19 -- see HelloMessage.arena).
       // import.meta.env.DEV is statically false in a production vite
       // build, so a normal player's client never sends this however the
@@ -738,6 +746,10 @@ export class NetMatch {
     this.mySlot = slot;
     this.spectating = slot < 0;
     this.matchStarted = true;
+    // Count this as a played match for the taper (matches-played.ts),
+    // but only for an actual seat -- a spectate-by-link connection never
+    // fights and should not push the count toward 1.0x.
+    if (!this.spectating) recordMatchPlayed();
     // Per-seat characters as resolved server-side (characterIds is a
     // parallel array to slot index). Falls back to placeholder-for-all if
     // an older server ever omits the field, matching createMatchSim's own

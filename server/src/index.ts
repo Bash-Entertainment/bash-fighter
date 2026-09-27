@@ -851,6 +851,7 @@ function handleText(conn: ClientConn, text: string): void {
         msg.arena,
         conn.requeuedAtJoin,
         msg.joinCode,
+        msg.matchesPlayed,
       );
       conn.match = match;
       conn.slot = slot;

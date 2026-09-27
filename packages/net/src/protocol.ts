@@ -85,6 +85,15 @@ export interface HelloMessage {
    *  trying to count. Stating it at join time makes every seat's record able
    *  to say whether it began a visit or continued one. */
   requeued?: boolean;
+  /** Tapered first-matches knockout boost (2026-09-26, see
+   *  packages/app/src/matches-played.ts): how many matches this browser
+   *  has already played, from a localStorage counter. Sanitised
+   *  server-side to an integer clamped to 0..99; absent or out-of-range
+   *  is treated as unknown and falls back to the requeued-based
+   *  behaviour (requeued=false -> 0, requeued=true -> treated as >=1).
+   *  Self-reported and reset by clearing site storage, so it is a
+   *  balance nudge, never trusted for anything security-sensitive. */
+  matchesPlayed?: number;
   /** Dev-only stage pin request: the id of a registered arena (see
    *  @bash-fighter/content's ALL_ARENAS) the client asks the server to
    *  pin this match's stage to, instead of the seeded pick. The client
@@ -831,6 +840,7 @@ export function parseClientControl(text: string): ClientControlMessage | null {
       // registry validation happens server-side.
       const arena = clampCappedString(obj.arena, 64);
       const joinCode = sanitiseJoinCode(obj.joinCode);
+      const matchesPlayed = sanitiseMatchesPlayed(obj.matchesPlayed);
       return {
         t: 'hello',
         protocolVersion: obj.protocolVersion,
@@ -840,6 +850,7 @@ export function parseClientControl(text: string): ClientControlMessage | null {
         ...(profile ? { profile } : {}),
         ...(arena ? { arena } : {}),
         ...(typeof obj.requeued === 'boolean' ? { requeued: obj.requeued } : {}),
+        ...(matchesPlayed !== undefined ? { matchesPlayed } : {}),
         ...(joinCode ? { joinCode } : {}),
         ...(obj.spectate === true ? { spectate: true } : {}),
       };
@@ -861,6 +872,12 @@ export function parseClientControl(text: string): ClientControlMessage | null {
 function clampFiniteNumber(value: unknown, min: number, max: number): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
   return Math.max(min, Math.min(max, value));
+}
+
+function sanitiseMatchesPlayed(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value)) return undefined;
+  if (value < 0) return undefined;
+  return Math.min(99, value);
 }
 
 function clampCappedString(value: unknown, maxLength: number): string | undefined {

@@ -337,7 +337,7 @@ export class Sim {
   private readonly characters: readonly CharacterData[];
   private readonly arena: ArenaData;
   private readonly settings: MatchSettings;
-  private readonly rookieFlag: Uint8Array;
+  private readonly rookieScaleFixed: Int32Array;
   private readonly botFlag: Uint8Array;
   private readonly grid: SpatialGrid;
   // Scratch arrays reused every tick inside resolveHits, preallocated once
@@ -381,9 +381,13 @@ export class Sim {
     }
     this.arena = arena;
     this.settings = resolveMatchSettings(matchSettings);
-    this.rookieFlag = new Uint8Array(numFighters);
+    this.rookieScaleFixed = new Int32Array(numFighters).fill(1 << 16);
     this.botFlag = new Uint8Array(numFighters);
-    for (const i of this.settings.rookieSlots) if (i >= 0 && i < numFighters) this.rookieFlag[i] = 1;
+    this.settings.rookieSlots.forEach((slot, idx) => {
+      if (slot >= 0 && slot < numFighters) {
+        this.rookieScaleFixed[slot] = this.settings.rookieScales[idx] ?? 1 << 16;
+      }
+    });
     for (const i of this.settings.botSlots) if (i >= 0 && i < numFighters) this.botFlag[i] = 1;
     this.blastMinX = arena.blastMinX;
     this.blastMaxX = arena.blastMaxX;
@@ -1399,8 +1403,8 @@ export class Sim {
       this.tick,
     );
     const magnitude =
-      this.rookieFlag[attacker] === 1 && this.botFlag[defender] === 1
-        ? fx.mul(baseMagnitude, this.settings.rookieKnockbackScale)
+      this.botFlag[defender] === 1
+        ? fx.mul(baseMagnitude, this.rookieScaleFixed[attacker]!)
         : baseMagnitude;
     const attackerBase = attacker * FighterField.FIELD_COUNT;
     const attackerFacing = d[attackerBase + FighterField.FACING] as number;

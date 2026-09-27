@@ -595,6 +595,20 @@ test('hello accepts requeued only as a strict boolean', () => {
   assert.equal(hello({})?.requeued, undefined);
 });
 
+test('hello.matchesPlayed: sanitised to an int 0..99, garbage/missing left absent', () => {
+  const hello = (extra: Record<string, unknown>) =>
+    parseClientControl(JSON.stringify({ t: 'hello', protocolVersion: PROTOCOL_VERSION, name: 'Ash', ...extra })) as {
+      matchesPlayed?: number;
+    } | null;
+  assert.equal(hello({ matchesPlayed: 0 })?.matchesPlayed, 0);
+  assert.equal(hello({ matchesPlayed: 1 })?.matchesPlayed, 1);
+  assert.equal(hello({ matchesPlayed: 250 })?.matchesPlayed, 99);
+  assert.equal(hello({ matchesPlayed: -3 })?.matchesPlayed, undefined);
+  assert.equal(hello({ matchesPlayed: 1.5 })?.matchesPlayed, undefined);
+  assert.equal(hello({ matchesPlayed: 'many' })?.matchesPlayed, undefined);
+  assert.equal(hello({})?.matchesPlayed, undefined);
+});
+
 // 2026-09-21. Render-resolution telemetry (adaptive-resolution governor,
 // packages/render/src/adaptive-resolution.ts): renderResolution follows
 // devicePixelRatio's drop-rather-than-clamp treatment, and

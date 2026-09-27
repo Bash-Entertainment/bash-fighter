@@ -13,6 +13,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { decideMatchModeForJoin, decideMatchMode, TIMED_BRAWL_TIME_LIMIT_TICKS } from '../src/mode-rotation.ts';
 import { RoomManager } from '../src/rooms.ts';
+import { rookieScaleForMatchesPlayed, ROOKIE_KNOCKBACK_SCALE } from '@bash-fighter/sim/src/index.ts';
 
 test('decideMatchModeForJoin: a non-requeued (first-time) join forces timedKO regardless of rotation position', () => {
   for (let matchNumber = 1; matchNumber <= 8; matchNumber++) {
@@ -74,6 +75,39 @@ test('RoomManager: a fresh match created for a requeued join follows the rotatio
   assert.equal(first.match.id, second.match.id);
   assert.equal(first.match.winCondition, 'battleRoyale');
   assert.deepEqual(first.match.getClientSettings()?.rookieSlots, []);
+  first.match.stop();
+});
+
+test('RoomManager: matchesPlayed=1 tapers the rookie scale below the first-match boost', () => {
+  // Tapered first-matches knockout boost (2026-09-26): a seat reporting
+  // one prior match gets the 1.35x-equivalent step, not the 1.75x
+  // first-match value and not the 1.0x cliff match 2 used to get.
+  const noopEvents = () => ({ onSnapshot: () => {}, onEliminated: () => {} });
+  const manager = new RoomManager(noopEvents, /* capacity */ 2, /* minimum */ 2);
+  const first = manager.joinLobby('a', undefined, false, undefined, true, undefined, 1);
+  manager.joinLobby('b', undefined, false, undefined, true, undefined, 1);
+  const settings = first.match.getClientSettings();
+  assert.deepEqual(settings?.rookieSlots, [0, 1]);
+  const expected = rookieScaleForMatchesPlayed(1);
+  assert.notEqual(expected, ROOKIE_KNOCKBACK_SCALE);
+  assert.notEqual(expected, 1 << 16);
+  assert.deepEqual(settings?.rookieScales, [expected, expected]);
+  first.match.stop();
+});
+
+test('RoomManager: garbage matchesPlayed is clamped/ignored, falling back to requeued-based behaviour', () => {
+  // The client field is sanitised in protocol.ts before it ever reaches
+  // here, so joinLobby only ever sees a clean int or undefined -- this
+  // documents that an out-of-range value the sanitiser lets through
+  // unclamped (defensive: rookieScaleForMatchesPlayed itself clamps) still
+  // resolves to the fully-decayed 1.0x scale rather than throwing or
+  // indexing out of bounds.
+  const noopEvents = () => ({ onSnapshot: () => {}, onEliminated: () => {} });
+  const manager = new RoomManager(noopEvents, /* capacity */ 2, /* minimum */ 2);
+  const first = manager.joinLobby('a', undefined, false, undefined, false, undefined, 99999);
+  manager.joinLobby('b', undefined, false, undefined, false, undefined, 99999);
+  const settings = first.match.getClientSettings();
+  assert.deepEqual(settings?.rookieScales, [1 << 16, 1 << 16]);
   first.match.stop();
 });
 

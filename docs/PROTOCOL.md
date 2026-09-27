@@ -29,7 +29,7 @@ anywhere. Any other message before `hello`, or a malformed message, gets
 
 | `t` | Fields | Meaning |
 |---|---|---|
-| `hello` | `protocolVersion`, `name`, `profile`?, `arena`? | First message. Server assigns a match/slot and replies `welcome`. `profile` is an optional, small, non-identifying client snapshot (see below) used only for engagement telemetry -- see `docs/MEASUREMENT.md`. `arena` is a dev-only stage pin (see below). |
+| `hello` | `protocolVersion`, `name`, `profile`?, `arena`?, `requeued`?, `matchesPlayed`? | First message. Server assigns a match/slot and replies `welcome`. `profile` is an optional, small, non-identifying client snapshot (see below) used only for engagement telemetry -- see `docs/MEASUREMENT.md`. `arena` is a dev-only stage pin (see below). `matchesPlayed` is a client-side localStorage counter (integer, sanitised server-side to 0..99) used to taper the first-matches knockout boost -- see the tapered first-matches knockout boost note below. |
 | `spectate` | — | Client wants to only watch, not play (used after being assigned, or after elimination to keep watching without reconciliation). |
 | `pong` | `id` | Echo of a server `ping`, for RTT measurement. |
 | `startNow` | — | Sent by a client holding a seat in a still-filling lobby (the waiting screen's "Start now" button): fills the rest of that lobby with bots and starts immediately, instead of waiting out the countdown/bot-fill grace period. The server only honours this from a connection that actually holds a seat in that exact match (never a spectator, never a stranger); once the match has left the lobby phase, further `startNow` messages for it are a silent no-op, so a client may resend freely (e.g. a double click). |
@@ -161,6 +161,21 @@ already existed in the `hello`/`lobby`/`matchStart` schema since the
 initial protocol), so `PROTOCOL_VERSION` was **not** bumped for it. Only
 sanitisation/de-duplication behaviour and client-side UI changed.
 | `ping` | `id` | RTT probe; client should reply `pong` with the same `id`. |
+
+### Tapered first-matches knockout boost (2026-09-26)
+
+`hello.matchesPlayed` reports how many matches this browser has already
+played (a plain localStorage counter, see
+`packages/app/src/matches-played.ts`), so the server can taper a human
+seat's rookie knockback scale down over several matches instead of
+dropping straight from the first-match boost to 1.0x after match one.
+Missing or invalid falls back to the original `requeued`-based behaviour
+(`requeued=false` -> treated as 0, `requeued=true` -> no boost). No wire
+format change beyond the new optional `hello` field, so `PROTOCOL_VERSION`
+was **not** bumped for it. `matchStart`'s existing `settings.rookieSlots`
+/`botSlots` gained a parallel `rookieScales` array (replacing the old
+single `rookieKnockbackScale`) so server and client prediction see
+identical per-seat scales.
 
 ## Binary: input (client -> server), 15 bytes
 

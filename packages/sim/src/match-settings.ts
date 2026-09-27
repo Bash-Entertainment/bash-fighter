@@ -30,14 +30,15 @@ export interface MatchSettings {
    * closure (independent of how many fighters remain) — the "hazard storm
    * closing in" clock. */
   shrinkFullyClosedTick: number;
-  /** First-match knockout boost (2026-09-26): fighter slots whose hits on
-   * a slot in `botSlots` get knockback magnitude scaled by
-   * `rookieKnockbackScale` (16.16 fixed point). Lives in settings, not
-   * fighter state, so server and client prediction both see it from the
-   * matchStart message and stay deterministic. Empty = no effect. */
+  /** Tapered first-matches knockout boost: fighter slots whose hits on a
+   * slot in botSlots get knockback magnitude scaled by the matching
+   * entry in rookieScales (16.16 fixed point, parallel array). Lives in
+   * settings, not fighter state, so server and client prediction both
+   * see it from the matchStart message and stay deterministic. Empty =
+   * no effect. See rookieScaleForMatchesPlayed below. */
   rookieSlots: number[];
   botSlots: number[];
-  rookieKnockbackScale: number;
+  rookieScales: number[];
 }
 
 /** Knockback multiplier for a first-match human's hits on bots (16.16
@@ -45,7 +46,14 @@ export interface MatchSettings {
  * a human-analog novice in 20-fighter Timed Brawl lands a KO within 60s in
  * 75% of 20 trials (0% at 1.0x) while staying below the top bot's count
  * on average. See wiki "First-Match Knockout Boost". */
-export const ROOKIE_KNOCKBACK_SCALE = 0x1c000;
+export const ROOKIE_TAPER_SCALES = [0x1c000, 0x1599a, 0x1266b, 0x10000];
+
+export const ROOKIE_KNOCKBACK_SCALE = ROOKIE_TAPER_SCALES[0]!;
+
+export function rookieScaleForMatchesPlayed(matchesPlayed: number): number {
+  const i = Math.max(0, Math.min(ROOKIE_TAPER_SCALES.length - 1, Math.trunc(matchesPlayed)));
+  return ROOKIE_TAPER_SCALES[i]!;
+}
 
 export const DEFAULT_MATCH_SETTINGS: MatchSettings = {
   winCondition: 'battleRoyale',
@@ -73,7 +81,7 @@ export const DEFAULT_MATCH_SETTINGS: MatchSettings = {
   // passes (see bot.test.ts).
   rookieSlots: [],
   botSlots: [],
-  rookieKnockbackScale: 1 << 16,
+  rookieScales: [],
   shrinkFullyClosedTick: 60 * 60 * 8, // 8 minutes (was 6) -- Lever 6, 2026-09-10 pass 3: individual fights now last longer with Levers 3/4, ease ring pacing further
 };
 

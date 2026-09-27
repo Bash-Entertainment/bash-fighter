@@ -214,6 +214,7 @@ export class RoomManager {
     arena?: string,
     requeued = false,
     joinCode?: string,
+    matchesPlayed?: number,
   ): { match: Match; slot: number } {
     let freshMatch = false;
     let match: Match;
@@ -239,7 +240,23 @@ export class RoomManager {
     }
 
     if (arena !== undefined && match.arenaRequest === undefined) match.arenaRequest = arena;
-    const seat = match.addSeat(name, false, characterId, qa, !MODE_ROTATION_DISABLED && !requeued);
+    // Tapered first-matches knockout boost (2026-09-26, replaces the
+    // plain rookie boolean): matchesPlayed came straight off the join
+    // hello (client's localStorage counter, sanitised to an int 0..99 or
+    // undefined). Missing falls back to the original requeued-based
+    // behaviour -- requeued=false -> treat as 0 (a fresh visit, full
+    // boost), requeued=true -> no boost, matching what shipped before
+    // this client field existed. Still gated behind the same kill
+    // switch as before (MODE_ROTATION_DISABLED doubles as the rookie-boost
+    // kill switch here, same as it always has).
+    const rookieMatchesPlayed = MODE_ROTATION_DISABLED
+      ? null
+      : matchesPlayed !== undefined
+        ? matchesPlayed
+        : requeued
+          ? null
+          : 0;
+    const seat = match.addSeat(name, false, characterId, qa, rookieMatchesPlayed);
 
     if (joinCode) {
       console.log(`[codedLobby] ${JSON.stringify({

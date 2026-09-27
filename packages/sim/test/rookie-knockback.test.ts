@@ -3,7 +3,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { Sim } from '../src/sim.ts';
-import { ROOKIE_KNOCKBACK_SCALE, type MatchSettings } from '../src/match-settings.ts';
+import { ROOKIE_KNOCKBACK_SCALE, rookieScaleForMatchesPlayed, type MatchSettings } from '../src/match-settings.ts';
 import { makeInputFrame, BUTTON_ATTACK } from '../src/types.ts';
 import * as fx from '../src/math/fixed.ts';
 import { PLACEHOLDER_CHARACTER } from '../../content/src/characters/placeholder/data.ts';
@@ -11,7 +11,7 @@ import { PLACEHOLDER_CHARACTER } from '../../content/src/characters/placeholder/
 /** Fighter 0 walks up to fighter 1 and jabs; returns fighter 1's knockback speed on the hit tick. */
 function jabSpeed(settings: Partial<MatchSettings>): number {
   const sim = new Sim(1, 2, [PLACEHOLDER_CHARACTER, PLACEHOLDER_CHARACTER], undefined, {
-    winCondition: 'stocks', startingStocks: 3, rookieKnockbackScale: ROOKIE_KNOCKBACK_SCALE, ...settings,
+    winCondition: 'stocks', startingStocks: 3, ...settings,
   });
   const step = fx.fromFloat(0.2);
   for (let i = 0; i < 2000; i++) {
@@ -32,12 +32,24 @@ describe('Rookie knockback boost', () => {
   const base = jabSpeed({});
 
   it('scales knockback when a rookie hits a bot', () => {
-    const boosted = jabSpeed({ rookieSlots: [0], botSlots: [1] });
+    const boosted = jabSpeed({ rookieSlots: [0], rookieScales: [ROOKIE_KNOCKBACK_SCALE], botSlots: [1] });
     assert.ok(Math.abs(boosted / base - fx.toFloat(ROOKIE_KNOCKBACK_SCALE)) < 0.02, `${boosted} vs ${base}`);
   });
 
   it('does not apply to a rookie hitting a human, or a non-rookie hitting a bot', () => {
-    assert.equal(jabSpeed({ rookieSlots: [0], botSlots: [] }), base);
-    assert.equal(jabSpeed({ rookieSlots: [1], botSlots: [0, 1] }), base);
+    assert.equal(jabSpeed({ rookieSlots: [0], rookieScales: [ROOKIE_KNOCKBACK_SCALE], botSlots: [] }), base);
+    assert.equal(jabSpeed({ rookieSlots: [1], rookieScales: [ROOKIE_KNOCKBACK_SCALE], botSlots: [0, 1] }), base);
+  });
+
+  it('tapers the scale by matches already played', () => {
+    const secondMatchScale = rookieScaleForMatchesPlayed(1);
+    const boosted = jabSpeed({ rookieSlots: [0], rookieScales: [secondMatchScale], botSlots: [1] });
+    assert.ok(Math.abs(boosted / base - fx.toFloat(secondMatchScale)) < 0.02, `${boosted} vs ${base}`);
+    assert.ok(fx.toFloat(secondMatchScale) < fx.toFloat(ROOKIE_KNOCKBACK_SCALE));
+  });
+
+  it('is fully decayed to 1.0x by the fourth match (index >= 3)', () => {
+    assert.equal(rookieScaleForMatchesPlayed(3), 1 << 16);
+    assert.equal(rookieScaleForMatchesPlayed(50), 1 << 16);
   });
 });
