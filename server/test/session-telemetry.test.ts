@@ -293,7 +293,7 @@ test('[sessionEnd]: carries the seat\'s attackPresses, hitsLanded, and damageDea
   const match = realMatch();
   match.setInput(0, makeInputFrame(BUTTON_ATTACK), 1);
   match.seats[0]!.hitsLanded = 3;
-  match.seats[0]!.damageDealt = 42;
+  match.seats[0]!.damageDealt = 42 * 65536;
   const conn = fakeConn({ slot: 0 });
   const lines = captureLogs(() => logSessionEnd(conn, match));
   const record = JSON.parse(lines.find((l) => l.startsWith('[sessionEnd]'))!.slice('[sessionEnd] '.length));

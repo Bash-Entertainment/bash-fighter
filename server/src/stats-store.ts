@@ -227,7 +227,7 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       deathCount: match.sim ? match.sim.getFighter(conn.slot).deathCount : null,
       attackPresses: seat.attackPresses ?? null,
       hitsLanded: seat.hitsLanded ?? null,
-      damageDealt: seat.damageDealt ?? null,
+      damageDealt: seat.damageDealt == null ? null : Math.round(seat.damageDealt / 65536),
       touchActive: profile?.touchActive ?? null,
       firstInputMs: report?.firstInputMs ?? null,
       inputTicks: report?.inputTicks ?? null,

@@ -130,7 +130,7 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
       // null-safe like every other optional field in this line.
       attackPresses: seat.attackPresses ?? null,
       hitsLanded: seat.hitsLanded ?? null,
-      damageDealt: seat.damageDealt ?? null,
+      damageDealt: seat.damageDealt == null ? null : Math.round(seat.damageDealt / 65536),
       touchActive: profile?.touchActive ?? null,
       viewportWidth: profile?.viewportWidth ?? null,
       viewportHeight: profile?.viewportHeight ?? null,
