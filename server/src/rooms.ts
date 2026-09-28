@@ -7,6 +7,12 @@ import { seedRng, nextBounded } from '@bash-fighter/sim/src/math/prng.ts';
 import { ALL_CHARACTERS } from '@bash-fighter/content/src/characters.ts';
 import { decideMatchModeForJoin, MODE_ROTATION_CADENCE, MODE_ROTATION_DISABLED } from './mode-rotation.ts';
 
+/** A player's first three matches are Timed Brawl (no elimination), not
+ *  just the first: a newcomer re-queued into one-life Battle Royale was
+ *  eliminated within ~15s, the opposite of a reason to stay. Keyed on the
+ *  client-reported matchesPlayed; absent = old requeued-only rule. */
+const NEWCOMER_TIMED_MATCHES = 3;
+
 export const DEFAULT_CAPACITY = 20;
 export const DEFAULT_MINIMUM = 2;
 export const COUNTDOWN_SECONDS = Number(process.env.MATCH_COUNTDOWN_SECONDS ?? 15);
@@ -224,14 +230,14 @@ export class RoomManager {
       if (existing && existing.phase === 'lobby') {
         match = existing;
       } else {
-        match = this.createMatch(requeued);
+        match = this.createMatch(requeued && !(matchesPlayed !== undefined && matchesPlayed < NEWCOMER_TIMED_MATCHES));
         match.joinCode = joinCode;
         this.coded.set(joinCode, match);
         freshMatch = true;
       }
     } else {
       if (!this.filling || this.filling.phase !== 'lobby') {
-        match = this.createMatch(requeued);
+        match = this.createMatch(requeued && !(matchesPlayed !== undefined && matchesPlayed < NEWCOMER_TIMED_MATCHES));
         this.filling = match;
         freshMatch = true;
       } else {

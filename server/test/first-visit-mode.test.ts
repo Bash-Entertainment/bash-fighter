@@ -127,3 +127,14 @@ test('RoomManager: only the requesting join matters, not who else is already in 
   assert.equal(first.match.winCondition, 'battleRoyale');
   first.match.stop();
 });
+
+test('RoomManager: a re-queued newcomer (fewer than 3 matches played) still gets Timed Brawl', () => {
+  const noopEvents = () => ({ onSnapshot: () => {}, onEliminated: () => {} });
+  for (const played of [1, 2]) {
+    const manager = new RoomManager(noopEvents, 2, 2);
+    const { match } = manager.joinLobby('a', undefined, false, undefined, true, undefined, played);
+    manager.joinLobby('b', undefined, false, undefined, true, undefined, played);
+    assert.equal(match.plannedWinCondition, 'timedKO', `matchesPlayed=${played}`);
+    match.stop();
+  }
+});
