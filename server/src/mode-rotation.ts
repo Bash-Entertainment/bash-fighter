@@ -58,18 +58,20 @@ export const MODE_ROTATION_CADENCE = MODE_ROTATION.length;
  *  also unset). For an emergency rollback without touching code. */
 export const MODE_ROTATION_DISABLED = /^(1|true|yes)$/i.test(process.env.MATCH_MODE_ROTATION_DISABLED ?? '');
 
-/** Timed Brawl's match length in the rotation. Chosen at 3 minutes
- *  (10800 ticks @ 60Hz): production Battle Royale matches resolve in
- *  60-90s (docs/MEASUREMENT.md, median 84.4s), so Timed Brawl needs to
- *  run noticeably longer than that to read as a distinct mode rather
- *  than "the same match but with a clock" -- but the sim's own default
- *  of 5 minutes (packages/sim/src/match-settings.ts) is too long for a
- *  bot-filled casual drop-in lobby where the median player did not
- *  choose this mode. 3 minutes matches the plain-language line shown to
- *  players ("most knockouts in 3 minutes wins") and is a round, legible
- *  number distinct from both the sim default and Battle Royale's
- *  natural length. */
-export const TIMED_BRAWL_TIME_LIMIT_TICKS = 60 * 60 * 3;
+/** Timed Brawl's match length in the rotation. Shortened from 3 minutes
+ *  to 90 seconds (5400 ticks @ 60Hz) on 2026-09-28 (owner decision): a
+ *  first-time visitor's first match is always Timed Brawl, real
+ *  newcomers leave 20-85s in, and only players who reach the end screen
+ *  get auto-requeued into match 2 (see auto-continue.ts). Match #322
+ *  (30% second-match re-queue) needs the end screen + auto-requeue
+ *  within reach of a newcomer who is still there. 3 minutes put that
+ *  moment past where most first-timers had already left; 90s does not.
+ *  Originally 3 minutes because production Battle Royale matches
+ *  resolve in 60-90s (docs/MEASUREMENT.md, median 84.4s) and Timed
+ *  Brawl needed to read as a distinct, longer mode -- that reasoning is
+ *  now subordinate to the re-queue goal. modeDisplayName below formats
+ *  this in seconds when it isn't a whole number of minutes. */
+export const TIMED_BRAWL_TIME_LIMIT_TICKS = 60 * 60 * 1.5;
 
 /** Stocks' starting-life count in the rotation. 2 lives, chosen from a
  *  measurement (scripts/stocks-metrics.mjs, 2026-09-12), not taste: a
@@ -167,8 +169,13 @@ export function decideMatchModeForJoin(
 
 export function modeDisplayName(winCondition: WinCondition, timeLimitTicks?: number, startingStocks?: number): string {
   if (winCondition === 'timedKO') {
-    const minutes = Math.round((timeLimitTicks ?? TIMED_BRAWL_TIME_LIMIT_TICKS) / 60 / 60);
-    return `Timed Brawl — most knockouts in ${minutes} minutes wins`;
+    const totalSeconds = Math.round((timeLimitTicks ?? TIMED_BRAWL_TIME_LIMIT_TICKS) / 60);
+    // Plain-language duration: whole minutes when the limit divides
+    // evenly (e.g. 300s -> "5 minutes"), otherwise seconds (e.g. 90s ->
+    // "90 seconds") so a value like 90s never gets rounded into the
+    // wrong minute count ("2 minutes").
+    const label = totalSeconds % 60 === 0 ? `${totalSeconds / 60} minutes` : `${totalSeconds} seconds`;
+    return `Timed Brawl — most knockouts in ${label} wins`;
   }
   if (winCondition === 'stocks') {
     const lives = startingStocks ?? STOCKS_STARTING_STOCKS;

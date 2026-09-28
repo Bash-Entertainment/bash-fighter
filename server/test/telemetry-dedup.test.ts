@@ -47,7 +47,7 @@ function startServer(port: number, statsPath: string, extraEnv: Record<string, s
         MATCH_SHRINK_FULLY_CLOSED_TICK: '100000',
         // This file's tests all want a short, deterministic
         // Last-Fighter-Standing match (one elimination ends it) so they can
-        // assert exactly one sessionEnd record without racing a 3-minute
+        // assert exactly one sessionEnd record without racing the
         // Timed Brawl clock. None of these clients set requeued on hello,
         // so without this override the first-time-visitor rule
         // (decideMatchModeForJoin, see mode-rotation.ts) would force

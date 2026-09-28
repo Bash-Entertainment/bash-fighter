@@ -50,11 +50,11 @@ test('decideMatchMode: kill switch pins every match to battleRoyale regardless o
   }
 });
 
-test('decideMatchMode: the timedKO decision carries the 3-minute time limit; the stocks decision carries 2 lives; battleRoyale carries neither', () => {
+test('decideMatchMode: the timedKO decision carries the 90-second time limit; the stocks decision carries 2 lives; battleRoyale carries neither', () => {
   const timed = decideMatchMode(3);
   assert.equal(timed.winCondition, 'timedKO');
   assert.equal(timed.timeLimitTicks, TIMED_BRAWL_TIME_LIMIT_TICKS);
-  assert.equal(timed.timeLimitTicks, 60 * 60 * 3);
+  assert.equal(timed.timeLimitTicks, 60 * 60 * 1.5);
   assert.equal(timed.startingStocks, undefined);
 
   const stocks = decideMatchMode(4);
@@ -79,7 +79,7 @@ test('modeDisplayName: never leaks an internal identifier, always plain language
   assert.match(royale, /Battle Royale/);
   assert.match(royale, /last fighter standing/i);
   assert.match(timed, /Timed Brawl/);
-  assert.match(timed, /3 minutes/);
+  assert.match(timed, /90 seconds/);
   assert.match(timed, /knockouts/i);
   assert.match(stocks, /Stocks/);
   assert.match(stocks, /2 lives/);

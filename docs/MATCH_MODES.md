@@ -15,9 +15,12 @@ Production-Hardware Measurements").
 
 ## Timed Brawl (`timedKO`)
 
-3 minutes (`TIMED_BRAWL_TIME_LIMIT_TICKS` = 10800 ticks @ 60Hz).
-Respawns are unlimited for the duration; most knockouts when the clock
-hits zero wins. End screen shows full standings
+90 seconds (`TIMED_BRAWL_TIME_LIMIT_TICKS` = 5400 ticks @ 60Hz;
+shortened from 3 minutes on 2026-09-28 so the end screen and
+auto-requeue into match 2 land within reach of a first-time visitor
+before they leave -- see wiki dated 2026-09-28). Respawns are unlimited
+for the duration; most knockouts when the clock hits zero wins. End
+screen shows full standings
 (`packages/app/src/ui/timed-brawl-end-screen.ts`).
 
 ## Stocks (`stocks`)
