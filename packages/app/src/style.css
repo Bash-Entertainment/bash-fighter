@@ -886,6 +886,18 @@ html, body {
   display: none;
 }
 
+/* Touch + urgent: .touch pins top, .urgent pins bottom; both at once stretched
+   the box into a full-height column over the fighters. Drop the top anchor and
+   sit the prompt just above the action buttons it points at. */
+.controls-hint.touch.urgent {
+  top: auto;
+  bottom: 176px;
+  left: auto;
+  right: 12px;
+  transform: none;
+  max-width: 70vw;
+}
+
 .btn-secondary:hover {
   background: transparent;
   border-color: var(--ink-dim);
