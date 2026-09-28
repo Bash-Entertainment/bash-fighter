@@ -39,7 +39,7 @@ function runTrial(seed, scale) {
     timeLimitTicks: 60 * 60 * 3,
     rookieSlots: [HUMAN_SLOT],
     botSlots,
-    rookieKnockbackScale: fx.fromFloat(scale),
+    rookieScales: [fx.fromFloat(scale)],
   }, characters, DEFAULT_ARENA_ID);
   const bots = botSlots.map((i) => new BotController(i, BotDifficulty.EASY, deriveBotSeed(seed, i), protectedSlots));
   const humanInput = makeHumanAnalogController(mulberry32(seed ^ 0x51ed270b), HUMAN_SLOT, PARAMS);
