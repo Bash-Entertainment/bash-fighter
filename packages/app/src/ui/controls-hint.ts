@@ -5,6 +5,8 @@
 // about a third of seats press nothing at all, and those are exactly the
 // people who should still get the hint next time.
 const STORAGE_KEY = 'bash-fighter:seen-controls-hint';
+/** Fired by NetMatch the first tick the local seat presses attack. */
+export const LOCAL_ATTACK_EVENT = 'bash-fighter:local-attack';
 const MAX_VISIBLE_MS = 20000;
 // Real sessions load the game, watch a match for ten or fifteen seconds and
 // leave without ever pressing anything. The quiet strip at the bottom is easy
@@ -17,13 +19,22 @@ const KEYBOARD_TEXT = 'A/D move · Space jump · F attack · G special · Shift 
 const TOUCH_TEXT = 'Drag the stick to move · tap Jump and Attack';
 const KEYBOARD_URGENT = 'You are in the match — A/D to move, Space to jump, F to attack';
 const TOUCH_URGENT = 'You are in the match — drag the stick to move, tap Attack';
+// Real newcomers moved around for 25-30s and never pressed attack once: the
+// hint used to vanish on the first key of any kind, taking "F attack" with
+// it. Moving now swaps it for the one thing still missing; only an actual
+// attack dismisses it.
+const KEYBOARD_ATTACK_NEXT = 'Now press F to attack';
+const TOUCH_ATTACK_NEXT = 'Now tap Attack to hit';
+const ATTACK_NEXT_MAX_MS = 30000;
 
 export class ControlsHint {
   private readonly el: HTMLDivElement;
   private timers: ReturnType<typeof setTimeout>[] = [];
   private listening = false;
   private touch = false;
-  private readonly onInput = (): void => this.acknowledge();
+  private moved = false;
+  private readonly onInput = (): void => this.noteMovement();
+  private readonly onAttack = (): void => this.acknowledge();
 
   constructor(parent: HTMLElement) {
     this.el = document.createElement('div');
@@ -55,11 +66,13 @@ export class ControlsHint {
 
   private show(): void {
     this.clearTimers();
+    this.moved = false;
     this.el.classList.remove('hidden', 'fading', 'urgent');
     if (!this.listening) {
       this.listening = true;
       window.addEventListener('keydown', this.onInput);
       window.addEventListener('pointerdown', this.onInput);
+      window.addEventListener(LOCAL_ATTACK_EVENT, this.onAttack);
     }
     this.timers.push(setTimeout(() => this.escalate(), URGENT_AFTER_MS));
     this.timers.push(setTimeout(() => this.fade(), MAX_VISIBLE_MS));
@@ -72,7 +85,19 @@ export class ControlsHint {
     this.el.textContent = this.touch ? TOUCH_URGENT : KEYBOARD_URGENT;
   }
 
-  /** The player did something: remember that, then get out of the way. */
+  /** Any key or touch that was not an attack: they found movement, so point
+   * at attack instead of repeating the whole list. */
+  private noteMovement(): void {
+    if (this.moved) return;
+    this.moved = true;
+    this.clearTimers();
+    this.el.classList.remove('fading', 'hidden');
+    this.el.classList.add('urgent');
+    this.el.textContent = this.touch ? TOUCH_ATTACK_NEXT : KEYBOARD_ATTACK_NEXT;
+    this.timers.push(setTimeout(() => this.fade(), ATTACK_NEXT_MAX_MS));
+  }
+
+  /** The player attacked: remember that, then get out of the way. */
   private acknowledge(): void {
     try {
       localStorage.setItem(STORAGE_KEY, '1');
@@ -95,6 +120,7 @@ export class ControlsHint {
     this.listening = false;
     window.removeEventListener('keydown', this.onInput);
     window.removeEventListener('pointerdown', this.onInput);
+    window.removeEventListener(LOCAL_ATTACK_EVENT, this.onAttack);
   }
 
   private clearTimers(): void {

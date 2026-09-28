@@ -49,6 +49,8 @@ import {
 } from '@bash-fighter/net';
 import { FixedTimestepLoop } from './loop.ts';
 import { hashStateBuffer } from '@bash-fighter/sim';
+import { BUTTON_ATTACK } from '@bash-fighter/sim';
+import { LOCAL_ATTACK_EVENT } from './ui/controls-hint.ts';
 import { AudioManager } from '@bash-fighter/audio';
 import { detectFighterEvents, detectItemEvents } from './effects-events.ts';
 import { EffectsAudioBridge } from './effects-audio.ts';
@@ -374,6 +376,8 @@ export class NetMatch {
   // and Node's built-in type-stripping loader does not support parameter
   // properties (ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX) -- vite/tsc handle them
   // fine, but that test file needs to run outside that build pipeline.
+  private attackAnnounced = false;
+
   constructor(
     url: string,
     events: NetMatchEvents = {},
@@ -849,6 +853,10 @@ export class NetMatch {
       // same local input frame already computed above for the sim, never
       // adds a poll or touches the sim's inputs array.
       const hadInput = local.buttons !== 0 || local.stickX !== 0 || local.stickY !== 0;
+      if (!this.attackAnnounced && (local.buttons & BUTTON_ATTACK) !== 0) {
+        this.attackAnnounced = true;
+        window.dispatchEvent(new Event(LOCAL_ATTACK_EVENT));
+      }
       this.inputActivity.recordTick(hadInput, performance.now() - this.matchStartAtMs);
       // Same tick's real source (see InputManager.lastSourceForSlot) --
       // observed usage, not capability. this.mySlot indexes the same
