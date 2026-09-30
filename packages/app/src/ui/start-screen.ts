@@ -81,9 +81,9 @@ export class StartScreen {
     this.root.innerHTML = `
       <div class="hero">
         <div class="wordmark">BASH FIGHTER</div>
-        <div class="subtitle">Twenty fighters, a different arena every match, last one standing. Free and open source, plays in your browser.</div>
+        <div class="subtitle">Twenty fighters, a different arena every match. Free and open source, plays in your browser.</div>
         <div class="how-to-play">
-          <div class="how-to-play-goal">Knock other fighters off the arena — the last one standing wins. Timed Brawl and Stocks score differently, and the in-match HUD always says which.</div>
+          <div class="how-to-play-goal">Knock other fighters off the arena. Your first matches are 90-second brawls: you respawn, and the most knockouts wins. The in-match HUD always shows the current rules.</div>
           <div class="how-to-play-controls">
             <span><b>A/D</b> move</span>
             <span><b>Space</b> jump</span>
