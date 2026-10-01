@@ -9,12 +9,19 @@
 // the feedback panel, should not be yanked into a new fight. Any click
 // or key inside the screen other than the button itself cancels.
 const DEFAULT_SECONDS = 6;
+// Phone players are mid-mash when the clock runs out; their next tap landed
+// on the end screen and cancelled the countdown, leaving a static screen they
+// closed instead of re-queueing. Input this soon after the screen opens is
+// leftover match input, not a decision.
+export const CANCEL_GRACE_MS = 1500;
 
 export class AutoContinue {
   private timer: ReturnType<typeof setInterval> | null = null;
+  private startedAt = 0;
   private readonly label: string;
   private readonly cancelOnInteraction = (event: Event): void => {
     if (event.target instanceof Node && this.button.contains(event.target)) return;
+    if (Date.now() - this.startedAt < CANCEL_GRACE_MS) return;
     this.cancel();
   };
 
@@ -28,6 +35,7 @@ export class AutoContinue {
 
   start(onFire: () => void): void {
     this.cancel();
+    this.startedAt = Date.now();
     let left = Math.ceil(this.seconds);
     this.button.textContent = `${this.label} (${left})`;
     this.root.addEventListener('pointerdown', this.cancelOnInteraction);

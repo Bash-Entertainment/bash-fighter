@@ -33,3 +33,8 @@ test('only an online match rolls into another one on its own', () => {
   assert.match(main, /winScreen\.autoContinueEnabled = true;/);
   assert.match(main, /winScreen\.autoContinueEnabled = false;\s*\n\s*winScreen\.show\(winnerIndex, 0,/);
 });
+
+test('leftover match taps right after the end screen opens do not cancel the countdown', () => {
+  assert.match(auto, /CANCEL_GRACE_MS = 1500/);
+  assert.match(auto, /Date\.now\(\) - this\.startedAt < CANCEL_GRACE_MS\) return;/);
+});
