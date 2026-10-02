@@ -130,7 +130,7 @@ export class TimedBrawlEndScreen {
     const myPlacement = localSlot !== undefined && localSlot !== null && localSlot >= 0 ? placementOf(standings, localSlot) : null;
     this.subtitle.textContent =
       myPlacement !== null ? `You finished ${myPlacement} of ${standings.length} on knockouts.` : 'Highest knockout count wins.';
-    const me = localSlot !== undefined && localSlot !== null && localSlot >= 0 ? scores[localSlot] : undefined;
+    const me = localSlot !== undefined && localSlot !== null && localSlot >= 0 ? scores.find((s) => s.slot === localSlot) : undefined;
     const bestEl = this.root.querySelector('#tb-best') as HTMLDivElement;
     bestEl.textContent = me ? recordAndDescribe(window.localStorage, me.koCount) : '';
     this.lastResult = winnerSlot === null ? 'tied' : won ? 'won' : 'lost';
