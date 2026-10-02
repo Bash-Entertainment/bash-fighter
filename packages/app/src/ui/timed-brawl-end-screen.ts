@@ -8,6 +8,7 @@
 import { PALETTE } from '@bash-fighter/render';
 import { AutoContinue } from './auto-continue.ts';
 import { buildStandings, placementOf, tiedHeadline, type TimedBrawlScore } from '../timed-brawl.ts';
+import { recordAndDescribe } from '../personal-best.ts';
 import { copyToClipboard } from '../join-link.ts';
 
 const PLAYER_HEX = PALETTE.playerColors.map((c) => `#${c.toString(16).padStart(6, '0')}`);
@@ -47,6 +48,7 @@ export class TimedBrawlEndScreen {
     this.root.innerHTML = `
       <div class="win-headline"><span class="tb-winner-swatch" id="tb-winner-swatch"></span><span id="tb-headline">&mdash;</span></div>
       <div class="subtitle" id="tb-subtitle">Time's up.</div>
+      <div class="subtitle" id="tb-best"></div>
       <div class="tb-standings" id="tb-standings"></div>
       <button class="btn btn-primary" id="tb-rematch-btn">Play again</button>
       <div class="feedback-end-screen-block">
@@ -128,6 +130,9 @@ export class TimedBrawlEndScreen {
     const myPlacement = localSlot !== undefined && localSlot !== null && localSlot >= 0 ? placementOf(standings, localSlot) : null;
     this.subtitle.textContent =
       myPlacement !== null ? `You finished ${myPlacement} of ${standings.length} on knockouts.` : 'Highest knockout count wins.';
+    const me = localSlot !== undefined && localSlot !== null && localSlot >= 0 ? scores[localSlot] : undefined;
+    const bestEl = this.root.querySelector('#tb-best') as HTMLDivElement;
+    bestEl.textContent = me ? recordAndDescribe(window.localStorage, me.koCount) : '';
     this.lastResult = winnerSlot === null ? 'tied' : won ? 'won' : 'lost';
 
     this.list.innerHTML = '';
