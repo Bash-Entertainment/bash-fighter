@@ -31,3 +31,8 @@ test('corrupt stored value is treated as no best', () => {
   assert.equal(s.v, '2');
   assert.equal(BEST_KEY, 'bash-fighter:best-timed-kos');
 });
+
+test('equalling the best says so instead of "You got N"', () => {
+  const s = mem('3');
+  assert.equal(recordAndDescribe(s, 3), 'You matched your best: 3 knockouts.');
+});

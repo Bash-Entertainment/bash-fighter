@@ -30,5 +30,6 @@ export function recordAndDescribe(storage: StorageLike, kos: number): string {
     return `New personal best: ${knockouts(kos)}.`;
   }
   if (best === null) return 'Your first knockout is waiting. Next match starts below.';
+  if (kos === best) return `You matched your best: ${knockouts(best)}.`;
   return `Your best: ${knockouts(best)}. You got ${kos}.`;
 }
