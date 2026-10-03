@@ -2504,3 +2504,17 @@ body.end-screen-open #net-mode-line {
   .touch-btn-jump { right: 0; bottom: 52px; }
   .touch-btn-shield { right: 52px; bottom: 52px; }
 }
+
+/* Pulses the touch Attack button until a newcomer's first attack. */
+.touch-btn.beckon {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 0 rgba(232, 178, 60, 0.6);
+  animation: touch-beckon 1.2s ease-out infinite;
+}
+@keyframes touch-beckon {
+  0% { box-shadow: 0 0 0 0 rgba(232, 178, 60, 0.6); }
+  100% { box-shadow: 0 0 0 14px rgba(232, 178, 60, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .touch-btn.beckon { animation: none; box-shadow: 0 0 0 3px var(--accent); }
+}

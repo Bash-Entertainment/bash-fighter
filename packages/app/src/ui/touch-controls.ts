@@ -38,7 +38,17 @@ const KEYBOARD_POINTER_ID = -1;
 /** Clearance between the top of the stick and the damage readout. */
 const STICK_READOUT_GAP_PX = 14;
 
+const SEEN_HINT_KEY = 'bash-fighter:seen-controls-hint';
+function hasAttackedBefore(): boolean {
+  try {
+    return window.localStorage.getItem(SEEN_HINT_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export class TouchControls {
+  private attackBtn!: HTMLButtonElement;
   readonly root: HTMLDivElement;
   readonly source = new TouchSource();
 
@@ -71,7 +81,8 @@ export class TouchControls {
     buttons.className = 'touch-buttons';
     buttons.appendChild(this.makeButton('shield', 'Shield'));
     buttons.appendChild(this.makeButton('special', 'Special'));
-    buttons.appendChild(this.makeButton('attack', 'Attack'));
+    this.attackBtn = this.makeButton('attack', 'Attack');
+    buttons.appendChild(this.attackBtn);
     buttons.appendChild(this.makeButton('jump', 'Jump'));
     this.root.appendChild(buttons);
 
@@ -81,6 +92,10 @@ export class TouchControls {
 
   show(): void {
     this.root.classList.remove('hidden');
+    // Phone newcomers moved but never attacked (3 of 4 real sessions, late
+    // Sep): the text prompt alone did not lead the eye to the button. Pulse
+    // the button itself until the first attack.
+    this.attackBtn.classList.toggle('beckon', !hasAttackedBefore());
     // The local damage percent -- the biggest number on screen -- is drawn
     // into the canvas's bottom-left corner, which is exactly where the
     // movement stick sits on a phone. Tell the renderer how much of that
@@ -118,6 +133,7 @@ export class TouchControls {
     this.buttonPointers.set(pointerId, name);
     this.source.setButton(name, true);
     btn.classList.add('pressed');
+    if (name === 'attack') btn.classList.remove('beckon');
     this.updateActiveCount();
   }
 
