@@ -362,7 +362,7 @@ player-account system to attach it to even if we wanted to.
 a client sends `touchActive` (is a touch input source active),
 `viewportWidth`/`viewportHeight` (CSS pixels, clamped 0-20000),
 `buildSha` (which build was served, capped at 64 chars), and, only when
-set, `qa` (a boolean, nothing more). See `docs/PROTOCOL.md`'s
+set, `qa` (a boolean, nothing more). Since 2026-10-08 it may also send `source`: a `?ref=` tag from a listing link (as `ref.<tag>`), else the referring page's hostname only -- never a path, query or full URL. See `docs/PROTOCOL.md`'s
 `hello.profile` section for the exact wire shape.
 
 **Debug URL parameters (client-side, `packages/app/src/main.ts` and

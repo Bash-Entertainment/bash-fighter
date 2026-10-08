@@ -18,7 +18,7 @@ import {
 import { PLACEHOLDER_CHARACTER, createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID } from '@bash-fighter/content';
 import type { CharacterData } from '@bash-fighter/sim';
 import { InputManager, isTouchCapable } from '@bash-fighter/input';
-import { buildClientProfile, buildSessionReportMessage, InputActivityTracker, InputUsageTracker, FrameTimeTracker, NetworkHitchTracker, SlowFrameTracker, SLOW_FRAME_THRESHOLD_MS } from './session-report.ts';
+import { buildClientProfile, visitSource, buildSessionReportMessage, InputActivityTracker, InputUsageTracker, FrameTimeTracker, NetworkHitchTracker, SlowFrameTracker, SLOW_FRAME_THRESHOLD_MS } from './session-report.ts';
 import { readBuildSha } from './ui/feedback-panel.ts';
 import {
   Renderer,
@@ -539,6 +539,7 @@ export class NetMatch {
         viewportHeight: window.innerHeight,
         buildSha: readBuildSha() ?? null,
         qa: this.qaMode,
+        source: visitSource(location.search, document.referrer, location.hostname),
         // Coarse device-capability tags (see docs/MEASUREMENT.md,
         // 2026-09-14) -- already-public, non-identifying browser APIs,
         // bucketed by buildClientProfile before sending. `deviceMemory`

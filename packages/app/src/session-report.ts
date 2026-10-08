@@ -142,6 +142,8 @@ export function buildClientProfile(input: {
    *  -- see detectUaFamily. The raw string itself never leaves this
    *  function. */
   userAgent?: string;
+  /** See ClientSessionProfile.source and visitSource(). */
+  source?: string;
 }): ClientSessionProfile {
   const profile: ClientSessionProfile = {
     touchActive: input.touchActive,
@@ -150,6 +152,7 @@ export function buildClientProfile(input: {
   };
   if (input.buildSha) profile.buildSha = input.buildSha.slice(0, MAX_BUILD_SHA_LENGTH);
   if (input.qa) profile.qa = true;
+  if (input.source) profile.source = input.source;
   const hwConcurrencyBucket = bucketHardwareConcurrency(input.hardwareConcurrency);
   if (hwConcurrencyBucket !== undefined) profile.hwConcurrencyBucket = hwConcurrencyBucket;
   const deviceMemoryBucket = bucketDeviceMemory(input.deviceMemory);
@@ -542,4 +545,23 @@ export function buildSessionReportMessage(input: {
   if (input.renderResolution !== undefined) msg.renderResolution = input.renderResolution;
   if (input.resolutionDowngrades !== undefined) msg.resolutionDowngrades = input.resolutionDowngrades;
   return msg;
+}
+
+/** Coarse visit source for ClientSessionProfile.source: a `?ref=` tag if
+ *  present, else the referrer's hostname (no path or query), else
+ *  undefined. Our own hosts count as no source. */
+export function visitSource(search: string, referrer: string, ownHost: string): string | undefined {
+  const clean = (v: string): string | undefined => {
+    const t = v.toLowerCase().slice(0, 64);
+    return /^[a-z0-9.-]+$/.test(t) ? t : undefined;
+  };
+  const ref = new URLSearchParams(search).get('ref');
+  if (ref) return clean('ref.' + ref);
+  try {
+    const host = new URL(referrer).hostname.replace(/^www\./, '');
+    if (!host || host === ownHost.replace(/^www\./, '')) return undefined;
+    return clean(host);
+  } catch {
+    return undefined;
+  }
 }

@@ -73,6 +73,8 @@ export interface StoredSessionEndRecord {
    *  absent from records written before this field existed, which the
    *  report treats as "unknown", not as false. */
   qa: boolean;
+  /** ClientSessionProfile.source (2026-10-08); null when none. */
+  source?: string | null;
   /** Coarse device-capability tags (2026-09-14, see docs/MEASUREMENT.md
    *  and ClientSessionProfile's doc comments) -- null when the client's
    *  browser/build didn't report that field, never a real "zero". */
@@ -235,6 +237,7 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       frameP95Ms: report?.frameP95Ms ?? null,
       devicePixelRatio: report?.devicePixelRatio ?? null,
       requeued: report?.requeued ?? (conn.requeuedAtJoin ? true : null),
+      source: profile?.source ?? null,
       qa: seat.qa,
       hwConcurrencyBucket: profile?.hwConcurrencyBucket ?? null,
       deviceMemoryBucket: profile?.deviceMemoryBucket ?? null,
