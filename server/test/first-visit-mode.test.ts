@@ -11,7 +11,7 @@
 // like mode-rotation.test.ts's existing RoomManager test.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { decideMatchModeForJoin, decideMatchMode, TIMED_BRAWL_TIME_LIMIT_TICKS } from '../src/mode-rotation.ts';
+import { decideMatchModeForJoin, decideMatchMode, FIRST_MATCH_TIME_LIMIT_TICKS } from '../src/mode-rotation.ts';
 import { RoomManager } from '../src/rooms.ts';
 import { rookieScaleForMatchesPlayed, ROOKIE_KNOCKBACK_SCALE } from '@bash-fighter/sim/src/index.ts';
 
@@ -19,7 +19,7 @@ test('decideMatchModeForJoin: a non-requeued (first-time) join forces timedKO re
   for (let matchNumber = 1; matchNumber <= 8; matchNumber++) {
     const decision = decideMatchModeForJoin(matchNumber, false);
     assert.equal(decision.winCondition, 'timedKO');
-    assert.equal(decision.timeLimitTicks, TIMED_BRAWL_TIME_LIMIT_TICKS);
+    assert.equal(decision.timeLimitTicks, FIRST_MATCH_TIME_LIMIT_TICKS);
   }
 });
 

@@ -72,6 +72,11 @@ export const MODE_ROTATION_DISABLED = /^(1|true|yes)$/i.test(process.env.MATCH_M
  *  now subordinate to the re-queue goal. modeDisplayName below formats
  *  this in seconds when it isn't a whole number of minutes. */
 export const TIMED_BRAWL_TIME_LIMIT_TICKS = 60 * 60 * 1.5;
+/** A fresh visitor's first match is 60s, not 90s (2026-10-10). Production
+ *  3-10 Oct: only 9 of 94 real sessions stayed to a match end, and a
+ *  player who never sees the end screen can never re-queue. A shorter
+ *  first match puts the rematch prompt in front of more of them. */
+export const FIRST_MATCH_TIME_LIMIT_TICKS = 60 * 60;
 
 /** Stocks' starting-life count in the rotation. 2 lives, chosen from a
  *  measurement (scripts/stocks-metrics.mjs, 2026-09-12), not taste: a
@@ -162,7 +167,7 @@ export function decideMatchModeForJoin(
   disabled: boolean = MODE_ROTATION_DISABLED,
 ): ModeDecision {
   if (!disabled && !joinerRequeued) {
-    return { winCondition: 'timedKO', timeLimitTicks: TIMED_BRAWL_TIME_LIMIT_TICKS };
+    return { winCondition: 'timedKO', timeLimitTicks: FIRST_MATCH_TIME_LIMIT_TICKS };
   }
   return decideMatchMode(matchNumber, cadenceOrRotation, disabled);
 }
