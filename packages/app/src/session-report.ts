@@ -144,6 +144,7 @@ export function buildClientProfile(input: {
   userAgent?: string;
   /** See ClientSessionProfile.source and visitSource(). */
   source?: string;
+  matchIndex?: number;
 }): ClientSessionProfile {
   const profile: ClientSessionProfile = {
     touchActive: input.touchActive,
@@ -153,6 +154,7 @@ export function buildClientProfile(input: {
   if (input.buildSha) profile.buildSha = input.buildSha.slice(0, MAX_BUILD_SHA_LENGTH);
   if (input.qa) profile.qa = true;
   if (input.source) profile.source = input.source;
+  if (input.matchIndex) profile.matchIndex = input.matchIndex;
   const hwConcurrencyBucket = bucketHardwareConcurrency(input.hardwareConcurrency);
   if (hwConcurrencyBucket !== undefined) profile.hwConcurrencyBucket = hwConcurrencyBucket;
   const deviceMemoryBucket = bucketDeviceMemory(input.deviceMemory);
@@ -564,4 +566,10 @@ export function visitSource(search: string, referrer: string, ownHost: string): 
   } catch {
     return undefined;
   }
+}
+
+let matchesThisPage = 0;
+/** Next 1-based match number for this page load (see ClientSessionProfile.matchIndex). */
+export function nextMatchIndex(): number {
+  return ++matchesThisPage;
 }

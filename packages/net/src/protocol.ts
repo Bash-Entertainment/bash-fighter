@@ -140,6 +140,9 @@ export interface ClientSessionProfile {
    *  listing link, else the referring page's HOSTNAME only (never a path,
    *  query or full URL). Lowercase [a-z0-9.-], max 64 chars. */
   source?: string;
+  /** 1-based count of matches played in this page load (2026-10-11), for
+   *  the 3+-matches-per-session goal. Integer 1..999. */
+  matchIndex?: number;
   /** Coarse, bucketed `navigator.hardwareConcurrency` (logical CPU
    *  count), added 2026-09-14 to help tell "weak/thermal-throttled
    *  device" apart from "browser/network hitch" as an explanation for
@@ -952,6 +955,7 @@ function sanitiseClientProfile(value: unknown): ClientSessionProfile | undefined
   // ClientSessionProfile.qa's doc comment for why this is never treated
   // as proof.
   if (typeof input.qa === 'boolean') out.qa = input.qa;
+  if (typeof input.matchIndex === 'number' && Number.isInteger(input.matchIndex) && input.matchIndex >= 1 && input.matchIndex <= 999) out.matchIndex = input.matchIndex;
   if (typeof input.source === 'string' && /^[a-z0-9.-]{1,64}$/.test(input.source)) out.source = input.source;
   // Coarse device-capability tags (2026-09-14, see docs/MEASUREMENT.md).
   // Each is an already-bucketed number from the client -- clamped again

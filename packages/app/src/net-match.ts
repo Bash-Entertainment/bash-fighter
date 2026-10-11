@@ -18,7 +18,7 @@ import {
 import { PLACEHOLDER_CHARACTER, createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID } from '@bash-fighter/content';
 import type { CharacterData } from '@bash-fighter/sim';
 import { InputManager, isTouchCapable } from '@bash-fighter/input';
-import { buildClientProfile, visitSource, buildSessionReportMessage, InputActivityTracker, InputUsageTracker, FrameTimeTracker, NetworkHitchTracker, SlowFrameTracker, SLOW_FRAME_THRESHOLD_MS } from './session-report.ts';
+import { buildClientProfile, visitSource, nextMatchIndex, buildSessionReportMessage, InputActivityTracker, InputUsageTracker, FrameTimeTracker, NetworkHitchTracker, SlowFrameTracker, SLOW_FRAME_THRESHOLD_MS } from './session-report.ts';
 import { readBuildSha } from './ui/feedback-panel.ts';
 import {
   Renderer,
@@ -216,6 +216,7 @@ export class NetMatch {
   // construction, like sessionDevicePixelRatio above, since it describes
   // how THIS session began, not anything that can change mid-match.
   private readonly requeued: boolean;
+  private readonly matchIndex: number;
   private stopped = false;
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -398,6 +399,7 @@ export class NetMatch {
     this.requeued = requeued;
     this.joinCodeRequest = joinCodeRequest;
     this.spectateRequest = spectateRequest;
+    this.matchIndex = spectateRequest ? 0 : nextMatchIndex();
   }
 
   async init(parent: HTMLElement): Promise<void> {
@@ -539,6 +541,7 @@ export class NetMatch {
         viewportHeight: window.innerHeight,
         buildSha: readBuildSha() ?? null,
         qa: this.qaMode,
+        matchIndex: this.matchIndex || undefined,
         source: visitSource(location.search, document.referrer, location.hostname),
         // Coarse device-capability tags (see docs/MEASUREMENT.md,
         // 2026-09-14) -- already-public, non-identifying browser APIs,

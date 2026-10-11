@@ -75,6 +75,8 @@ export interface StoredSessionEndRecord {
   qa: boolean;
   /** ClientSessionProfile.source (2026-10-08); null when none. */
   source?: string | null;
+  /** ClientSessionProfile.matchIndex (2026-10-11); null when unknown. */
+  matchIndex?: number | null;
   /** Coarse device-capability tags (2026-09-14, see docs/MEASUREMENT.md
    *  and ClientSessionProfile's doc comments) -- null when the client's
    *  browser/build didn't report that field, never a real "zero". */
@@ -238,6 +240,7 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       devicePixelRatio: report?.devicePixelRatio ?? null,
       requeued: report?.requeued ?? (conn.requeuedAtJoin ? true : null),
       source: profile?.source ?? null,
+      matchIndex: profile?.matchIndex ?? null,
       qa: seat.qa,
       hwConcurrencyBucket: profile?.hwConcurrencyBucket ?? null,
       deviceMemoryBucket: profile?.deviceMemoryBucket ?? null,

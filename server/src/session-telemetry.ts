@@ -136,6 +136,7 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
       viewportHeight: profile?.viewportHeight ?? null,
       buildSha: profile?.buildSha ?? null,
       source: profile?.source ?? null,
+      matchIndex: profile?.matchIndex ?? null,
       firstInputMs: report?.firstInputMs ?? null,
       inputTicks: report?.inputTicks ?? null,
       frameMedianMs: report?.frameMedianMs ?? null,
