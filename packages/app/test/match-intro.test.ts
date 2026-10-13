@@ -41,6 +41,6 @@ test('defines its own hidden rule (there is no global .hidden)', () => {
 });
 
 test('honours reduced motion by dropping the fade animation', () => {
-  const reduced = css.slice(css.lastIndexOf('prefers-reduced-motion'));
-  assert.match(reduced, /\.match-intro-card \{ animation: none; \}/);
+  // Any reduced-motion block may carry it; other features add their own blocks.
+  assert.match(css, /prefers-reduced-motion[^@]*\.match-intro-card \{ animation: none; \}/);
 });
