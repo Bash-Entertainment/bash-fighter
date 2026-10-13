@@ -357,7 +357,8 @@ onlineButton.textContent = 'Play online';
 (startScreen.root.querySelector('#primary-actions') ?? startScreen.root).appendChild(onlineButton);
 
 if (shouldShowLeavePrompt()) {
-  mountLeavePrompt(startScreen.root.querySelector('#primary-actions') ?? onlineButton, () => touchCapable);
+  // Above the attract window so it is visible without scrolling on desktop.
+  mountLeavePrompt(startScreen.root.querySelector<HTMLElement>('#attract-frame')?.previousElementSibling as HTMLElement ?? onlineButton, () => touchCapable);
 }
 
 // Move reference (repo issue #5): reachable from the start screen at any
