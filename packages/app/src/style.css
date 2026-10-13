@@ -2555,3 +2555,6 @@ body.end-screen-open #net-mode-line {
   border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer;
 }
 .leave-prompt-send:disabled { opacity: 0.4; cursor: default; }
+
+/* A returning player already saw the attract match; keep Play and the leave prompt above the fold. */
+body:has(.leave-prompt) #attract-frame, body:has(.leave-prompt) .attract-caption { display: none; }
