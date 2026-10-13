@@ -2518,3 +2518,40 @@ body.end-screen-open #net-mode-line {
 @media (prefers-reduced-motion: reduce) {
   .touch-btn.beckon { animation: none; box-shadow: 0 0 0 3px var(--accent); }
 }
+
+/* Next-visit "why did you leave?" prompt: inline under Play, never modal. */
+.leave-prompt {
+  margin: 14px auto 0;
+  max-width: 420px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid #2c3037;
+  border-radius: 8px;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--ink);
+  text-align: left;
+}
+.leave-prompt-thanks { text-align: center; color: var(--ink-dim); }
+.leave-prompt-head { display: flex; gap: 8px; justify-content: space-between; align-items: flex-start; }
+.leave-prompt-close {
+  background: none; border: 0; color: var(--ink-dim); font-size: 20px; line-height: 1;
+  cursor: pointer; padding: 0 4px; min-width: 32px; min-height: 32px;
+}
+.leave-prompt-close:hover { color: var(--ink); }
+.leave-prompt-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.leave-prompt-chip {
+  font-family: inherit; font-size: 13px; color: var(--ink); background: transparent;
+  border: 1px solid #2c3037; border-radius: 999px; padding: 8px 12px; cursor: pointer;
+}
+.leave-prompt-chip[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.leave-prompt-row { display: flex; gap: 8px; }
+.leave-prompt-input {
+  flex: 1; min-width: 0; font-family: inherit; font-size: 14px; color: var(--ink);
+  background: var(--bg); border: 1px solid #2c3037; border-radius: 6px; padding: 8px 10px;
+}
+.leave-prompt-send {
+  font-family: inherit; font-size: 14px; font-weight: 600; color: var(--bg); background: var(--accent);
+  border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer;
+}
+.leave-prompt-send:disabled { opacity: 0.4; cursor: default; }

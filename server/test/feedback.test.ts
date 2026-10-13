@@ -341,3 +341,22 @@ test('feedback: a self-declared QA submission is marked, a player submission is 
     assert.equal(lines[2].qa, undefined);
   });
 });
+
+test('feedback: a leave-reason with a whitelisted chip is stored; an unknown chip is rejected', async () => {
+  await withServer(undefined, async (baseUrl, logPath) => {
+    const post = (body: unknown) =>
+      fetch(`${baseUrl}/api/feedback`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const ok = await post({ kind: 'leave-reason', reason: 'too-hard', context: { touchControls: true } });
+    assert.equal(ok.status, 200);
+    const bad = await post({ kind: 'leave-reason', reason: 'evil<script>' });
+    assert.equal(bad.status, 400);
+    const lines = readLines(logPath);
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0].kind, 'leave-reason');
+    assert.equal(lines[0].reason, 'too-hard');
+  });
+});

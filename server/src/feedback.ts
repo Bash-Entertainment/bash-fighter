@@ -30,6 +30,8 @@ const RATING_KEYS = [
   'touchErgonomics',
   'matchmakingClarity',
 ] as const;
+export const LEAVE_REASON_IDS = ['too-hard', 'confusing', 'laggy', 'just-looking', 'other'] as const;
+export type LeaveReasonId = (typeof LEAVE_REASON_IDS)[number];
 export type RatingKey = (typeof RATING_KEYS)[number];
 export type FeedbackRatings = Partial<Record<RatingKey, number>>;
 
@@ -54,6 +56,8 @@ export interface StoredFeedback {
    *  feedback review can tell our smoke tests from a real player's
    *  words -- the same self-declared flag the stats report uses. */
   qa?: boolean;
+  kind?: 'leave-reason';
+  reason?: LeaveReasonId;
   comment?: string;
   ratings?: FeedbackRatings;
   context?: FeedbackContext;
@@ -288,13 +292,27 @@ export function createFeedbackHandler(options: FeedbackHandlerOptions = {}) {
       const ratings = sanitiseRatings(body.ratings);
       const context = sanitiseContext(body.context);
 
-      if (!comment && !ratings) {
+      let leaveReason: LeaveReasonId | undefined;
+      if (body.kind !== undefined || body.reason !== undefined) {
+        const reason = LEAVE_REASON_IDS.find((id) => id === body.reason);
+        if (body.kind !== 'leave-reason' || !reason) {
+          sendJson(res, 400, { ok: false, error: 'invalid leave-reason' });
+          return;
+        }
+        leaveReason = reason;
+      }
+
+      if (!comment && !ratings && !leaveReason) {
         sendJson(res, 400, { ok: false, error: 'comment or ratings required' });
         return;
       }
 
       const record: StoredFeedback = { receivedAt: new Date(now()).toISOString() };
       if (body.qa === true) record.qa = true;
+      if (leaveReason) {
+        record.kind = 'leave-reason';
+        record.reason = leaveReason;
+      }
       if (comment) record.comment = comment;
       if (ratings) record.ratings = ratings;
       if (context) record.context = context;

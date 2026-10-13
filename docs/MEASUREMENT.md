@@ -1096,3 +1096,7 @@ Both fields are captured in `packages/app/src/net-match.ts` by reading `this.ren
 
 Press F3 in-match to show the live debug overlay (tick, hash, per-fighter state). The overlay does not currently display current resolution, but `this.renderer.currentResolution` and `this.renderer.adaptiveResolutionCounters` are always readable in the browser console while in-match.
 
+
+## Leave-reason prompt
+
+A player who unloads the page mid-match (alive, match not over) gets the localStorage flag `bash-fighter:left-mid-match`; on their next visit one inline, dismissible prompt asks why (five fixed chips plus an optional 200-char line) and posts to `/api/feedback` with `kind:'leave-reason'` and `reason:<chip id>` -- same record shape and context as the feedback panel, nothing extra -- shown once ever (`bash-fighter:leave-prompt-shown`).

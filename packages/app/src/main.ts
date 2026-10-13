@@ -17,6 +17,8 @@ import { MatchOverlay, SPECTATE_OFFER, type MatchOverlayContent } from './ui/mat
 import { ControlsHint } from './ui/controls-hint.ts';
 import { MoveReferencePanel } from './ui/move-reference-panel.ts';
 import { SettingsPanel } from './ui/settings-panel.ts';
+import { shouldShowLeavePrompt } from './leave-prompt.ts';
+import { mountLeavePrompt } from './ui/leave-prompt-panel.ts';
 import { FeedbackPanel } from './ui/feedback-panel.ts';
 import { TouchControls } from './ui/touch-controls.ts';
 import { WaitingScreen } from './ui/waiting-screen.ts';
@@ -353,6 +355,10 @@ onlineButton.textContent = 'Play online';
 // the end of the screen, below the local key bindings and off the bottom
 // of most viewports.
 (startScreen.root.querySelector('#primary-actions') ?? startScreen.root).appendChild(onlineButton);
+
+if (shouldShowLeavePrompt()) {
+  mountLeavePrompt(startScreen.root.querySelector('#primary-actions') ?? onlineButton, () => touchCapable);
+}
 
 // Move reference (repo issue #5): reachable from the start screen at any
 // time, and from inside a match (bound below) without ending it.

@@ -18,6 +18,7 @@ import {
 import { PLACEHOLDER_CHARACTER, createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID } from '@bash-fighter/content';
 import type { CharacterData } from '@bash-fighter/sim';
 import { InputManager, isTouchCapable } from '@bash-fighter/input';
+import { markLeftMidMatch } from './leave-prompt.ts';
 import { buildClientProfile, visitSource, nextMatchIndex, buildSessionReportMessage, InputActivityTracker, InputUsageTracker, FrameTimeTracker, NetworkHitchTracker, SlowFrameTracker, SLOW_FRAME_THRESHOLD_MS } from './session-report.ts';
 import { readBuildSha } from './ui/feedback-panel.ts';
 import {
@@ -371,6 +372,12 @@ export class NetMatch {
     if (document.hidden) this.sendSessionReport();
   };
 
+  // Unloading mid-match as a live player (not eliminated/spectating, match
+  // not over) is the "left mid-match" the next-visit prompt asks about.
+  private readonly pageHideHandler = (): void => {
+    if (this.matchStarted && !this.spectating && this.mySlot >= 0 && !this.over) markLeftMidMatch();
+  };
+
   // Not a TS parameter-property constructor: this class is imported
   // directly (not through vite) by a plain `node --test` regression test
   // (net-match-stale-socket.test.ts) for the stale-socket-message guard,
@@ -417,6 +424,7 @@ export class NetMatch {
     if (typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__debugRenderer = this.renderer;
     this.input.attach(window);
     document.addEventListener('visibilitychange', this.visibilityHandler);
+    window.addEventListener('pagehide', this.pageHideHandler);
   }
 
   /** Sends the small, infrequent sessionReport (see docs/MEASUREMENT.md).
@@ -644,6 +652,7 @@ export class NetMatch {
     if (this.reportTimer) clearInterval(this.reportTimer);
     this.reportTimer = null;
     document.removeEventListener('visibilitychange', this.visibilityHandler);
+    window.removeEventListener('pagehide', this.pageHideHandler);
     this.loop?.stop();
     this.input.detach(window);
     this.ws?.close();
