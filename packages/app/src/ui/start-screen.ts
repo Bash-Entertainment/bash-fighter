@@ -119,6 +119,7 @@ export class StartScreen {
           <p class="hint">The arena shrinks as fighters are eliminated. Empty slots are filled by bots so a match always starts.</p>
         </section>
         <button class="btn btn-secondary" id="watch-replay-btn">Watch a replay</button>
+        <a class="btn-plain" id="contribute-link" href="https://github.com/Bash-Entertainment/bash-fighter/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer">Contribute</a>
         <details class="local-play">
           <summary>Play locally on one keyboard</summary>
           <div class="select-row">

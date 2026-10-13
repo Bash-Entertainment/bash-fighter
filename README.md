@@ -158,6 +158,7 @@ architecture is shaped this way.
 ## Contributing
 
 See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for dev environment setup,
+(and [`AGENTS.md`](./AGENTS.md) for a short commands-and-conventions cheat sheet),
 coding standards, and the PR process. [`docs/ROADMAP.md`](./docs/ROADMAP.md)
 tracks what's built, in progress, and not started. Use the issue forms
 under `.github/ISSUE_TEMPLATE/` to report bugs or propose features, and

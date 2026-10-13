@@ -6,6 +6,9 @@ request, read [`CLA.md`](./CLA.md): contributions require agreeing to a
 Contributor License Agreement. It is a licence grant, not a copyright
 assignment — you keep ownership of what you write.
 
+For a short cheat sheet of run/test commands, layout and conventions, see
+[`AGENTS.md`](./AGENTS.md).
+
 **Signing the CLA (first PR only):** add one line to
 [`CLA-SIGNATURES.md`](./CLA-SIGNATURES.md), in your own pull request:
 
