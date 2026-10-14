@@ -132,6 +132,39 @@ The live production deployment is at https://bashfighter.com/ and runs the
 match server described above; the "PLAY ONLINE" flow works the same way
 against it as against a local `server` dev instance.
 
+### Testing on a mobile viewport
+
+The touch/mobile layout is not just a narrower desktop layout, so it is
+worth knowing how to actually get in front of it. The pieces involved are
+the small-screen block in `packages/app/src/style.css` (the breakpoint at
+`max-width: 700px`, with further tuning at `480px` and `330px`) and the
+on-screen controls in `packages/app/src/ui/touch-controls.ts`. Overlap
+bugs have shown up at a real 390px phone width that resizing a desktop
+window did not reproduce, so there are two routes, in increasing order of
+accuracy:
+
+- **Devtools responsive mode, for layout iteration.** Open the device
+  toolbar (Chrome/Edge/Firefox: Ctrl/Cmd+Shift+M) and pick a phone preset
+  or set a custom width. This is the fast loop, and enough for pure layout
+  work. It is not a touch device, though: the on-screen controls are gated
+  on `isTouchCapable()` (see `packages/input/src/touch.ts`), which reads
+  `navigator.maxTouchPoints` and `ontouchstart`, so they only appear if
+  your devtools session reports touch support.
+
+- **A real phone on the same network, for anything touching input.** The
+  app dev server in `packages/app` listens on `0.0.0.0:5173`, so
+  `npm run dev` prints a `Network:` URL alongside its `Local:` one. Open
+  that URL on a phone connected to the same Wi-Fi. This is the only route
+  that gives real `PointerEvent`s, true `vw` resolution, and genuine
+  capability detection, which is what those 390px bugs needed. The offline
+  "PLAY" button runs entirely client-side, so the match server does not
+  need to be running for layout work -- only "PLAY ONLINE" connects to it.
+
+If you want the on-screen controls in a desktop browser without a phone,
+add `?forceTouch=1` to the dev URL. It forces `isTouchCapable()` to true
+and is used by the automated touch verification harness; it has no effect
+unless the URL explicitly asks for it.
+
 To reproduce a full 20-fighter crowd locally without a server or a live
 lobby (`?crowd20=1`, reproducible via `&seed=`/`&arena=`), see
 [`docs/LOCAL_CROWD_TESTING.md`](./docs/LOCAL_CROWD_TESTING.md).
