@@ -14,6 +14,8 @@ const DEFAULT_SECONDS = 6;
 // closed instead of re-queueing. Input this soon after the screen opens is
 // leftover match input, not a decision.
 export const CANCEL_GRACE_MS = 1500;
+// Controls inside the end screen that must not stop the countdown (the match rating row).
+export const KEEPS_COUNTDOWN_SELECTOR = '[data-keeps-countdown]';
 
 export class AutoContinue {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -21,6 +23,7 @@ export class AutoContinue {
   private readonly label: string;
   private readonly cancelOnInteraction = (event: Event): void => {
     if (event.target instanceof Node && this.button.contains(event.target)) return;
+    if (event.target instanceof Element && event.target.closest(KEEPS_COUNTDOWN_SELECTOR)) return;
     if (Date.now() - this.startedAt < CANCEL_GRACE_MS) return;
     this.cancel();
   };

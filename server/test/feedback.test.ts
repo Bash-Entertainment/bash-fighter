@@ -360,3 +360,30 @@ test('feedback: a leave-reason with a whitelisted chip is stored; an unknown chi
     assert.equal(lines[0].reason, 'too-hard');
   });
 });
+
+test('feedback: a match-rating is stored with kind and rating; unknown ratings and mixed kinds are rejected', async () => {
+  await withServer({}, async (baseUrl, logPath) => {
+    const post = (body: unknown) =>
+      fetch(`${baseUrl}/api/feedback`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const ok = await post({ kind: 'match-rating', rating: 'okay', context: { mode: 'timed-brawl' } });
+    assert.equal(ok.status, 200);
+    for (const bad of [
+      { kind: 'match-rating', rating: 'great' },
+      { kind: 'match-rating' },
+      { kind: 'match-rating', rating: 5 },
+      { kind: 'match-rating', rating: 'good', reason: 'laggy' },
+      { rating: 'good' },
+      { kind: 'leave-reason', reason: 'laggy', rating: 'good' },
+    ]) {
+      assert.equal((await post(bad)).status, 400, JSON.stringify(bad));
+    }
+    const lines = readLines(logPath);
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0]?.kind, 'match-rating');
+    assert.equal(lines[0]?.rating, 'okay');
+  });
+});

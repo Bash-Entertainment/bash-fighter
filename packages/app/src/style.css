@@ -2558,3 +2558,13 @@ body.end-screen-open #net-mode-line {
 
 /* A returning player already saw the attract match; keep Play and the leave prompt above the fold. */
 body:has(.leave-prompt) #attract-frame, body:has(.leave-prompt) .attract-caption { display: none; }
+
+/* One-tap match rating on the end screens. */
+.match-rating { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; font-size: 13px; color: var(--ink-dim); }
+.match-rating-btn {
+  font-family: var(--font-ui); font-size: 13px; color: var(--ink); background: transparent;
+  border: 1px solid #2c3037; padding: 6px 14px; cursor: pointer;
+}
+.match-rating-btn:hover { border-color: var(--ink-dim); }
+.match-rating-btn[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.match-rating-thanks { color: var(--ink-dim); }

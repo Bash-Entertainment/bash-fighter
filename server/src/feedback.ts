@@ -31,6 +31,8 @@ const RATING_KEYS = [
   'matchmakingClarity',
 ] as const;
 export const LEAVE_REASON_IDS = ['too-hard', 'confusing', 'laggy', 'just-looking', 'other'] as const;
+export const MATCH_RATINGS = ['bad', 'okay', 'good'] as const;
+export type MatchRating = (typeof MATCH_RATINGS)[number];
 export type LeaveReasonId = (typeof LEAVE_REASON_IDS)[number];
 export type RatingKey = (typeof RATING_KEYS)[number];
 export type FeedbackRatings = Partial<Record<RatingKey, number>>;
@@ -56,8 +58,9 @@ export interface StoredFeedback {
    *  feedback review can tell our smoke tests from a real player's
    *  words -- the same self-declared flag the stats report uses. */
   qa?: boolean;
-  kind?: 'leave-reason';
+  kind?: 'leave-reason' | 'match-rating';
   reason?: LeaveReasonId;
+  rating?: MatchRating;
   comment?: string;
   ratings?: FeedbackRatings;
   context?: FeedbackContext;
@@ -293,16 +296,25 @@ export function createFeedbackHandler(options: FeedbackHandlerOptions = {}) {
       const context = sanitiseContext(body.context);
 
       let leaveReason: LeaveReasonId | undefined;
-      if (body.kind !== undefined || body.reason !== undefined) {
-        const reason = LEAVE_REASON_IDS.find((id) => id === body.reason);
-        if (body.kind !== 'leave-reason' || !reason) {
-          sendJson(res, 400, { ok: false, error: 'invalid leave-reason' });
-          return;
+      let matchRating: MatchRating | undefined;
+      if (body.kind !== undefined || body.reason !== undefined || body.rating !== undefined) {
+        if (body.kind === 'match-rating') {
+          matchRating = MATCH_RATINGS.find((r) => r === body.rating);
+          if (!matchRating || body.reason !== undefined) {
+            sendJson(res, 400, { ok: false, error: 'invalid match-rating' });
+            return;
+          }
+        } else {
+          const reason = LEAVE_REASON_IDS.find((id) => id === body.reason);
+          if (body.kind !== 'leave-reason' || !reason || body.rating !== undefined) {
+            sendJson(res, 400, { ok: false, error: 'invalid leave-reason' });
+            return;
+          }
+          leaveReason = reason;
         }
-        leaveReason = reason;
       }
 
-      if (!comment && !ratings && !leaveReason) {
+      if (!comment && !ratings && !leaveReason && !matchRating) {
         sendJson(res, 400, { ok: false, error: 'comment or ratings required' });
         return;
       }
@@ -312,6 +324,10 @@ export function createFeedbackHandler(options: FeedbackHandlerOptions = {}) {
       if (leaveReason) {
         record.kind = 'leave-reason';
         record.reason = leaveReason;
+      }
+      if (matchRating) {
+        record.kind = 'match-rating';
+        record.rating = matchRating;
       }
       if (comment) record.comment = comment;
       if (ratings) record.ratings = ratings;

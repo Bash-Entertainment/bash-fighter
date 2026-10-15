@@ -4,6 +4,7 @@
 // should not feel like they are looking at two different games.
 import { PALETTE } from '@bash-fighter/render';
 import { AutoContinue } from './auto-continue.ts';
+import { MatchRatingRow } from './match-rating-row.ts';
 import { copyToClipboard } from '../join-link.ts';
 
 const PLAYER_HEX = PALETTE.playerColors.map((c) => `#${c.toString(16).padStart(6, '0')}`);
@@ -16,6 +17,7 @@ export class WinScreen {
    * on its own; the local harness is something the player chose to open. */
   autoContinueEnabled = false;
   private readonly autoContinue!: AutoContinue;
+  private readonly rating: MatchRatingRow;
   private readonly onRematch: () => void;
   private lastResult: 'won' | 'eliminated' | 'no_survivor' = 'no_survivor';
   private inviteLink: string | null = null;
@@ -44,6 +46,7 @@ export class WinScreen {
       <div class="win-headline" id="win-headline">&mdash;</div>
       <div class="subtitle" id="win-subtitle">Match over.</div>
       <button class="btn btn-primary" id="rematch-btn">Play again</button>
+      <div class="match-rating-slot"></div>
       <div class="feedback-end-screen-block">
         <div class="feedback-end-screen-copy">Got a minute? Tell us what felt off.</div>
         <button type="button" class="feedback-link-btn" id="win-feedback-btn">Feedback</button>
@@ -59,6 +62,7 @@ export class WinScreen {
       onRematch();
     });
     this.autoContinue = new AutoContinue(this.root, rematchBtn);
+    this.rating = new MatchRatingRow(this.root.querySelector('.match-rating-slot') as HTMLElement);
     this.onRematch = onRematch;
     (this.root.querySelector('#win-feedback-btn') as HTMLButtonElement).addEventListener('click', () =>
       onOpenFeedback?.(this.lastResult),
@@ -111,6 +115,7 @@ export class WinScreen {
       this.lastResult = won ? 'won' : 'eliminated';
     }
     if (winnerIndex === null) this.lastResult = 'no_survivor';
+    this.rating.open('battle-royale');
     this.root.classList.remove('hidden');
     if (this.autoContinueEnabled) this.autoContinue.start(this.onRematch);
     document.body.classList.add('end-screen-open');
