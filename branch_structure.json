@@ -1,0 +1,21 @@
+{
+  "default_branch": "main",
+  "branches": [
+    "gfi/25-mobile-viewport-testing",
+    "main",
+    "origin",
+    "prototype"
+  ],
+  "parent": {
+    "gfi/25-mobile-viewport-testing": "main",
+    "main": null,
+    "origin": "main",
+    "prototype": "main"
+  },
+  "order": [
+    "main",
+    "gfi/25-mobile-viewport-testing",
+    "origin",
+    "prototype"
+  ]
+}

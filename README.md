@@ -136,6 +136,19 @@ To reproduce a full 20-fighter crowd locally without a server or a live
 lobby (`?crowd20=1`, reproducible via `&seed=`/`&arena=`), see
 [`docs/LOCAL_CROWD_TESTING.md`](./docs/LOCAL_CROWD_TESTING.md).
 
+To test the mobile/touch layout on a real device rather than just
+resizing a desktop browser window, run the Vite dev server as above
+and open the LAN URL it prints: the `host: '0.0.0.0'` setting in
+`packages/app/vite.config.ts` makes Vite listen on the local network,
+so a phone on the same Wi-Fi can reach the dev server directly.
+Some layout and `PointerEvent` bugs only reproduce at true `vw`
+resolution with real touch input. For a quick check without a phone,
+use the browser devtools device toolbar (Chrome: F12 then
+Ctrl+Shift+M; Safari: Develop then Enter Responsive Design Mode)
+and set a 390 x 844 viewport, which is the size the mobile
+breakpoint at `max-width: 700px` in `packages/app/src/style.css`
+is tuned for.
+
 The game is also published as an HTML5 playable on
 [itch.io](https://bashfighter.itch.io/bash-fighter), built from the same
 source with a separate static bundle so it works from itch's CDN
