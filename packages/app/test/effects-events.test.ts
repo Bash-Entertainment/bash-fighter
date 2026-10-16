@@ -152,3 +152,9 @@ test('detectItemEvents: use fires when an armed item stops being armed', () => {
   const events = detectItemEvents(prev, curr, 1);
   assert.deepEqual(events, [{ type: 'itemUse', slot: 0 }]);
 });
+
+test('detectFighterEvents: a rising koCount fires a knockout for that fighter', () => {
+  const prev = [baseFighter({ koCount: 1 }), baseFighter({})];
+  const curr = [baseFighter({ koCount: 2 }), baseFighter({})];
+  assert.deepEqual(detectFighterEvents(prev, curr, 2), [{ type: 'knockout', fighterIndex: 0 }]);
+});

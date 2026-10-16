@@ -25,6 +25,8 @@ export interface HitEffectInput {
    * the local player was actually involved. Omit (or pass 1) when there
    * is no local player to compare against, e.g. while spectating. */
   shakeAttenuation?: number;
+  /** The local player landed this hit: bigger punch. */
+  landed?: boolean;
 }
 
 interface Particle {
@@ -52,6 +54,7 @@ interface TrailSegment {
 const SPARK_COLOR = PALETTE.danger;
 const POP_COLOR = PALETTE.hud;
 const TRAIL_COLOR = PALETTE.hud;
+const LAUNCH_TRAIL_COLOR = 0xe8b23c;
 
 // A fighter has to be moving at least this many screen pixels per
 // frame-equivalent (16.6667ms) while in hitstun before it earns a
@@ -133,6 +136,7 @@ export class EffectsLayer {
   // Last known screen position per fighter index, used only to measure
   // frame-to-frame screen-space speed for the launch trail -- never
   // read from or fed back into sim state.
+  private launchRemainingMs = new Map<number, number>();
   private lastTrailPos = new Map<number, { x: number; y: number }>();
 
   // Per-fighter-index flash timers (index -> remaining ms + total ms for
@@ -229,7 +233,12 @@ export class EffectsLayer {
     this.popLayer.addChild(pop);
     this.pops.push({ g: pop, ageMs: 0, lifeMs: 120 + strength * 80, baseScale: 1 });
 
-    this.addShake(strength, 1, input.shakeAttenuation ?? 1);
+    this.addShake(strength, input.landed ? 1.6 : 1, input.shakeAttenuation ?? 1);
+  }
+
+  /** Mark a fighter as launched by the local player so trailFighter draws a heavy amber streak. */
+  markLaunch(fighterIndex: number, ms: number): void {
+    this.launchRemainingMs.set(fighterIndex, ms);
   }
 
   /** Called once per fighter per render frame with its current screen
@@ -244,7 +253,8 @@ export class EffectsLayer {
   trailFighter(fighterIndex: number, x: number, y: number, inHitstun: boolean): void {
     const prev = this.lastTrailPos.get(fighterIndex);
     this.lastTrailPos.set(fighterIndex, { x, y });
-    if (!prev || !inHitstun) return;
+    const launched = (this.launchRemainingMs.get(fighterIndex) ?? 0) > 0;
+    if (!prev || !(inHitstun || launched)) return;
     const dx = x - prev.x;
     const dy = y - prev.y;
     const dist = Math.hypot(dx, dy);
@@ -258,11 +268,11 @@ export class EffectsLayer {
       oldest?.g.destroy();
     }
     const speedFrac = Math.min(1, (dist - TRAIL_SPEED_THRESHOLD_PX) / 40);
-    const thickness = 3 + speedFrac * 4;
+    const thickness = launched ? 7 + speedFrac * 8 : 3 + speedFrac * 4;
     const g = new Graphics();
     g.moveTo(prev.x, prev.y);
     g.lineTo(x, y);
-    g.stroke({ color: TRAIL_COLOR, width: thickness, alpha: 0.5 + speedFrac * 0.3 });
+    g.stroke({ color: launched ? LAUNCH_TRAIL_COLOR : TRAIL_COLOR, width: thickness, alpha: 0.5 + speedFrac * 0.3 });
     this.trailLayer.addChild(g);
     this.trails.push({ g, ageMs: 0, lifeMs: 110 + speedFrac * 80 });
   }
@@ -322,6 +332,10 @@ export class EffectsLayer {
    * deleted after use) because it is generically useful for reviewing
    * any future impact-effect tuning the same way. */
   update(dtMs: number): { x: number; y: number } {
+    for (const [k, v] of this.launchRemainingMs) {
+      if (v - dtMs <= 0) this.launchRemainingMs.delete(k);
+      else this.launchRemainingMs.set(k, v - dtMs);
+    }
     const timeScale =
       typeof window !== 'undefined' && typeof (window as unknown as Record<string, unknown>).__debugEffectTimeScale === 'number'
         ? ((window as unknown as Record<string, unknown>).__debugEffectTimeScale as number)

@@ -2558,3 +2558,28 @@ body.end-screen-open #net-mode-line {
 
 /* A returning player already saw the attract match; keep Play and the leave prompt above the fold. */
 body:has(.leave-prompt) #attract-frame, body:has(.leave-prompt) .attract-caption { display: none; }
+
+.ko-pop {
+  position: fixed;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  z-index: 60;
+  pointer-events: none;
+  font: 900 clamp(64px, 14vw, 140px) / 1 system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: #e8b23c;
+  background: rgba(10, 10, 12, 0.72);
+  padding: 0.1em 0.35em;
+  animation: ko-pop 700ms ease-out forwards;
+}
+@keyframes ko-pop {
+  0% { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+  15% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  75% { opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(0.95); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ko-pop { animation: ko-pop-fade 700ms linear forwards; }
+}
+@keyframes ko-pop-fade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }

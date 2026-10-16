@@ -80,7 +80,7 @@ test('RoomManager: a fresh match created for a requeued join follows the rotatio
 
 test('RoomManager: matchesPlayed=1 tapers the rookie scale below the first-match boost', () => {
   // Tapered first-matches knockout boost (2026-09-26): a seat reporting
-  // one prior match gets the 1.35x-equivalent step, not the 1.75x
+  // one prior match gets the tapered step, not the 2.6x
   // first-match value and not the 1.0x cliff match 2 used to get.
   const noopEvents = () => ({ onSnapshot: () => {}, onEliminated: () => {} });
   const manager = new RoomManager(noopEvents, /* capacity */ 2, /* minimum */ 2);

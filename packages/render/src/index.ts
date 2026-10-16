@@ -125,6 +125,8 @@ export interface PendingHitEffect {
   dirY: number;
   strength: number; // 0..1
   strong: boolean; // true = heavy hit, drives longer flash + optional freeze
+  /** True when the local player landed this hit: adds hit-pause, a stronger punch and a launch trail. */
+  landed?: boolean;
 }
 
 export interface PendingEliminationEffect {
@@ -1170,9 +1172,15 @@ export class Renderer {
         dirX: hit.dirX,
         dirY: -hit.dirY,
         strength: hit.strength,
-        shakeAttenuation: shakeAttenuationFor(hit.worldX, hit.worldY),
+        shakeAttenuation: hit.landed ? 1 : shakeAttenuationFor(hit.worldX, hit.worldY),
+        landed: hit.landed,
       });
-      this.effects.flashFighter(hit.fighterIndex, hit.strong);
+      this.effects.flashFighter(hit.fighterIndex, hit.strong || !!hit.landed);
+      if (hit.landed) {
+        this.effects.markLaunch(hit.fighterIndex, 250 + hit.strength * 450);
+        // Hit-pause: hold the picture briefly; heavier hits hold longer.
+        this.freezeRemainingMs = Math.max(this.freezeRemainingMs, 40 + hit.strength * 60);
+      }
     }
     for (const elim of frame.eliminationEffects ?? []) {
       const screen = worldToScreen(elim.worldX, elim.worldY, cam, vw, vh);

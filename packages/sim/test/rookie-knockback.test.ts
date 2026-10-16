@@ -48,6 +48,11 @@ describe('Rookie knockback boost', () => {
     assert.ok(fx.toFloat(secondMatchScale) < fx.toFloat(ROOKIE_KNOCKBACK_SCALE));
   });
 
+  it('gives a first-match rookie at least 2.5x outgoing knockback, tapering after', () => {
+    assert.ok(fx.toFloat(rookieScaleForMatchesPlayed(0)) >= 2.5);
+    assert.ok(fx.toFloat(rookieScaleForMatchesPlayed(1)) < fx.toFloat(rookieScaleForMatchesPlayed(0)));
+  });
+
   it('is fully decayed to 1.0x by the fourth match (index >= 3)', () => {
     assert.equal(rookieScaleForMatchesPlayed(3), 1 << 16);
     assert.equal(rookieScaleForMatchesPlayed(50), 1 << 16);
