@@ -17,6 +17,7 @@ import path from 'node:path';
 import type { MatchSummary } from './match.ts';
 import { computeDerivedPlayMetrics, type SessionEndConnLike } from './session-telemetry.ts';
 import type { Match } from './match.ts';
+import type { TraceEntry } from './session-trace.ts';
 
 /** Default log path: next to production's other shared-state files
  *  (/srv/bash-fighter/shared, see feedback.ts and match-defaults.ts) but
@@ -126,6 +127,8 @@ export interface StoredSessionEndRecord {
    *  fabricated zero, same convention as every field above. Absent on
    *  records written before this field existed -- the report treats
    *  those the same way. */
+  /** Per-second telemetry trace, tuple documented in session-trace.ts. */
+  trace: TraceEntry[];
   visibleMs: number | null;
   hiddenMs: number | null;
   matchAgeAtLeaveSec: number | null;
@@ -269,6 +272,7 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       spectatingMs: derived.spectatingMs,
       leftBeforeFirstElimination: derived.leftBeforeFirstElimination,
       reconnectCount: conn.reconnectCount,
+      trace: seat.trace.entries,
     };
     appendStatsLine(logPath, record);
   }

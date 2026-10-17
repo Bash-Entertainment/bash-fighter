@@ -182,6 +182,33 @@ test('recordSessionEnd: appends one sessionEnd record derived from the real Matc
   }
 });
 
+test('recordSessionEnd: trace is bounded, one tuple per match second, shaped per session-trace.ts', () => {
+  const { logPath, cleanup } = scratchDir();
+  try {
+    const match = new Match('stats-trace-test', 2, 1, noopEvents());
+    match.addSeat('human-a', false);
+    match.addSeat('bot-1', true, undefined as unknown as string);
+    match.start();
+    match.stop();
+    const step = (match as unknown as { tickOnce(): void }).tickOnce.bind(match);
+    for (let i = 0; i < 60 * 100; i++) step();
+
+    createStatsRecorder({ logPath, now: () => 1_700_000_010_000 }).recordSessionEnd(fakeConn({ slot: 0 }), match);
+    const trace = readLines(logPath)[0]!.trace as number[][];
+    assert.ok(Array.isArray(trace));
+    assert.equal(trace.length, 90);
+    trace.forEach((e, i) => {
+      assert.equal(e.length, 10);
+      assert.ok(e.every(Number.isInteger));
+      assert.equal(e[0], i + 1);
+      assert.ok(e[8] === 0 || e[8] === 1);
+      assert.ok(e[9] === 0 || e[9] === 1);
+    });
+  } finally {
+    cleanup();
+  }
+});
+
 test('accumulation: multiple matchEnd/sessionEnd records land as separate lines in the one file', () => {
   const { logPath, cleanup } = scratchDir();
   try {
