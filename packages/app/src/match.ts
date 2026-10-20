@@ -424,6 +424,7 @@ export class Match {
       hash: this.currentHash(),
       hitEffects,
       eliminationEffects,
+      crownSlot: this.sim.getCrownHolder(),
       liveArenaBounds: currentArenaBounds(blastRect),
       previewArenaBounds: previewArenaBounds(
         this.sim.getArena(),

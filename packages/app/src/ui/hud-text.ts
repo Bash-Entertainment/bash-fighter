@@ -55,13 +55,13 @@ export function objectiveLineText(
   const mode = modeLabelText(winCondition);
   if (winCondition === 'timedKO') {
     if (spectating) {
-      return `${mode}: fighters respawn when knocked out, and most knockouts when the clock runs out wins.`;
+      return `${mode}: fighters respawn when knocked out, and most knockouts when the clock runs out wins. Knocking out the crowned leader is worth 2.`;
     }
     // The respawn clause matters more than the win condition for a
     // newcomer: Timed Brawl is now the first match a first-time visitor
     // gets (server/src/mode-rotation.ts) precisely because being knocked
     // out does not end their match, and nothing else on screen says so.
-    return `${mode}: you respawn when knocked out, and most knockouts when the clock runs out wins.`;
+    return `${mode}: you respawn when knocked out, and most knockouts when the clock runs out wins. Knocking out the crowned leader is worth 2.`;
   }
   return `${mode}: the ${winConditionText(winCondition)} wins.`;
 }
@@ -141,11 +141,20 @@ export function ordinal(n: number): string {
  * the end-screen's buildStandings behaviour), and the current leader's
  * count -- never a full N-row table (see koStandingInfo in
  * timed-brawl.ts for how this is computed). */
-export function koStandingLineText(ownKo: number, ownRank: number, totalFighters: number, leaderKo: number): string {
+export function koStandingLineText(
+  ownKo: number,
+  ownRank: number,
+  totalFighters: number,
+  leaderKo: number,
+  crownHolder: number | null = null,
+  localIndex = -1,
+): string {
   // "leader 2" read as a fighter number rather than a knockout count when
   // I played it, which is the exact ambiguity this whole line exists to
   // remove, so the unit is spelled out (2026-09-19).
   const leaderPart =
     ownRank === 1 ? '' : ` \u00b7 leader has ${leaderKo} KO${leaderKo === 1 ? '' : 's'}`;
-  return `${ownKo} KO${ownKo === 1 ? '' : 's'} \u00b7 ${ordinal(ownRank)} of ${totalFighters}${leaderPart}`;
+  const crownPart =
+    crownHolder === null ? '' : crownHolder === localIndex ? ' \u00b7 you hold the crown' : ` \u00b7 crown on #${crownHolder + 1}`;
+  return `${ownKo} KO${ownKo === 1 ? '' : 's'} \u00b7 ${ordinal(ownRank)} of ${totalFighters}${leaderPart}${crownPart}`;
 }

@@ -167,6 +167,25 @@ export interface EliminationEvent {
   readonly percentAtDeath: Fixed;
 }
 
+/** KOs credited for knocking out the Timed Brawl crown holder. */
+export const CROWN_KO_VALUE = 2;
+
+/** Index alone at the top of a KO list with at least 1 KO; a tie at the top has none. */
+export function crownHolderOf(kos: readonly number[]): number | null {
+  let best = 0;
+  let holder: number | null = null;
+  for (let i = 0; i < kos.length; i++) {
+    const k = kos[i] as number;
+    if (k > best) {
+      best = k;
+      holder = i;
+    } else if (k === best) {
+      holder = null;
+    }
+  }
+  return holder;
+}
+
 export const FighterField = {
   POS_X: 0,
   POS_Y: 1,
@@ -589,6 +608,17 @@ export class Sim {
     }
     if (alive.length === 1) return alive[0] as number;
     return null;
+  }
+
+  /**
+   * Timed Brawl crown: the fighter alone at the top of the KO count (at least 1 KO).
+   * A tie at the top means no crown. Knocking out the holder is worth CROWN_KO_VALUE.
+   */
+  getCrownHolder(): number | null {
+    if (this.settings.winCondition !== 'timedKO') return null;
+    const kos: number[] = [];
+    for (let i = 0; i < this.numFighters; i++) kos.push(this.data[i * FighterField.FIELD_COUNT + FighterField.KO_COUNT] as number);
+    return crownHolderOf(kos);
   }
 
   isMatchOver(): boolean {
@@ -1961,7 +1991,8 @@ export class Sim {
     const creditedAttacker = cause === 'knockout' ? attacker : -1;
     if (creditedAttacker >= 0) {
       const attackerBase = creditedAttacker * FighterField.FIELD_COUNT;
-      d[attackerBase + FighterField.KO_COUNT] = (d[attackerBase + FighterField.KO_COUNT] as number) + 1;
+      const bonus = this.getCrownHolder() === index ? CROWN_KO_VALUE : 1;
+      d[attackerBase + FighterField.KO_COUNT] = (d[attackerBase + FighterField.KO_COUNT] as number) + bonus;
     }
     this.eliminationEvents.push({
       fighterIndex: index,

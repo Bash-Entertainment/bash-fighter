@@ -9,7 +9,7 @@ import { PALETTE } from '@bash-fighter/render';
 import { AutoContinue } from './auto-continue.ts';
 import { MatchRatingRow } from './match-rating-row.ts';
 import { buildStandings, placementOf, tiedHeadline, type TimedBrawlScore } from '../timed-brawl.ts';
-import { recordAndDescribe } from '../personal-best.ts';
+import { recordKos, nextGoalLine } from '../personal-best.ts';
 import { copyToClipboard } from '../join-link.ts';
 
 const PLAYER_HEX = PALETTE.playerColors.map((c) => `#${c.toString(16).padStart(6, '0')}`);
@@ -51,6 +51,8 @@ export class TimedBrawlEndScreen {
       <div class="win-headline"><span class="tb-winner-swatch" id="tb-winner-swatch"></span><span id="tb-headline">&mdash;</span></div>
       <div class="subtitle" id="tb-subtitle">Time's up.</div>
       <div class="subtitle" id="tb-best"></div>
+      <div class="tb-new-best hidden" id="tb-new-best">New best</div>
+      <div class="subtitle" id="tb-next"></div>
       <div class="tb-standings" id="tb-standings"></div>
       <button class="btn btn-primary" id="tb-rematch-btn">Play again</button>
       <div class="match-rating-slot"></div>
@@ -136,7 +138,12 @@ export class TimedBrawlEndScreen {
       myPlacement !== null ? `You finished ${myPlacement} of ${standings.length} on knockouts.` : 'Highest knockout count wins.';
     const me = localSlot !== undefined && localSlot !== null && localSlot >= 0 ? scores.find((s) => s.slot === localSlot) : undefined;
     const bestEl = this.root.querySelector('#tb-best') as HTMLDivElement;
-    bestEl.textContent = me ? recordAndDescribe(window.localStorage, me.koCount) : '';
+    const newBestEl = this.root.querySelector('#tb-new-best') as HTMLDivElement;
+    const nextEl = this.root.querySelector('#tb-next') as HTMLDivElement;
+    const result = me ? recordKos(window.localStorage, me.koCount) : null;
+    bestEl.textContent = result ? `Your KOs: ${result.kos} · Best: ${result.best}` : '';
+    newBestEl.classList.toggle('hidden', !result?.isNew);
+    nextEl.textContent = nextGoalLine(window.localStorage);
     this.lastResult = winnerSlot === null ? 'tied' : won ? 'won' : 'lost';
 
     this.list.innerHTML = '';

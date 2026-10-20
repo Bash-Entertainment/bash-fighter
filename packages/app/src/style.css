@@ -2593,3 +2593,21 @@ body:has(.leave-prompt) #attract-frame, body:has(.leave-prompt) .attract-caption
   .ko-pop { animation: ko-pop-fade 700ms linear forwards; }
 }
 @keyframes ko-pop-fade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
+
+.tb-new-best {
+  color: #e8b23c;
+  font-size: 16px;
+}
+
+.tb-new-best.hidden {
+  display: none;
+}
+
+.waiting-goal {
+  font-size: 15px;
+  color: #e8b23c;
+}
+
+.waiting-goal:empty {
+  display: none;
+}

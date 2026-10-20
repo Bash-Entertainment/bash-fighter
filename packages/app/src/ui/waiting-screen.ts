@@ -19,6 +19,7 @@
 // fix: an honest countdown (falls back to an indeterminate state if the
 // server hasn't told us a deadline yet, never a fake timer), the bots/
 // other-humans explanation, and Start now.
+import { nextGoalLine } from '../personal-best.ts';
 import { copyToClipboard } from '../join-link.ts';
 
 export class WaitingScreen {
@@ -62,6 +63,7 @@ export class WaitingScreen {
     this.root.innerHTML = `
       <div class="waiting-wordmark">BASH FIGHTER</div>
       <div class="waiting-mode" id="waiting-mode"></div>
+      <div class="waiting-goal" id="waiting-goal"></div>
       <div class="waiting-countdown" id="waiting-countdown">Waiting for players&hellip;</div>
       <div class="waiting-count" id="waiting-count"></div>
       <div class="waiting-explain" id="waiting-explain">Empty seats fill with bots, so a match always starts. Other players join this same lobby when they're around.</div>
@@ -181,6 +183,8 @@ export class WaitingScreen {
   setMode(modeName: string | undefined): void {
     this.modeLine.textContent = modeName ?? '';
     this.modeLine.classList.toggle('hidden', !modeName);
+    const goal = this.root.querySelector('#waiting-goal') as HTMLDivElement;
+    goal.textContent = modeName && /brawl/i.test(modeName) ? nextGoalLine(window.localStorage) : '';
   }
 
   /** countdownTicks is the server's `lobby` message field: ticks (60/s)

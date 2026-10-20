@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BEST_KEY, recordAndDescribe, type StorageLike } from '../src/personal-best.ts';
+import { BEST_KEY, nextGoalLine, recordKos, type StorageLike } from '../src/personal-best.ts';
 
 const mem = (init?: string): StorageLike & { v: string | null } => ({
   v: init ?? null,
@@ -8,31 +8,29 @@ const mem = (init?: string): StorageLike & { v: string | null } => ({
   setItem(_k, val) { this.v = val; },
 });
 
-test('new best is stored and announced', () => {
+test('beating the best stores it and flags it new', () => {
   const s = mem('3');
-  assert.equal(recordAndDescribe(s, 5), 'New personal best: 5 knockouts.');
+  assert.deepEqual(recordKos(s, 5), { kos: 5, best: 5, isNew: true });
   assert.equal(s.v, '5');
-  assert.equal(recordAndDescribe(mem(), 1), 'New personal best: 1 knockout.');
 });
-test('not a best keeps the stored value', () => {
+test('equal or lower keeps the stored best', () => {
   const s = mem('4');
-  assert.equal(recordAndDescribe(s, 2), 'Your best: 4 knockouts. You got 2.');
-  assert.equal(recordAndDescribe(mem('1'), 0), 'Your best: 1 knockout. You got 0.');
+  assert.deepEqual(recordKos(s, 4), { kos: 4, best: 4, isNew: false });
+  assert.deepEqual(recordKos(s, 2), { kos: 2, best: 4, isNew: false });
   assert.equal(s.v, '4');
 });
-test('first match with 0 KOs stores nothing', () => {
+test('zero KOs never stores a best', () => {
   const s = mem();
-  assert.match(recordAndDescribe(s, 0), /first knockout is waiting/);
+  assert.deepEqual(recordKos(s, 0), { kos: 0, best: 0, isNew: false });
   assert.equal(s.v, null);
 });
-test('corrupt stored value is treated as no best', () => {
+test('corrupt value is treated as no best', () => {
   const s = mem('abc');
-  assert.equal(recordAndDescribe(s, 2), 'New personal best: 2 knockouts.');
-  assert.equal(s.v, '2');
+  assert.equal(recordKos(s, 2).isNew, true);
   assert.equal(BEST_KEY, 'bash-fighter:best-timed-kos');
 });
-
-test('equalling the best says so instead of "You got N"', () => {
-  const s = mem('3');
-  assert.equal(recordAndDescribe(s, 3), 'You matched your best: 3 knockouts.');
+test('next goal line names the best, empty without one', () => {
+  assert.equal(nextGoalLine(mem('7')), 'Next: beat 7 KOs');
+  assert.equal(nextGoalLine(mem()), '');
 });
+test('next goal singular', () => { assert.equal(nextGoalLine(mem('1')), 'Next: beat 1 KO'); });

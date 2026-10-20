@@ -16,20 +16,26 @@ export function readBest(storage: StorageLike): number | null {
   }
 }
 
-const knockouts = (n: number): string => `${n} ${n === 1 ? 'knockout' : 'knockouts'}`;
+export interface BestResult {
+  kos: number;
+  best: number;
+  isNew: boolean;
+}
 
-/** Compares kos against the stored best, stores the new best, returns the line to show. */
-export function recordAndDescribe(storage: StorageLike, kos: number): string {
-  const best = readBest(storage);
-  if (kos > (best ?? 0)) {
-    try {
-      storage.setItem(BEST_KEY, String(kos));
-    } catch {
-      /* storage unavailable: still show the line */
-    }
-    return `New personal best: ${knockouts(kos)}.`;
+/** Stores kos if it beats the stored best (0 never counts) and reports the outcome. */
+export function recordKos(storage: StorageLike, kos: number): BestResult {
+  const prev = readBest(storage) ?? 0;
+  if (kos <= prev) return { kos, best: prev, isNew: false };
+  try {
+    storage.setItem(BEST_KEY, String(kos));
+  } catch {
+    /* storage unavailable: still report it */
   }
-  if (best === null) return 'Your first knockout is waiting. Next match starts below.';
-  if (kos === best) return `You matched your best: ${knockouts(best)}.`;
-  return `Your best: ${knockouts(best)}. You got ${kos}.`;
+  return { kos, best: kos, isNew: true };
+}
+
+/** The "Next: beat N KOs" goal line, or '' when there is no best yet. */
+export function nextGoalLine(storage: StorageLike): string {
+  const best = readBest(storage);
+  return best === null || best < 1 ? '' : `Next: beat ${best} ${best === 1 ? 'KO' : 'KOs'}`;
 }

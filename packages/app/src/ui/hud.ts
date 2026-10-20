@@ -5,7 +5,7 @@
 // 20-player FFA, without a structural rewrite — same markup, denser CSS
 // class for N>4. Eliminated status is optional per-card input, sourced
 // from spectator/types.ts's MatchAdapter once wired up.
-import { fixed as fx, FighterStateId, type FighterSnapshot } from '@bash-fighter/sim';
+import { fixed as fx, FighterStateId, crownHolderOf, type FighterSnapshot } from '@bash-fighter/sim';
 import { PALETTE } from '@bash-fighter/render';
 import { survivorsLineText, objectiveLineText, koStandingLineText, eliminationFeedLine, chipDisplayName, sortFeedEntriesNewestFirst, type EliminationFeedEntry } from './hud-text.ts';
 import { koStandingInfo, type TimedBrawlScore } from '../timed-brawl.ts';
@@ -249,7 +249,7 @@ export class Hud {
       const scores: TimedBrawlScore[] = snapshots.map((s, i) => ({ slot: i, koCount: s.koCount, deathCount: s.deathCount }));
       const info = koStandingInfo(scores, localIndex);
       if (info) {
-        this.koStandingLine.textContent = koStandingLineText(info.ownKo, info.ownRank, info.totalFighters, info.leaderKo);
+        this.koStandingLine.textContent = koStandingLineText(info.ownKo, info.ownRank, info.totalFighters, info.leaderKo, crownHolderOf(snapshots.map((x) => x.koCount)), localIndex);
         this.koStandingLine.style.display = '';
       } else {
         this.koStandingLine.style.display = 'none';

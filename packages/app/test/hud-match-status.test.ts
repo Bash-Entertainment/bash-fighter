@@ -140,7 +140,7 @@ test('objectiveLineText states a full sentence for each mode, derived from the s
   assert.equal(objectiveLineText('battleRoyale'), 'Battle Royale: the last fighter standing wins.');
   assert.equal(
     objectiveLineText('timedKO'),
-    'Timed Brawl: you respawn when knocked out, and most knockouts when the clock runs out wins.',
+    'Timed Brawl: you respawn when knocked out, and most knockouts when the clock runs out wins. Knocking out the crowned leader is worth 2.',
   );
   assert.equal(objectiveLineText('stocks'), 'Stocks: the last stock standing wins.');
 });

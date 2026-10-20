@@ -141,6 +141,8 @@ export interface RenderFrame {
   hazards?: readonly RenderHazardState[];
   tick: number;
   hash: string;
+  /** Slot wearing the Timed Brawl crown, if any. Drawn as an amber marker above its badge. */
+  crownSlot?: number | null;
   /** Live arena bounds (e.g. a shrinking battle-royale blast zone) to
    * draw and frame instead of the static stage bounds. Falls back to the
    * Renderer's static StageBounds-derived arena when omitted. */
@@ -433,6 +435,8 @@ export class Renderer {
   // damage was 0%.
   private readonly badgeLeaders = new Graphics();
   private readonly localPointer = new Graphics();
+  private readonly crownMarker = new Graphics();
+  private crownSlot: number | null = null;
   // Fixed screen-space corner readout of the local player's own damage --
   // see computeLocalDamageReadout in badge-layout.ts for why this exists
   // separately from the in-world badge: at true 20-fighter phone density
@@ -630,6 +634,7 @@ export class Renderer {
     this.app.stage.addChild(this.badgeContainer);
     this.badgeContainer.addChild(this.badgeLeaders);
     this.badgeContainer.addChild(this.localPointer);
+    this.badgeContainer.addChild(this.crownMarker);
     this.localDamageText.anchor.set(0, 1);
     this.badgeContainer.addChild(this.localDamageText);
 
@@ -892,6 +897,21 @@ export class Renderer {
       (this.badgeTexts[i] as Text).visible = false;
     }
     this.drawLocalPointer(followedPlacements);
+    this.drawCrown(followedPlacements);
+  }
+
+  /** Small flat amber crown, constant pixel size, above the crowned fighter's badge. */
+  private drawCrown(placements: readonly FollowedBadgePlacement[]): void {
+    this.crownMarker.clear();
+    const p = this.crownSlot === null ? undefined : placements.find((q) => q.candidate.slot === this.crownSlot);
+    this.crownMarker.visible = Boolean(p);
+    if (!p) return;
+    const x = p.x;
+    const y = p.box.top - 3;
+    this.crownMarker
+      .poly([x - 8, y, x - 8, y - 9, x - 4, y - 4, x, y - 11, x + 4, y - 4, x + 8, y - 9, x + 8, y])
+      .fill({ color: 0xe8b23c })
+      .stroke({ color: PALETTE.fighterOutline, width: 1 });
   }
 
   /** Joins a staggered badge to its own fighter's head with a hairline.
@@ -1287,6 +1307,7 @@ export class Renderer {
     this.lastFrameFightersAlive = fightersAlive;
     this.lastFrameFightersOnScreen = fightersOnScreen;
     this.names = frame.names;
+    this.crownSlot = frame.crownSlot ?? null;
     this.layoutBadges(badgeCandidates, bodyBoxes);
     this.drawLocalDamageReadout(localFighter?.eliminated ? undefined : localFighter?.percent);
 

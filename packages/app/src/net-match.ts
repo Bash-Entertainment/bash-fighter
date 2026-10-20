@@ -1229,6 +1229,7 @@ export class NetMatch {
       eliminationEffects: this.pendingEliminationEffects,
       localPlayerIndex: !this.spectating && this.mySlot >= 0 ? this.mySlot : undefined,
       names: this.names,
+      crownSlot: this.renderSim.getCrownHolder(),
       liveArenaBounds: currentArenaBounds(this.renderSim.getCurrentBlastRect()),
       previewArenaBounds: previewArenaBounds(
         this.renderSim.getArena(),
