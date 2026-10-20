@@ -6,6 +6,7 @@ import { fixed as fx, type CharacterData, type FighterSnapshot } from '@bash-fig
 import type { PendingHitEffect, PendingEliminationEffect } from '@bash-fighter/render';
 import { AudioManager } from '@bash-fighter/audio';
 import type { EffectEvent } from './effects-events.ts';
+import { showKoPop } from './ui/ko-pop.ts';
 
 export class EffectsAudioBridge {
   /** One entry per fighter slot, used only to look up weight for "a hit
@@ -34,6 +35,10 @@ export class EffectsAudioBridge {
     return c ? fx.toFloat(c.weight) : undefined;
   }
 
+  private landedByLocal(attackerIndex: number, victimIndex: number): boolean {
+    return this.localFighterIndex >= 0 && attackerIndex === this.localFighterIndex && victimIndex !== this.localFighterIndex;
+  }
+
   private isOwn(fighterIndex: number): boolean {
     return this.localFighterIndex >= 0 && fighterIndex === this.localFighterIndex;
   }
@@ -52,6 +57,7 @@ export class EffectsAudioBridge {
       if (ev.type === 'hit') {
         const f = currFighters[ev.fighterIndex];
         if (!f) continue;
+        const landed = this.landedByLocal(ev.attackerIndex, ev.fighterIndex);
         hitEffects.push({
           fighterIndex: ev.fighterIndex,
           worldX: fx.toFloat(f.posX),
@@ -60,12 +66,14 @@ export class EffectsAudioBridge {
           dirY: ev.dirY,
           strength: ev.strength,
           strong: ev.strong,
+          landed,
         });
         this.audio.playHit({
           damage: ev.damage,
           strength: ev.strength,
           weight: this.weightOf(ev.fighterIndex),
-          isOwn: this.isOwn(ev.fighterIndex),
+          isOwn: this.isOwn(ev.fighterIndex) || landed,
+          landed,
           // Deterministic per-event seed from data the sim already gives
           // us (fighter index + this tick's damage), never Math.random().
           seed: ev.fighterIndex * 7919 + ev.damage * 1000,
@@ -82,6 +90,11 @@ export class EffectsAudioBridge {
         const f = currFighters[ev.fighterIndex];
         if (f) eliminationEffects.push({ worldX: fx.toFloat(f.posX), worldY: fx.toFloat(f.posY) });
         this.audio.playElimination(this.isOwn(ev.fighterIndex));
+      } else if (ev.type === 'knockout') {
+        if (this.isOwn(ev.fighterIndex)) {
+          this.audio.playKnockout();
+          showKoPop();
+        }
       } else if (ev.type === 'itemPickup') {
         this.audio.playItemPickup(this.isOwn(ev.fighterIndex));
       } else if (ev.type === 'itemUse') {

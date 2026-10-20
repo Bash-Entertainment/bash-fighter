@@ -42,11 +42,11 @@ export interface MatchSettings {
 }
 
 /** Knockback multiplier for a first-match human's hits on bots (16.16
- * fixed point). 1.75x picked by scripts/rookie-ko-metrics.mjs (2026-09-26):
+ * fixed point). 1.75x was picked by (raised to 2.6x on 2026-10-16 for faster first KOs) scripts/rookie-ko-metrics.mjs (2026-09-26):
  * a human-analog novice in 20-fighter Timed Brawl lands a KO within 60s in
  * 75% of 20 trials (0% at 1.0x) while staying below the top bot's count
  * on average. See wiki "First-Match Knockout Boost". */
-export const ROOKIE_TAPER_SCALES = [0x1c000, 0x1599a, 0x1266b, 0x10000];
+export const ROOKIE_TAPER_SCALES = [0x2a000, 0x1e000, 0x15000, 0x10000];
 
 export const ROOKIE_KNOCKBACK_SCALE = ROOKIE_TAPER_SCALES[0]!;
 

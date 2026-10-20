@@ -93,6 +93,8 @@ export interface HitSoundInput {
    * attenuated so a 20-fighter brawl doesn't become a flat wall of
    * noise on every distant scuffle. */
   isOwn?: boolean;
+  /** The local player landed this hit: heavier, punchier thump. */
+  landed?: boolean;
   /** Deterministic seed for per-event pitch/timbre variation -- derive
    * this from event data the caller already has (e.g. a hash of
    * fighterIndex and the sim tick), never from Math.random() or
@@ -184,7 +186,8 @@ export function computeHitSoundParams(input: HitSoundInput): HitSoundParams {
   // unmistakably different from a weak hit by ear, not just by pitch.
   // Quadratic so the ramp-in is gentle at low strength and pronounced
   // near 1, rather than thumping on every third hit.
-  const thumpGain = strength > 0.25 ? Math.min(0.6, (strength - 0.25) ** 2 * 1.1) : 0;
+  const baseThump = strength > 0.25 ? Math.min(0.6, (strength - 0.25) ** 2 * 1.1) : 0;
+  const thumpGain = input.landed ? Math.min(0.85, baseThump + 0.3) : baseThump;
   const thumpFreq = 55 - weightTerm * 15; // heavier fighters thump a touch lower
   const thumpDuration = thumpGain > 0 ? 0.05 + strength * 0.09 : 0;
 
@@ -192,7 +195,7 @@ export function computeHitSoundParams(input: HitSoundInput): HitSoundParams {
     freq: Math.max(70, freq),
     duration: Math.min(0.35, duration),
     noiseMix,
-    gain: Math.min(1, gain),
+    gain: Math.min(1, input.landed ? gain + 0.2 : gain),
     detuneCents: (jitter - 0.5) * 30,
     waveform,
     thumpGain,
@@ -555,6 +558,13 @@ export class AudioManager {
   /** Own elimination: a longer, lower descending chirp. Someone else's:
    * a shorter, quieter one -- the player still learns "a fighter just
    * went out" without it fighting for attention against their own game. */
+  /** The local player just knocked someone out: low boom plus a bright amber-register ping. */
+  playKnockout(): void {
+    this.logCue('playKnockout');
+    this.playTone(70, 0.35, 0.8, true, 'sine');
+    this.playChirp(880, true, 0.22, 0.45, true);
+  }
+
   playElimination(isOwn: boolean): void {
     this.logCue('playElimination');
     if (isOwn) this.playChirp(220, false, 0.5, 0.65);

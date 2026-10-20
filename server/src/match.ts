@@ -3,6 +3,7 @@
 // between matches, no global game instance.
 import { randomBytes } from 'node:crypto';
 import { Sim, makeInputFrame, rookieScaleForMatchesPlayed, BUTTON_ATTACK, type InputFrame, type MatchSettings, type WinCondition } from '@bash-fighter/sim/src/index.ts';
+import { newSeatTrace, observeTick, sampleSecond, type SeatTrace } from './session-trace.ts';
 import { BotController, BotDifficulty, deriveBotSeed, type BotDifficultyValue } from '@bash-fighter/sim/src/ai/bot.ts';
 import { createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID, pickArenaId, isKnownArenaId } from '@bash-fighter/content/src/index.ts';
 import { SNAPSHOT_HZ, dedupeName } from '@bash-fighter/net/src/protocol.ts';
@@ -156,6 +157,8 @@ export interface Seat {
    *  for is "did this human ever land anything", not "against whom". */
   hitsLanded: number;
   damageDealt: number;
+  /** Telemetry-only per-second trace, see session-trace.ts. */
+  trace: SeatTrace;
 }
 
 export type MatchPhase = 'lobby' | 'playing' | 'ended';
@@ -479,6 +482,7 @@ export class Match {
       attackHeldLast: false,
       hitsLanded: 0,
       damageDealt: 0,
+      trace: newSeatTrace(),
       resumeToken: isBot ? null : generateResumeToken(),
       disconnectedAt: null,
       joinedAt: Date.now(),
@@ -587,6 +591,7 @@ export class Match {
     const attackHeldNow = (input.buttons & BUTTON_ATTACK) !== 0;
     if (attackHeldNow && !seat.attackHeldLast) seat.attackPresses++;
     seat.attackHeldLast = attackHeldNow;
+    if (input.buttons !== 0 || input.stickX !== 0 || input.stickY !== 0) seat.trace.hadInput = true;
     seat.pendingInput = input;
     seat.lastInputTick = Math.max(seat.lastInputTick, tick);
   }
@@ -735,6 +740,22 @@ export class Match {
     }
   }
 
+  /** Telemetry only: reads sim state, writes only seat.trace. Runs before
+   *  the main per-seat loop so hitsLanded/lastPercent are the previous
+   *  tick's values; one tick of lag in the counters is irrelevant. */
+  private sampleTraces(sim: Sim): void {
+    const elapsed = this.tick - this.matchStartedAtTick;
+    const sample = elapsed > 0 && elapsed % 60 === 0;
+    let alive: number[] | null = null;
+    for (const seat of this.seats) {
+      if (seat.isBot) continue;
+      observeTick(seat.trace, sim.getFighter(seat.slot).percent, seat.hitsLanded);
+      if (!sample) continue;
+      alive ??= this.seats.filter((s) => !s.eliminated).map((s) => s.slot);
+      sampleSecond(seat.trace, sim, seat.slot, alive, elapsed / 60);
+    }
+  }
+
   private tickOnce(): void {
     const sim = this.sim;
     if (!sim) return;
@@ -746,6 +767,8 @@ export class Match {
     sim.advance(inputs);
     recordTickDurationMs(Number(process.hrtime.bigint() - tickStart) / 1e6);
     this.tick++;
+
+    this.sampleTraces(sim);
 
     for (const seat of this.seats) {
       if (seat.eliminated) continue;

@@ -15,9 +15,10 @@
 import { fixed as fx, FighterStateId, type FighterSnapshot, type ItemSnapshot } from '@bash-fighter/sim';
 
 export type EffectEvent =
-  | { type: 'hit'; fighterIndex: number; strength: number; strong: boolean; medium: boolean; damage: number; dirX: number; dirY: number }
+  | { type: 'hit'; fighterIndex: number; strength: number; strong: boolean; medium: boolean; damage: number; dirX: number; dirY: number; attackerIndex: number }
   | { type: 'block'; fighterIndex: number }
   | { type: 'eliminated'; fighterIndex: number }
+  | { type: 'knockout'; fighterIndex: number }
   | { type: 'itemPickup'; fighterIndex: number }
   | { type: 'itemUse'; slot: number }
   | { type: 'jump'; fighterIndex: number }
@@ -116,8 +117,11 @@ export function detectFighterEvents(
         damage: damageDelta,
         dirX: dirX / len,
         dirY: dirY / len,
+        attackerIndex: c.lastAttacker,
       });
     }
+
+    if (c.koCount > p.koCount) events.push({ type: 'knockout', fighterIndex: i });
 
     const wasEliminated = p.eliminated;
     const isEliminated = c.eliminated;
