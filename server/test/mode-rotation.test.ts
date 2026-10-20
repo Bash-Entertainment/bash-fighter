@@ -114,3 +114,7 @@ test('RoomManager: match creation (not connection) decides the mode, following t
     'battleRoyale', 'battleRoyale', 'timedKO', 'stocks',
   ]);
 });
+
+test('a one-minute Timed Brawl reads "1 minute", not "1 minutes"', () => {
+  assert.equal(modeDisplayName('timedKO', 3600), 'Timed Brawl — most knockouts in 1 minute wins');
+});

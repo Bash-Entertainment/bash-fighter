@@ -179,7 +179,8 @@ export function modeDisplayName(winCondition: WinCondition, timeLimitTicks?: num
     // evenly (e.g. 300s -> "5 minutes"), otherwise seconds (e.g. 90s ->
     // "90 seconds") so a value like 90s never gets rounded into the
     // wrong minute count ("2 minutes").
-    const label = totalSeconds % 60 === 0 ? `${totalSeconds / 60} minutes` : `${totalSeconds} seconds`;
+    const minutes = totalSeconds / 60;
+    const label = totalSeconds % 60 !== 0 ? `${totalSeconds} seconds` : minutes === 1 ? '1 minute' : `${minutes} minutes`;
     return `Timed Brawl — most knockouts in ${label} wins`;
   }
   if (winCondition === 'stocks') {
