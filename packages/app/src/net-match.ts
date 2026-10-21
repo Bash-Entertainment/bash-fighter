@@ -328,6 +328,11 @@ export class NetMatch {
   // resumed/second match starts a fresh reading rather than carrying over
   // the previous one.
   private inputActivity = new InputActivityTracker();
+
+  /** Ticks of non-neutral local input this match; 0 means the player never touched a control. */
+  localInputTicks(): number {
+    return this.inputActivity.getInputTicks();
+  }
   // Observed input-device usage for this match, keyed by real source --
   // see InputUsageTracker and docs/MEASUREMENT.md "Capability vs usage".
   private inputUsage = new InputUsageTracker();

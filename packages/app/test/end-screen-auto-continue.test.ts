@@ -28,9 +28,10 @@ test('both end screens start the countdown on show and cancel it on hide', () =>
   }
 });
 
-test('only an online match rolls into another one on its own', () => {
-  assert.match(main, /timedBrawlEndScreen\.autoContinueEnabled = true;/);
-  assert.match(main, /winScreen\.autoContinueEnabled = true;/);
+test('only an online match the player actually played rolls into another one on its own', () => {
+  assert.match(main, /const playerWasActive = \(netMatch\?\.localInputTicks\(\) \?\? 1\) > 0;/);
+  assert.match(main, /timedBrawlEndScreen\.autoContinueEnabled = playerWasActive;/);
+  assert.match(main, /winScreen\.autoContinueEnabled = playerWasActive;/);
   assert.match(main, /winScreen\.autoContinueEnabled = false;\s*\n\s*winScreen\.show\(winnerIndex, 0,/);
 });
 

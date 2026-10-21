@@ -877,6 +877,9 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
       spectateChip.hide();
       audio.play('match_end');
       resumeLobbyMusic();
+      // An idle tab must not chain matches forever: auto-continue only
+      // after a match where the player actually pressed something.
+      const playerWasActive = (netMatch?.localInputTicks() ?? 1) > 0;
       if (isTimedBrawl(settings) && leaderboard) {
         // Timed Brawl never eliminates (fighters respawn -- see
         // eliminatedThisOnlineMatch above, which this mode never sets),
@@ -889,11 +892,11 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
           koCount: s.koCount,
           deathCount: s.deathCount,
         }));
-        timedBrawlEndScreen.autoContinueEnabled = true;
+        timedBrawlEndScreen.autoContinueEnabled = playerWasActive;
         timedBrawlEndScreen.setInviteLink(nextMatchInviteLink(), commitInvite);
         timedBrawlEndScreen.show(winnerIndex, leaderboard, scores, netMatch?.localSlot(), netMatch ? (slot) => netMatch!.nameFor(slot) : undefined);
       } else {
-        winScreen.autoContinueEnabled = true;
+        winScreen.autoContinueEnabled = playerWasActive;
         winScreen.setInviteLink(nextMatchInviteLink(), commitInvite);
         winScreen.show(winnerIndex, netMatch?.localSlot(), netMatch ? (slot) => netMatch!.nameFor(slot) : undefined);
       }
