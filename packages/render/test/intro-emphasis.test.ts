@@ -17,7 +17,7 @@ import { readFileSync } from 'node:fs';
 const SOURCE = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
 
 test('announceLocalPlayer records a wall-clock start, not a frame count', () => {
-  const method = SOURCE.slice(SOURCE.indexOf('announceLocalPlayer(): void'));
+  const method = SOURCE.slice(SOURCE.indexOf('announceLocalPlayer(firstMatch = false): void'));
   assert.match(method.slice(0, method.indexOf('}')), /this\.introStartMs = performance\.now\(\);/);
 });
 

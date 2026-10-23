@@ -138,3 +138,19 @@ test('RoomManager: a re-queued newcomer (fewer than 3 matches played) still gets
     match.stop();
   }
 });
+
+test('RoomManager: a fresh visitor\'s first match fills to 8 fighters, a normal room to 20', () => {
+  const noopEvents = () => ({ onSnapshot: () => {}, onEliminated: () => {} });
+  const manager = new RoomManager(noopEvents);
+  const first = manager.joinLobby('newcomer', undefined, false, undefined, false, undefined, 0);
+  assert.equal(first.match.capacity, 8);
+  manager.startNow(first.match);
+  assert.equal(first.match.filledSlots, 8);
+  first.match.stop();
+
+  const normal = manager.joinLobby('regular', undefined, false, undefined, true, undefined, 5);
+  assert.equal(normal.match.capacity, 20);
+  manager.startNow(normal.match);
+  assert.equal(normal.match.filledSlots, 20);
+  normal.match.stop();
+});

@@ -506,8 +506,31 @@ export class Renderer {
    *  spotlight the local fighter. Safe to call with no local player
    *  (spectating): render() only ever dims fighters other than
    *  frame.localPlayerIndex, so with no local player nothing dims. */
-  announceLocalPlayer(): void {
+  announceLocalPlayer(firstMatch = false): void {
     this.introStartMs = performance.now();
+    this.spotlightStartMs = firstMatch ? this.introStartMs : null;
+  }
+
+  // First-match spotlight: a soft amber ring under the local fighter's feet
+  // for the first SPOTLIGHT_MS of a newcomer's first match, fading out.
+  // Presentation only, like the intro emphasis above.
+  private spotlightStartMs: number | null = null;
+  private static readonly SPOTLIGHT_MS = 5000;
+  private static readonly SPOTLIGHT_COLOR = 0xe8b23c;
+  private readonly spotlight = new Graphics();
+
+  private drawSpotlight(now: number, x: number, y: number, scale: number): void {
+    this.spotlight.clear();
+    const elapsed = this.spotlightStartMs === null ? Infinity : now - this.spotlightStartMs;
+    if (elapsed >= Renderer.SPOTLIGHT_MS) return;
+    const fade = 1 - elapsed / Renderer.SPOTLIGHT_MS;
+    const rx = BODY_WIDTH * 2.4 * scale;
+    const ry = rx * 0.3;
+    this.spotlight
+      .ellipse(x, y, rx, ry)
+      .fill({ color: Renderer.SPOTLIGHT_COLOR, alpha: 0.18 * fade })
+      .ellipse(x, y, rx, ry)
+      .stroke({ color: Renderer.SPOTLIGHT_COLOR, width: 2, alpha: 0.8 * fade });
   }
 
   constructor(stageBounds: StageBounds) {
@@ -622,6 +645,7 @@ export class Renderer {
 
     this.world.addChild(this.stageLayer);
     this.world.addChild(this.hazardContainer);
+    this.world.addChild(this.spotlight);
     this.world.addChild(this.spriteContainer);
     this.world.addChild(this.itemContainer);
     this.world.addChild(this.effects.root);
@@ -1237,6 +1261,7 @@ export class Renderer {
     // iteration, no allocation.
     let fightersAlive = 0;
     let fightersOnScreen = 0;
+    this.spotlight.clear();
     for (let i = 0; i < frame.fighters.length; i++) {
       const f = frame.fighters[i] as RenderFighterState;
       const sprite = this.sprites[i] as FighterSprite;
@@ -1254,6 +1279,7 @@ export class Renderer {
       this.effects.trailFighter(i, screen.x, screen.y, f.hitstun > 0);
       const char = frame.characters[i] as CharacterData | undefined;
       const isLocalPlayer = frame.localPlayerIndex === i;
+      if (isLocalPlayer) this.drawSpotlight(now, screen.x, screen.y, cam.scale);
       // Intro emphasis: dim everyone except the local fighter for the
       // first INTRO_EMPHASIS_MS after announceLocalPlayer() was called,
       // easing back to full opacity. See the field doc above.

@@ -14,6 +14,16 @@ import { decideMatchModeForJoin, MODE_ROTATION_CADENCE, MODE_ROTATION_DISABLED }
 const NEWCOMER_TIMED_MATCHES = 3;
 
 export const DEFAULT_CAPACITY = 20;
+
+/** A fresh visitor's first match is a human plus 7 bots: a smaller, closer
+ *  match is easier to read and has stakes a newcomer can feel. */
+export const FIRST_MATCH_FIGHTERS = 8;
+
+/** True for a fresh visitor's first match (the client's matchesPlayed is 0,
+ *  or absent on a non-requeued join). */
+export function isFirstMatchJoin(requeued: boolean, matchesPlayed?: number): boolean {
+  return matchesPlayed !== undefined ? matchesPlayed === 0 : !requeued;
+}
 export const DEFAULT_MINIMUM = 2;
 export const COUNTDOWN_SECONDS = Number(process.env.MATCH_COUNTDOWN_SECONDS ?? 15);
 // A 20-stranger lobby that needs 20 simultaneous humans to ever start is
@@ -163,10 +173,11 @@ export class RoomManager {
     return undefined;
   }
 
-  private createMatch(requeued: boolean): Match {
+  private createMatch(requeued: boolean, firstMatch = false): Match {
     const matchNumber = this.nextId;
     const id = `m${this.nextId++}`;
-    const match = new Match(id, this.capacity, this.minimum, this.makeEvents(id));
+    const capacity = firstMatch ? Math.min(this.capacity, FIRST_MATCH_FIGHTERS) : this.capacity;
+    const match = new Match(id, capacity, Math.min(this.minimum, capacity), this.makeEvents(id));
     // Mode rotation (2026-09-11, Timed Brawl launch, see
     // server/src/mode-rotation.ts): decided once per created match, not
     // per connecting player -- every seat that joins this match sees
@@ -230,14 +241,14 @@ export class RoomManager {
       if (existing && existing.phase === 'lobby') {
         match = existing;
       } else {
-        match = this.createMatch(requeued && !(matchesPlayed !== undefined && matchesPlayed < NEWCOMER_TIMED_MATCHES));
+        match = this.createMatch(requeued && !(matchesPlayed !== undefined && matchesPlayed < NEWCOMER_TIMED_MATCHES), isFirstMatchJoin(requeued, matchesPlayed) && !MODE_ROTATION_DISABLED);
         match.joinCode = joinCode;
         this.coded.set(joinCode, match);
         freshMatch = true;
       }
     } else {
       if (!this.filling || this.filling.phase !== 'lobby') {
-        match = this.createMatch(requeued && !(matchesPlayed !== undefined && matchesPlayed < NEWCOMER_TIMED_MATCHES));
+        match = this.createMatch(requeued && !(matchesPlayed !== undefined && matchesPlayed < NEWCOMER_TIMED_MATCHES), isFirstMatchJoin(requeued, matchesPlayed) && !MODE_ROTATION_DISABLED);
         this.filling = match;
         freshMatch = true;
       } else {

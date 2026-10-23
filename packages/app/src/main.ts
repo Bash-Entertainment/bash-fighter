@@ -11,6 +11,7 @@ import { SpectatorBanner } from './ui/spectator-banner.ts';
 import { SimMatchAdapter } from './spectator/sim-adapter.ts';
 import { SpectatorController } from './spectator/controller.ts';
 import { NetMatch, clearStoredResumeToken, type ConnectionState } from './net-match.ts';
+import { getMatchesPlayed } from './matches-played.ts';
 import { SpectateChip } from './ui/spectate-chip.ts';
 import { MatchIntro } from './ui/match-intro.ts';
 import { MatchOverlay, SPECTATE_OFFER, type MatchOverlayContent } from './ui/match-overlay.ts';
@@ -910,7 +911,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
       // mid-match join alike -- both are the first moment THIS client
       // can see the arena, so both deserve the same emphasis. Render-side
       // only; does not touch sim state.
-      netMatch?.renderer.announceLocalPlayer();
+      netMatch?.renderer.announceLocalPlayer(getMatchesPlayed() === 1);
     },
     onEliminated: (placement, totalFighters) => {
       matchIntro.hide();
