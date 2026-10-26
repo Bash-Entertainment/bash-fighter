@@ -39,6 +39,12 @@ export interface MatchSettings {
   rookieSlots: number[];
   botSlots: number[];
   rookieScales: number[];
+  /** Ticks at the start of the match during which the whole sim holds
+   * still (inputs ignored, nothing moves, no clocks run) so a "3, 2, 1,
+   * GO!" countdown can play. The tick counter still advances, and the
+   * time limit is extended by the same amount so match length is
+   * unchanged. 0 = no freeze (offline play, fixtures). */
+  introFreezeTicks: number;
 }
 
 /** Knockback multiplier for a first-match human's hits on bots (16.16
@@ -54,6 +60,9 @@ export function rookieScaleForMatchesPlayed(matchesPlayed: number): number {
   const i = Math.max(0, Math.min(ROOKIE_TAPER_SCALES.length - 1, Math.trunc(matchesPlayed)));
   return ROOKIE_TAPER_SCALES[i]!;
 }
+
+/** Online matches open with a 3-second frozen "3, 2, 1" countdown. */
+export const ONLINE_INTRO_FREEZE_TICKS = 180;
 
 export const DEFAULT_MATCH_SETTINGS: MatchSettings = {
   winCondition: 'battleRoyale',
@@ -82,6 +91,7 @@ export const DEFAULT_MATCH_SETTINGS: MatchSettings = {
   rookieSlots: [],
   botSlots: [],
   rookieScales: [],
+  introFreezeTicks: 0,
   shrinkFullyClosedTick: 60 * 60 * 8, // 8 minutes (was 6) -- Lever 6, 2026-09-10 pass 3: individual fights now last longer with Levers 3/4, ease ring pacing further
 };
 

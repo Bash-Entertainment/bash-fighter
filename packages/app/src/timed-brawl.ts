@@ -16,8 +16,10 @@ export function isTimedBrawl(settings: Pick<MatchSettings, 'winCondition'> | nul
 /** Ticks remaining until time expiry, floored at 0 -- never negative, so a
  * clock never reads e.g. "-0:01" in the last-tick window before matchEnd
  * arrives. Sim runs at a fixed 60Hz (see packages/sim). */
-export function ticksRemaining(currentTick: number, settings: Pick<MatchSettings, 'timeLimitTicks'>): number {
-  return Math.max(0, settings.timeLimitTicks - currentTick);
+export function ticksRemaining(currentTick: number, settings: Pick<MatchSettings, 'timeLimitTicks' | 'introFreezeTicks'>): number {
+  // The intro countdown freezes the sim but still advances the tick, so the
+  // clock holds at the full limit until GO.
+  return Math.min(settings.timeLimitTicks, Math.max(0, settings.timeLimitTicks + settings.introFreezeTicks - currentTick));
 }
 
 /** "M:SS" clock text from a tick count at 60Hz. Always two digits of

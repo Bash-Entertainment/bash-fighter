@@ -615,6 +615,13 @@ export class AudioManager {
     this.playTone(140, 0.12, isOwn ? 0.5 : 0.15, isOwn, 'sawtooth');
   }
 
+  /** Pre-match countdown beep: a short flat tone for 3/2/1, a higher, longer one for GO. */
+  playCountdownBeep(isGo: boolean): void {
+    this.logCue('playCountdownBeep');
+    if (isGo) this.playTone(880, 0.35, 0.5, true, 'square');
+    else this.playTone(440, 0.12, 0.4, true, 'square');
+  }
+
   /** Down to the final two fighters -- a distinct rising two-note cue,
    * played once. */
   playFinalTwo(): void {

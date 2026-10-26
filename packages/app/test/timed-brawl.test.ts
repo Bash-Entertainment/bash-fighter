@@ -10,10 +10,16 @@ test('isTimedBrawl only true for winCondition timedKO', () => {
   assert.equal(isTimedBrawl(undefined), false);
 });
 
+test('ticksRemaining holds at the full limit during the intro freeze', () => {
+  assert.equal(ticksRemaining(0, { timeLimitTicks: 600, introFreezeTicks: 180 }), 600);
+  assert.equal(ticksRemaining(180, { timeLimitTicks: 600, introFreezeTicks: 180 }), 600);
+  assert.equal(ticksRemaining(280, { timeLimitTicks: 600, introFreezeTicks: 180 }), 500);
+});
+
 test('ticksRemaining floors at 0 and never goes negative', () => {
-  assert.equal(ticksRemaining(100, { timeLimitTicks: 600 }), 500);
-  assert.equal(ticksRemaining(600, { timeLimitTicks: 600 }), 0);
-  assert.equal(ticksRemaining(700, { timeLimitTicks: 600 }), 0);
+  assert.equal(ticksRemaining(100, { timeLimitTicks: 600, introFreezeTicks: 0 }), 500);
+  assert.equal(ticksRemaining(600, { timeLimitTicks: 600, introFreezeTicks: 0 }), 0);
+  assert.equal(ticksRemaining(700, { timeLimitTicks: 600, introFreezeTicks: 0 }), 0);
 });
 
 test('formatClock renders M:SS with zero-padded seconds', () => {

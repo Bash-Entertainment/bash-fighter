@@ -54,6 +54,7 @@ import { BUTTON_ATTACK } from '@bash-fighter/sim';
 import { LOCAL_ATTACK_EVENT } from './ui/controls-hint.ts';
 import { AudioManager } from '@bash-fighter/audio';
 import { detectFighterEvents, detectItemEvents } from './effects-events.ts';
+import { countdownLabel, GO_LABEL } from './start-countdown.ts';
 import { EffectsAudioBridge } from './effects-audio.ts';
 import type { PendingHitEffect, PendingEliminationEffect } from '@bash-fighter/render';
 
@@ -135,6 +136,9 @@ export interface NetMatchEvents {
    *  taking "a minute to even find my dude". joinedLate is true when we
    *  never saw a lobby countdown, i.e. play began as far as we can tell
    *  without any run-up. */
+  /** Fired when the pre-match countdown label changes ("3", "2", "1",
+   *  "GO!") and with null once it is over. Presentation only. */
+  onCountdown?(label: string | null): void;
   onMatchBegan?(slot: number, name: string, joinedLate: boolean): void;
   /** Fired once when the canvas's WebGL context is lost (see
    * packages/render/src/index.ts's Renderer.onContextLost). The match
@@ -247,6 +251,7 @@ export class NetMatch {
    *  began. Presentation only: it decides whether the match-start intro
    *  says the fight is already going. */
   private sawCountdown = false;
+  private countdownShown: string | null = null;
   private over = false;
 
   private localTick = 0;
@@ -794,6 +799,7 @@ export class NetMatch {
     // battleRoyale) for any older server that still sends an empty
     // settings stub, which is what every client already assumed before
     // this field carried real data.
+    this.countdownShown = null;
     this.matchSettings = resolveMatchSettings((settings as Partial<MatchSettings>) ?? {});
     this.localSim = createMatchSim(seed, numFighters, this.matchSettings, this.characters, arenaId);
     this.renderSim = createMatchSim(seed, numFighters, this.matchSettings, this.characters, arenaId);
@@ -896,6 +902,15 @@ export class NetMatch {
     // neutral input in this local sim. That is fine because remote
     // fighters are never rendered from this sim — see render().
     this.localSim.advance(inputs);
+    this.announceCountdown();
+  }
+
+  private announceCountdown(): void {
+    const label = countdownLabel(this.localTick, this.matchSettings?.introFreezeTicks ?? 0);
+    if (label === this.countdownShown) return;
+    this.countdownShown = label;
+    if (label !== null) this.audio.playCountdownBeep(label === GO_LABEL);
+    this.events.onCountdown?.(label);
   }
 
   private handleBinary(bytes: Uint8Array): void {

@@ -2611,3 +2611,39 @@ body:has(.leave-prompt) #attract-frame, body:has(.leave-prompt) .attract-caption
 .waiting-goal:empty {
   display: none;
 }
+
+.start-countdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 42%;
+  display: flex;
+  justify-content: center;
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 45;
+}
+.start-countdown.hidden { display: none; }
+.start-countdown-text {
+  font: 900 clamp(96px, 22vw, 220px) / 1 system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: #e8b23c;
+  background: rgba(10, 10, 12, 0.72);
+  padding: 0.05em 0.3em;
+  animation: start-countdown-pop 1000ms ease-out forwards;
+}
+.start-countdown-text.go { animation-name: start-countdown-go; }
+.start-countdown-text.reduced { animation: none; }
+.start-countdown-text.go.reduced { animation: start-countdown-fade 1000ms linear forwards; }
+@keyframes start-countdown-pop {
+  0% { transform: scale(1.5); opacity: 0; }
+  20% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes start-countdown-go {
+  0% { transform: scale(1.5); opacity: 0; }
+  15% { transform: scale(1); opacity: 1; }
+  50% { opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+@keyframes start-countdown-fade { 0%, 50% { opacity: 1; } 100% { opacity: 0; } }

@@ -2,7 +2,7 @@
 // or spectating it. Matches are fully isolated: no shared mutable state
 // between matches, no global game instance.
 import { randomBytes } from 'node:crypto';
-import { Sim, makeInputFrame, rookieScaleForMatchesPlayed, BUTTON_ATTACK, type InputFrame, type MatchSettings, type WinCondition } from '@bash-fighter/sim/src/index.ts';
+import { Sim, makeInputFrame, rookieScaleForMatchesPlayed, BUTTON_ATTACK, ONLINE_INTRO_FREEZE_TICKS, type InputFrame, type MatchSettings, type WinCondition } from '@bash-fighter/sim/src/index.ts';
 import { newSeatTrace, observeTick, sampleSecond, type SeatTrace } from './session-trace.ts';
 import { BotController, BotDifficulty, deriveBotSeed, type BotDifficultyValue } from '@bash-fighter/sim/src/ai/bot.ts';
 import { createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID, pickArenaId, isKnownArenaId } from '@bash-fighter/content/src/index.ts';
@@ -664,6 +664,7 @@ export class Match {
     if (timeLimitOverride) settingsOverride.timeLimitTicks = Number(timeLimitOverride);
     const stocksOverride = process.env.MATCH_STARTING_STOCKS;
     if (stocksOverride) settingsOverride.startingStocks = Number(stocksOverride);
+    settingsOverride.introFreezeTicks = ONLINE_INTRO_FREEZE_TICKS;
     const rookieSeats = this.seats.filter((s) => s.rookieMatchesPlayed !== null);
     settingsOverride.rookieSlots = rookieSeats.map((s) => s.slot);
     settingsOverride.rookieScales = rookieSeats.map((s) => rookieScaleForMatchesPlayed(s.rookieMatchesPlayed as number));

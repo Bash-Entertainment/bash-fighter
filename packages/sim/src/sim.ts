@@ -623,7 +623,7 @@ export class Sim {
 
   isMatchOver(): boolean {
     if (this.settings.winCondition === 'timedKO') {
-      return this.tick >= this.settings.timeLimitTicks;
+      return this.tick >= this.settings.timeLimitTicks + this.settings.introFreezeTicks;
     }
     return this.aliveCount() <= 1;
   }
@@ -908,6 +908,10 @@ export class Sim {
       throw new RangeError(`advance: expected ${this.numFighters} inputs, got ${inputs.length}`);
     }
     this.eliminationEvents.length = 0;
+    if (this.tick < this.settings.introFreezeTicks) {
+      this.tick = (this.tick + 1) | 0;
+      return;
+    }
     for (let i = 0; i < this.numFighters; i++) {
       this.stepFighter(i, inputs[i] as InputFrame);
     }

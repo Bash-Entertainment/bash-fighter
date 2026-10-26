@@ -13,6 +13,7 @@ import { SpectatorController } from './spectator/controller.ts';
 import { NetMatch, clearStoredResumeToken, type ConnectionState } from './net-match.ts';
 import { getMatchesPlayed } from './matches-played.ts';
 import { SpectateChip } from './ui/spectate-chip.ts';
+import { StartCountdown } from './ui/start-countdown.ts';
 import { MatchIntro } from './ui/match-intro.ts';
 import { MatchOverlay, SPECTATE_OFFER, type MatchOverlayContent } from './ui/match-overlay.ts';
 import { ControlsHint } from './ui/controls-hint.ts';
@@ -248,6 +249,7 @@ function onRendererInitFailed(where: string, error: unknown): void {
 }
 const spectateChip = new SpectateChip(appRoot, () => void beginOnlineMatch(true));
 const matchIntro = new MatchIntro(appRoot);
+const startCountdown = new StartCountdown(appRoot);
 /** The 20-slot FFA palette entry for a seat, as a CSS colour -- the same
  *  colour the renderer fills that fighter with, so the intro's swatch and
  *  the fighter on screen are recognisably the same thing. */
@@ -716,6 +718,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
   spectatorBanner.hide();
   matchOverlay.hide();
   matchIntro.hide();
+  startCountdown.show(null);
   hud.hide();
       inMatchMovesButton.classList.add('hidden');
       inMatchSettingsButton.classList.add('hidden');
@@ -902,6 +905,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
         winScreen.show(winnerIndex, netMatch?.localSlot(), netMatch ? (slot) => netMatch!.nameFor(slot) : undefined);
       }
     },
+    onCountdown: (label) => startCountdown.show(label),
     onMatchBegan: (slot, name, joinedLate) => {
       // Names the fighter that belongs to this player for the opening
       // couple of seconds. See ui/match-intro.ts for why.
