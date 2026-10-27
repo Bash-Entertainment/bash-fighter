@@ -2616,16 +2616,15 @@ body:has(.leave-prompt) #attract-frame, body:has(.leave-prompt) .attract-caption
   position: absolute;
   left: 0;
   right: 0;
-  top: 42%;
+  top: 40%;
   display: flex;
   justify-content: center;
-  transform: translateY(-50%);
   pointer-events: none;
   z-index: 45;
 }
 .start-countdown.hidden { display: none; }
 .start-countdown-text {
-  font: 900 clamp(96px, 22vw, 220px) / 1 system-ui, sans-serif;
+  font: 900 clamp(64px, 12vw, 140px) / 1 system-ui, sans-serif;
   letter-spacing: 0.06em;
   color: #e8b23c;
   background: rgba(10, 10, 12, 0.72);
