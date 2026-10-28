@@ -159,7 +159,7 @@ architecture is shaped this way.
 ## Contributing
 
 New here? Start with the
-[`good-first-issue` list](https://github.com/Bash-Entertainment/bash-fighter/issues?q=is%3Aissue+is%3Aopen+label%3Agood-first-issue);
+[`good first issue` list](https://github.com/Bash-Entertainment/bash-fighter/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22);
 each one names the files, the acceptance criteria and how to test it.
 `CONTRIBUTING.md` opens with a six-step first-PR path.
 

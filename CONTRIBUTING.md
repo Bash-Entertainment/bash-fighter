@@ -30,7 +30,7 @@ See [`README.md`](./README.md) for the package layout and
 ## Your first PR in six steps
 
 1. Pick an issue from the
-   [`good-first-issue` list](https://github.com/Bash-Entertainment/bash-fighter/issues?q=is%3Aissue+is%3Aopen+label%3Agood-first-issue)
+   [`good first issue` list](https://github.com/Bash-Entertainment/bash-fighter/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
    and comment on it that you are starting (see "Claiming an issue" below).
 2. Fork, clone, `npm install` (about 10 seconds). The `npm warn install-scripts`
    lines about esbuild are harmless.
