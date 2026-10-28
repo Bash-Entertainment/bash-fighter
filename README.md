@@ -103,7 +103,7 @@ CI covers Node 22 and 24.
 git clone https://github.com/Bash-Entertainment/bash-fighter.git
 cd bash-fighter
 npm install
-npm test            # packages/*/test only — see CONTRIBUTING.md "Running the tests"
+npm test            # packages/*/test only (takes a few minutes; CI runs it for you) — see CONTRIBUTING.md "Running the tests"
 npm run test:server  # server/test — not covered by `npm test`
 npm run test:all      # both; what CI runs
 npm run typecheck    # tsc --noEmit -p tsconfig.json
@@ -122,7 +122,8 @@ cd packages/app
 npm run dev
 ```
 
-Open the Vite dev URL it prints. The local build has two entry points: a
+Open the Vite dev URL it prints (to try it on a phone, see "Testing the
+mobile layout" in `CONTRIBUTING.md`). The local build has two entry points: a
 "PLAY" button that runs the sim entirely client-side as an offline test
 harness (no server needed), and a "PLAY ONLINE" button that connects to
 the match server above, predicts the local fighter, and reconciles against
@@ -156,6 +157,11 @@ change to `packages/sim`, and `docs/ARCHITECTURE.md` for why the
 architecture is shaped this way.
 
 ## Contributing
+
+New here? Start with the
+[`good-first-issue` list](https://github.com/Bash-Entertainment/bash-fighter/issues?q=is%3Aissue+is%3Aopen+label%3Agood-first-issue);
+each one names the files, the acceptance criteria and how to test it.
+`CONTRIBUTING.md` opens with a six-step first-PR path.
 
 See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for dev environment setup,
 (and [`AGENTS.md`](./AGENTS.md) for a short commands-and-conventions cheat sheet),

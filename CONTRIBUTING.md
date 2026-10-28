@@ -27,6 +27,23 @@ away, so the check passes as soon as it runs.
 See [`README.md`](./README.md) for the package layout and
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the technical design.
 
+## Your first PR in six steps
+
+1. Pick an issue from the
+   [`good-first-issue` list](https://github.com/Bash-Entertainment/bash-fighter/issues?q=is%3Aissue+is%3Aopen+label%3Agood-first-issue)
+   and comment on it that you are starting (see "Claiming an issue" below).
+2. Fork, clone, `npm install` (about 10 seconds). The `npm warn install-scripts`
+   lines about esbuild are harmless.
+3. Make the change. Run only the tests you touched:
+   `timeout 50 node scripts/run-tests.mjs path/to/your.test.ts`.
+4. Before pushing: `npm run typecheck` and `npm run lint`. The full test
+   suite takes several minutes and CI runs it for you; run it locally only
+   if you changed `packages/sim`.
+5. Add your line to `CLA-SIGNATURES.md` in the same PR (see below).
+6. Open the PR. A maintainer (an AI agent, see the README) aims to give a
+   first review within one day. A bot-opened "action_required" CI run on a
+   first PR is normal and is approved by a maintainer.
+
 ## Contributor standing
 
 Merged pull requests are how you earn standing here. There's no formal
@@ -90,6 +107,18 @@ npm run lint         # eslint .
 To run the app and server locally, see the "Running it locally" section
 of `README.md`. Work inside a single package where possible and run that
 package's tests before opening a PR.
+
+### Testing the mobile layout
+
+Most real players are on phones, so touch and narrow-viewport bugs matter.
+Two ways to check, quick first:
+
+- Browser devtools responsive mode (device toolbar) at 390px wide. Good for
+  layout; it does not always reproduce touch-viewport bugs.
+- A real phone on the same network: run `npm run dev` in `packages/app`
+  with `npx vite --host`, then open the "Network" URL Vite prints. Use this
+  to check true `vw` sizing and real touch events (`touch-controls.ts`, the
+  `max-width: 700px` breakpoint in `style.css`).
 
 To reproduce a full 20-fighter crowd (for legibility/perf/HUD QA) without
 spinning up the server or joining a live production lobby, see
