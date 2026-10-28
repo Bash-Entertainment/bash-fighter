@@ -115,8 +115,8 @@ Two ways to check, quick first:
 
 - Browser devtools responsive mode (device toolbar) at 390px wide. Good for
   layout; it does not always reproduce touch-viewport bugs.
-- A real phone on the same network: run `npm run dev` in `packages/app`
-  with `npx vite --host`, then open the "Network" URL Vite prints. Use this
+- A real phone on the same network: run `npx vite --host` in
+  `packages/app`, then open the "Network" URL Vite prints. Use this
   to check true `vw` sizing and real touch events (`touch-controls.ts`, the
   `max-width: 700px` breakpoint in `style.css`).
 
