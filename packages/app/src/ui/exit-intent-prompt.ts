@@ -1,8 +1,9 @@
-import { EXIT_INTENT_SHOWN_KEY, shouldShowExitIntent } from '../exit-intent.ts';
+import { EXIT_INTENT_MIN_MATCH_AGE_SEC, EXIT_INTENT_SHOWN_KEY, shouldShowExitIntent } from '../exit-intent.ts';
 import { postLeaveReason } from '../feedback-post.ts';
 import { LEAVE_REASONS, settleLeavePrompt } from '../leave-prompt.ts';
 
 const MAX_TEXT = 200;
+const TAB_RETURN_MIN_AWAY_MS = 4000;
 
 export interface ExitIntentDeps {
   playingLive: () => boolean;
@@ -41,11 +42,26 @@ export function installExitIntentPrompt(deps: ExitIntentDeps): void {
     if (!show) return;
     shownThisPage = true;
     markShown();
-    mount(deps);
+    mount(deps, 'Leaving? One tap tells us what to fix.', 'exit-intent');
+  });
+  // Phones have no exit-intent pointer: ask when the player comes back to
+  // the tab after stepping away from a live match.
+  let hiddenAt: number | null = null;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      hiddenAt = deps.playingLive() && deps.matchAgeSec() >= EXIT_INTENT_MIN_MATCH_AGE_SEC ? Date.now() : null;
+      return;
+    }
+    const awayMs = hiddenAt === null ? 0 : Date.now() - hiddenAt;
+    hiddenAt = null;
+    if (awayMs < TAB_RETURN_MIN_AWAY_MS || shownThisPage || wasShown()) return;
+    shownThisPage = true;
+    markShown();
+    mount(deps, 'Welcome back. What made you step away?', 'tab-return');
   });
 }
 
-function mount(deps: ExitIntentDeps): void {
+function mount(deps: ExitIntentDeps, title: string, trigger: string): void {
   const root = document.createElement('div');
   root.id = 'exit-intent';
   root.className = 'exit-intent';
@@ -53,7 +69,7 @@ function mount(deps: ExitIntentDeps): void {
   root.setAttribute('aria-label', 'Why are you leaving?');
   root.innerHTML = [
     '<div class="exit-intent-head">',
-    '  <span class="exit-intent-title">Leaving? One tap tells us what to fix.</span>',
+    `  <span class="exit-intent-title">${title}</span>`,
     '  <button type="button" class="exit-intent-close" aria-label="Dismiss">\u00d7</button>',
     '</div>',
     '<div class="exit-intent-chips"></div>',
@@ -70,7 +86,7 @@ function mount(deps: ExitIntentDeps): void {
     b.textContent = r.label;
     b.addEventListener('click', () => {
       postLeaveReason(r.id, '', deps.isTouchActive(), {
-        trigger: 'exit-intent',
+        trigger,
         matchAgeSec: deps.matchAgeSec(),
         matchIndex: deps.matchIndex(),
       });
