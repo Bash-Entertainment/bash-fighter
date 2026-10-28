@@ -30,7 +30,7 @@ const RATING_KEYS = [
   'touchErgonomics',
   'matchmakingClarity',
 ] as const;
-export const LEAVE_REASON_IDS = ['too-hard', 'confusing', 'laggy', 'just-looking', 'other'] as const;
+export const LEAVE_REASON_IDS = ['too-hard', 'confusing', 'laggy', 'boring', 'bug', 'just-looking', 'other'] as const;
 export const MATCH_RATINGS = ['bad', 'okay', 'good'] as const;
 export type MatchRating = (typeof MATCH_RATINGS)[number];
 export type LeaveReasonId = (typeof LEAVE_REASON_IDS)[number];
@@ -46,6 +46,10 @@ export interface FeedbackContext {
   touchControls?: boolean;
   viewport?: { width?: number; height?: number };
   buildSha?: string;
+  trigger?: string;
+  matchAgeSec?: number;
+  matchIndex?: number;
+  errors?: string[];
 }
 
 /** The record actually written to the log -- one JSON object per line.
@@ -131,6 +135,16 @@ function sanitiseContext(value: unknown): FeedbackContext | undefined {
   }
   const buildSha = clampString(input.buildSha, 64);
   if (buildSha) out.buildSha = buildSha;
+  const trigger = clampString(input.trigger, 40);
+  if (trigger) out.trigger = trigger;
+  const matchAgeSec = clampNumber(input.matchAgeSec, 0, 100000);
+  if (matchAgeSec !== undefined) out.matchAgeSec = matchAgeSec;
+  const matchIndex = clampNumber(input.matchIndex, 0, 100000);
+  if (matchIndex !== undefined) out.matchIndex = matchIndex;
+  if (Array.isArray(input.errors)) {
+    const errors = input.errors.slice(0, 5).map((e) => clampString(e, 300)).filter((e): e is string => !!e);
+    if (errors.length > 0) out.errors = errors;
+  }
   return Object.keys(out).length > 0 ? out : undefined;
 }
 

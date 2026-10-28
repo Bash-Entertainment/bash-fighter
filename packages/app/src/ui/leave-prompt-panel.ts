@@ -1,5 +1,5 @@
 import { LEAVE_REASONS, settleLeavePrompt, type LeaveReasonId } from '../leave-prompt.ts';
-import { readBuildSha } from './feedback-panel.ts';
+import { postLeaveReason } from '../feedback-post.ts';
 
 const MAX_TEXT = 200;
 
@@ -55,23 +55,7 @@ export function mountLeavePrompt(after: HTMLElement, isTouchActive: () => boolea
   (root.querySelector('.leave-prompt-close') as HTMLButtonElement).addEventListener('click', () => finish(false));
   send.addEventListener('click', () => {
     if (!selected) return;
-    const buildSha = readBuildSha();
-    const comment = input.value.trim();
-    void fetch('/api/feedback', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        ...(new URLSearchParams(location.search).get('qa') === '1' ? { qa: true } : {}),
-        kind: 'leave-reason',
-        reason: selected,
-        comment: comment.length > 0 ? comment : undefined,
-        context: {
-          touchControls: isTouchActive(),
-          viewport: { width: window.innerWidth, height: window.innerHeight },
-          ...(buildSha ? { buildSha } : {}),
-        },
-      }),
-    }).catch(() => undefined);
+    postLeaveReason(selected, input.value.trim(), isTouchActive(), { trigger: 'next-visit' });
     finish(true);
   });
 }

@@ -9,6 +9,8 @@ export const LEAVE_REASONS = [
   { id: 'too-hard', label: 'Too hard' },
   { id: 'confusing', label: 'Confusing' },
   { id: 'laggy', label: 'Laggy or slow' },
+  { id: 'boring', label: 'Boring' },
+  { id: 'bug', label: 'Found a bug' },
   { id: 'just-looking', label: 'Just looking' },
   { id: 'other', label: 'Other' },
 ] as const;

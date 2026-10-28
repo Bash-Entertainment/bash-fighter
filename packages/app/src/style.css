@@ -2611,3 +2611,24 @@ body:has(.leave-prompt) #attract-frame, body:has(.leave-prompt) .attract-caption
 .waiting-goal:empty {
   display: none;
 }
+
+/* Desktop exit-intent prompt (ui/exit-intent-prompt.ts): top centre, non-modal. */
+.exit-intent {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 80;
+  width: min(440px, calc(100vw - 32px));
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--ink);
+}
+.exit-intent-head { display: flex; gap: 8px; justify-content: space-between; align-items: flex-start; }
+.exit-intent-title { font-weight: 600; }
+.exit-intent-close { background: none; border: 0; color: var(--ink-dim); font-size: 18px; line-height: 1; cursor: pointer; }
+.exit-intent-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }

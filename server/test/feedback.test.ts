@@ -361,6 +361,34 @@ test('feedback: a leave-reason with a whitelisted chip is stored; an unknown chi
   });
 });
 
+test('feedback: exit-intent bug report keeps trigger, match age/index and clamped errors (max 5)', async () => {
+  await withServer(undefined, async (baseUrl, logPath) => {
+    const res = await fetch(`${baseUrl}/api/feedback`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kind: 'leave-reason',
+        reason: 'bug',
+        context: { trigger: 'exit-intent', matchAgeSec: 12.4, matchIndex: 2, errors: ['a', 'b', 'c', 'd', 'e', 'f', 'x'.repeat(900)], junk: 'dropped' },
+      }),
+    });
+    assert.equal(res.status, 200);
+    const [line] = readLines(logPath);
+    assert.equal(line.reason, 'bug');
+    assert.equal(line.context.trigger, 'exit-intent');
+    assert.equal(line.context.matchAgeSec, 12);
+    assert.equal(line.context.matchIndex, 2);
+    assert.deepEqual(line.context.errors, ['a', 'b', 'c', 'd', 'e']);
+    assert.equal(line.context.junk, undefined);
+    const boring = await fetch(`${baseUrl}/api/feedback`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kind: 'leave-reason', reason: 'boring' }),
+    });
+    assert.equal(boring.status, 200);
+  });
+});
+
 test('feedback: a match-rating is stored with kind and rating; unknown ratings and mixed kinds are rejected', async () => {
   await withServer({}, async (baseUrl, logPath) => {
     const post = (body: unknown) =>
