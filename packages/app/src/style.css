@@ -2024,6 +2024,20 @@ body.end-screen-open #net-mode-line {
 }
 
 
+/* Landscape phones (~390-430px tall): the 20-card list took 55% of the
+   sidebar, so the clipped match-status block pushed "N KOs · Nth of 20"
+   under the fixed #net-status chip. A shorter (still scrollable) list and
+   smaller rules text keep the player's own standing visible. */
+@media (max-height: 500px) {
+  .hud-list.dense {
+    max-height: 40%;
+  }
+
+  .match-status-mode {
+    font-size: 9px;
+  }
+}
+
 /* Replay viewer (issue #3) */
 #replay-picker-back-btn {
   margin-top: 0.5rem;
