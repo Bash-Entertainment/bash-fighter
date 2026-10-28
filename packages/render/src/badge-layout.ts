@@ -424,6 +424,11 @@ const DANGER_PERCENT_THRESHOLD = 100;
  * TouchControls as it shows and hides. */
 let bottomLeftInsetPx = 0;
 
+/** Below this view height (landscape phones) there is no room above the
+ * stick without landing the readout in the middle of the arena, so it is
+ * placed beside the stick instead. Mirrors the CSS `max-height: 500px`. */
+const SHORT_VIEW_HEIGHT_PX = 500;
+
 export function setLocalReadoutBottomInset(px: number): void {
   bottomLeftInsetPx = Number.isFinite(px) && px > 0 ? px : 0;
 }
@@ -435,9 +440,10 @@ export function computeLocalDamageReadout(
   if (percent === undefined) return null;
   const pct = Math.max(0, Math.round(percent));
   const m = LOCAL_DAMAGE_READOUT_MARGIN_PX;
+  const besideStick = view.height < SHORT_VIEW_HEIGHT_PX;
   return {
-    x: m,
-    y: view.height - m - bottomLeftInsetPx,
+    x: besideStick ? m + bottomLeftInsetPx : m,
+    y: view.height - m - (besideStick ? 0 : bottomLeftInsetPx),
     text: `${pct}%`,
     danger: pct >= DANGER_PERCENT_THRESHOLD,
   };

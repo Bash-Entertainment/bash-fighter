@@ -2446,6 +2446,21 @@ body.end-screen-open #net-mode-line {
     padding-right: 14px;
   }
 
+  /* The bottom-left connection chip sat on the touch stick; park it under
+     the top controls instead, clear of the status block on the left. */
+  #net-status {
+    top: 84px;
+    bottom: auto;
+    left: auto;
+    right: 12px;
+  }
+
+  /* The "You are X" card sat over the rules box in the HUD for its 2.6s;
+     drop it below the status block. */
+  .match-intro {
+    top: 30%;
+  }
+
   /* The spectate chip's bottom-right corner is the action buttons on a
      phone: playing at 256px it sat straight on Attack and Special. It goes
      above the whole control block (104px of buttons plus their margin). */

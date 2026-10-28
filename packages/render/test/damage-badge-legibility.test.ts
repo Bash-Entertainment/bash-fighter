@@ -346,3 +346,17 @@ test('the local damage readout clears whatever covers the bottom-left corner', (
   setLocalReadoutBottomInset(0);
   assert.equal(computeLocalDamageReadout(46, view)?.y, base.y, 'hiding the controls puts it back');
 });
+
+// 2026-10-28: on a landscape phone lifting the readout above the stick put it
+// mid-arena over the fighters; there it sits beside the stick instead.
+test('on a short landscape view the local damage readout moves beside the stick, not up into the arena', () => {
+  const view = { width: 844, height: 400 };
+  const base = computeLocalDamageReadout(46, view);
+  assert.ok(base);
+  setLocalReadoutBottomInset(120);
+  const beside = computeLocalDamageReadout(46, view);
+  setLocalReadoutBottomInset(0);
+  assert.ok(beside);
+  assert.equal(beside.y, base.y, 'stays on the bottom margin');
+  assert.ok(beside.x >= 120, `clear of the stick, x=${beside.x}`);
+});
