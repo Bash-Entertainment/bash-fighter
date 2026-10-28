@@ -37,12 +37,14 @@ export class MatchIntro {
    * @param colour      that fighter's colour, as a CSS colour string
    * @param joinedLate  true when the match was already running as we joined
    * @param durationMs  how long to stay up before fading itself out
+   * @param seriesLabel Rookie series line (rookie-series.ts), when one applies
    */
   show(
     name: string,
     colour: string,
     joinedLate: boolean,
     durationMs = 2600,
+    seriesLabel?: string,
   ): void {
     if (this.timer !== null) clearTimeout(this.timer);
     this.root.replaceChildren();
@@ -65,6 +67,13 @@ export class MatchIntro {
       ? 'The fight is already going. The marker on screen follows you.'
       : 'The marker on screen follows you.';
     card.appendChild(hint);
+
+    if (seriesLabel) {
+      const series = document.createElement('p');
+      series.className = 'match-intro-series';
+      series.textContent = seriesLabel;
+      card.appendChild(series);
+    }
 
     this.root.appendChild(card);
     this.root.classList.remove('hidden');

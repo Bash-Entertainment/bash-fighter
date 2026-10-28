@@ -11,6 +11,7 @@ import { MatchRatingRow } from './match-rating-row.ts';
 import { buildStandings, placementOf, tiedHeadline, type TimedBrawlScore } from '../timed-brawl.ts';
 import { recordKos, nextGoalLine } from '../personal-best.ts';
 import { copyToClipboard } from '../join-link.ts';
+import { renderSeriesPanel, type SeriesPanelView } from './rookie-series-panel.ts';
 
 const PLAYER_HEX = PALETTE.playerColors.map((c) => `#${c.toString(16).padStart(6, '0')}`);
 
@@ -30,6 +31,11 @@ export class TimedBrawlEndScreen {
   private lastResult: 'won' | 'lost' | 'tied' = 'tied';
   private inviteLink: string | null = null;
   private onInviteCopied: (() => void) | undefined;
+
+  /** Rookie series panel for the next show(); null hides it. */
+  setSeries(view: SeriesPanelView | null): void {
+    renderSeriesPanel(this.root.querySelector('#tb-series') as HTMLElement, view);
+  }
 
   /** Same shareable-lobby-link code as WinScreen/WaitingScreen. */
   setInviteLink(link: string | null, onCopy?: () => void): void {
@@ -53,6 +59,7 @@ export class TimedBrawlEndScreen {
       <div class="subtitle" id="tb-best"></div>
       <div class="tb-new-best hidden" id="tb-new-best">New best</div>
       <div class="subtitle" id="tb-next"></div>
+      <div class="series-panel hidden" id="tb-series"></div>
       <div class="tb-standings" id="tb-standings"></div>
       <button class="btn btn-primary" id="tb-rematch-btn">Play again</button>
       <div class="match-rating-slot"></div>

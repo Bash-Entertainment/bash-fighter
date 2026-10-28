@@ -6,6 +6,7 @@ import { PALETTE } from '@bash-fighter/render';
 import { AutoContinue } from './auto-continue.ts';
 import { MatchRatingRow } from './match-rating-row.ts';
 import { copyToClipboard } from '../join-link.ts';
+import { renderSeriesPanel, type SeriesPanelView } from './rookie-series-panel.ts';
 
 const PLAYER_HEX = PALETTE.playerColors.map((c) => `#${c.toString(16).padStart(6, '0')}`);
 
@@ -22,6 +23,11 @@ export class WinScreen {
   private lastResult: 'won' | 'eliminated' | 'no_survivor' = 'no_survivor';
   private inviteLink: string | null = null;
   private onInviteCopied: (() => void) | undefined;
+
+  /** Rookie series panel for the next show(); null hides it. */
+  setSeries(view: SeriesPanelView | null): void {
+    renderSeriesPanel(this.root.querySelector('#win-series') as HTMLElement, view);
+  }
 
   /** Same shareable-lobby-link code as the waiting screen (see
    *  join-link.ts) -- lets a group stay together into their next match.
@@ -45,6 +51,7 @@ export class WinScreen {
     this.root.innerHTML = `
       <div class="win-headline" id="win-headline">&mdash;</div>
       <div class="subtitle" id="win-subtitle">Match over.</div>
+      <div class="series-panel hidden" id="win-series"></div>
       <button class="btn btn-primary" id="rematch-btn">Play again</button>
       <div class="match-rating-slot"></div>
       <div class="feedback-end-screen-block">

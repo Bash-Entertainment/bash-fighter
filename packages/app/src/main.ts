@@ -14,6 +14,8 @@ import { NetMatch, clearStoredResumeToken, type ConnectionState } from './net-ma
 import { getMatchesPlayed } from './matches-played.ts';
 import { SpectateChip } from './ui/spectate-chip.ts';
 import { MatchIntro } from './ui/match-intro.ts';
+import { activeSeries, introLabel, isComplete, markResultShown, recordSeriesMatch, type SeriesState } from './rookie-series.ts';
+import { seriesPanelView } from './ui/rookie-series-panel.ts';
 import { MatchOverlay, SPECTATE_OFFER, type MatchOverlayContent } from './ui/match-overlay.ts';
 import { ControlsHint } from './ui/controls-hint.ts';
 import { MoveReferencePanel } from './ui/move-reference-panel.ts';
@@ -250,6 +252,27 @@ function onRendererInitFailed(where: string, error: unknown): void {
 }
 const spectateChip = new SpectateChip(appRoot, () => void beginOnlineMatch(true));
 const matchIntro = new MatchIntro(appRoot);
+
+/** Records a finished online match in the rookie series and returns its panel; only a match the player
+ *  actually played counts (same notion as auto-continue). */
+function rookieSeriesPanel() {
+  const playerWasActive = (netMatch?.localInputTicks() ?? 0) > 0;
+  const localSlot = netMatch?.localSlot();
+  const localKos = (netMatch?.currentSnapshots() ?? [])[localSlot ?? -1]?.koCount ?? 0;
+  const storage = window.localStorage;
+  let series = activeSeries(storage, Date.now(), getMatchesPlayed() <= 1);
+  if (!series) return null;
+  if (playerWasActive && !isComplete(series)) series = recordSeriesMatch(series, storage, localKos, Date.now());
+  pendingSeriesResult = isComplete(series) ? series : null;
+  return seriesPanelView(series);
+}
+
+/** The result card is shown once: only a screen that displays it ends the series. */
+let pendingSeriesResult: SeriesState | null = null;
+function endSeriesIfResultShown(): void {
+  if (pendingSeriesResult) markResultShown(pendingSeriesResult, window.localStorage);
+  pendingSeriesResult = null;
+}
 /** The 20-slot FFA palette entry for a seat, as a CSS colour -- the same
  *  colour the renderer fills that fighter with, so the intro's swatch and
  *  the fighter on screen are recognisably the same thing. */
@@ -819,6 +842,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
     },
     onMatchOver: (winnerIndex, resolved, leaderboard, settings) => {
       clearSpectateStallTimer();
+      const seriesView = resolved ? rookieSeriesPanel() : null;
       // The sim has genuinely finished in every branch below (resolved
       // or an abandoned teardown) -- resume here once, rather than in
       // each branch, so nothing can fall through without it.
@@ -903,11 +927,16 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
           koCount: s.koCount,
           deathCount: s.deathCount,
         }));
-        timedBrawlEndScreen.autoContinueEnabled = playerWasActive;
+        // The result card is read, not skipped past by a countdown.
+        timedBrawlEndScreen.autoContinueEnabled = playerWasActive && !pendingSeriesResult;
+        timedBrawlEndScreen.setSeries(seriesView);
+        endSeriesIfResultShown();
         timedBrawlEndScreen.setInviteLink(nextMatchInviteLink(), commitInvite);
         timedBrawlEndScreen.show(winnerIndex, leaderboard, scores, netMatch?.localSlot(), netMatch ? (slot) => netMatch!.nameFor(slot) : undefined);
       } else {
-        winScreen.autoContinueEnabled = playerWasActive;
+        winScreen.autoContinueEnabled = playerWasActive && !pendingSeriesResult;
+        winScreen.setSeries(seriesView);
+        endSeriesIfResultShown();
         winScreen.setInviteLink(nextMatchInviteLink(), commitInvite);
         winScreen.show(winnerIndex, netMatch?.localSlot(), netMatch ? (slot) => netMatch!.nameFor(slot) : undefined);
       }
@@ -916,7 +945,8 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
       liveMatchBeganAtMs = performance.now();
       // Names the fighter that belongs to this player for the opening
       // couple of seconds. See ui/match-intro.ts for why.
-      matchIntro.show(name, localPlayerColour(slot), joinedLate);
+      const series = activeSeries(window.localStorage, Date.now(), getMatchesPlayed() <= 1);
+      matchIntro.show(name, localPlayerColour(slot), joinedLate, undefined, series ? introLabel(series) : undefined);
       // Dims every other fighter and enlarges the local pointer for the
       // first ~1.8s (Renderer.announceLocalPlayer), fresh join or a
       // mid-match join alike -- both are the first moment THIS client

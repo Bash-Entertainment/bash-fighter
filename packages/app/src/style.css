@@ -2632,3 +2632,25 @@ body:has(.leave-prompt) #attract-frame, body:has(.leave-prompt) .attract-caption
 .exit-intent-title { font-weight: 600; }
 .exit-intent-close { background: none; border: 0; color: var(--ink-dim); font-size: 18px; line-height: 1; cursor: pointer; }
 .exit-intent-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+
+/* Rookie series (ui/rookie-series-panel.ts, match-intro series line). */
+.series-panel {
+  border: 1px solid var(--accent);
+  background: var(--panel);
+  padding: 8px 12px;
+  margin: 8px 0;
+  max-width: 100%;
+  text-align: center;
+}
+.series-heading { color: var(--accent); font-size: 14px; font-weight: 600; }
+.series-lines {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 14px;
+  margin: 4px 0;
+  color: var(--ink);
+  font-size: 13px;
+}
+.series-footer { color: var(--ink-dim); font-size: 13px; }
+.match-intro-series { margin: 4px 0 0; color: var(--accent); font-size: 13px; }
