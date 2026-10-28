@@ -1511,8 +1511,12 @@ export class Renderer {
       // Nothing to release, or the browser refused to say. Either way this
       // is a best-effort early return of a context, never a failure.
     }
+    // `{ removeView: true }`, never `true`: `true` also releases Pixi's
+    // global pools, which destroys batches another live Application (the
+    // shared character-icon renderer, a late attract-mode demo) is still
+    // drawing with -- its next frame throws "batcher is null" and freezes.
     try {
-      this.app.destroy(true, { children: true });
+      this.app.destroy({ removeView: true }, { children: true });
     } catch {
       // Same reasoning: a half-constructed Pixi application is exactly the
       // case we are cleaning up after.
