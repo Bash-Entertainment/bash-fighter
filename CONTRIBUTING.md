@@ -111,6 +111,8 @@ package's tests before opening a PR.
 ### Testing the mobile layout
 
 Most real players are on phones, so touch and narrow-viewport bugs matter.
+The full guide (including `?forceTouch=1`) is in the README under
+[Testing on a mobile viewport](README.md#testing-on-a-mobile-viewport).
 Two ways to check, quick first:
 
 - Browser devtools responsive mode (device toolbar) at 390px wide. Good for
