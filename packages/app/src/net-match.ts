@@ -335,6 +335,11 @@ export class NetMatch {
   private inputActivity = new InputActivityTracker();
 
   /** Ticks of non-neutral local input this match; 0 means the player never touched a control. */
+  /** True while this client is a live, not-yet-eliminated player in a running match. */
+  isPlayingLive(): boolean {
+    return this.matchStarted && !this.spectating && this.mySlot >= 0 && !this.over;
+  }
+
   localInputTicks(): number {
     return this.inputActivity.getInputTicks();
   }

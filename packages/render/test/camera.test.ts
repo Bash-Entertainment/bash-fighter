@@ -234,7 +234,9 @@ test('clampBounds lets the camera center follow ground-level fighters instead of
   // comment in camera.ts) should put it at roughly 60-68% down the
   // viewport -- more room above the ground than below it (jumps go up,
   // not down), without pinning the action to either edge.
-  assert.ok(beforeFrac > 0.75, `expected pre-fix ground line pinned near bottom, got ${beforeFrac}`);
+  // (Clamping to the floor itself used to pin it near the bottom, > 0.75;
+  // the ground-anchor ceiling in computeFitEveryoneCamera now holds either.)
+  assert.ok(beforeFrac <= 0.75, `expected ground line not pinned near bottom, got ${beforeFrac}`);
   assert.ok(afterFrac > 0.60 && afterFrac < 0.68, `expected post-fix ground line at ~60-68% down, got ${afterFrac}`);
 });
 
@@ -524,3 +526,44 @@ test('a small cluster below the slack-cap threshold still gets the full arena fl
   );
 });
 
+
+// Presentation bug 2026-10-28: once the live blast rect had closed in to
+// just below the ground, clamping the view bottom to it parked the ground
+// on the very bottom edge of the screen with the sky filling the rest, under
+// the damage readout and debug hint. The clamp must never push the lowest
+// fighter below the ground-anchored line.
+const GROUND_LINE_MAX_FRAC = 0.75;
+
+test('a blast rect closed in just below the ground does not pin the ground to the screen bottom', () => {
+  const c = cfg({
+    minScale: 0.5,
+    arena: { minX: -480, maxX: 480, minY: -40, maxY: 500 },
+    clampBounds: { minX: -480, maxX: 480, minY: -40, maxY: 500 },
+  });
+  const pack = [-400, -200, 0, 200, 400].map((x) => ({ x, y: 0 }));
+  const cam = computeRawCamera(pack, c);
+  const groundY = c.viewHeight / 2 - (0 - cam.centerY) * cam.scale;
+  assert.ok(groundY / c.viewHeight <= GROUND_LINE_MAX_FRAC, `ground at ${groundY / c.viewHeight}`);
+  for (const p of pack) {
+    const sx = c.viewWidth / 2 + (p.x - cam.centerX) * cam.scale;
+    assert.ok(sx >= 0 && sx <= c.viewWidth, `fighter at ${p.x} cropped (screen x ${sx})`);
+  }
+});
+
+test('the follow-the-local-player floor keeps the local fighter on screen and off the bottom row against a closed-in blast rect', () => {
+  const c = cfg({
+    viewWidth: 390,
+    viewHeight: 844,
+    minScale: 0.3,
+    arena: { minX: -300, maxX: 300, minY: -40, maxY: 400 },
+    clampBounds: { minX: -300, maxX: 300, minY: -40, maxY: 400 },
+  });
+  const pack = Array.from({ length: 20 }, (_, i) => ({ x: -290 + i * 30, y: 0 }));
+  const local = pack[19]!;
+  const cam = computeRawCamera(pack, c, local);
+  assert.equal(cam.minSizeFollow, true);
+  const sx = c.viewWidth / 2 + (local.x - cam.centerX) * cam.scale;
+  const sy = c.viewHeight / 2 - (local.y - cam.centerY) * cam.scale;
+  assert.ok(sx >= 0 && sx <= c.viewWidth, `local screen x ${sx}`);
+  assert.ok(sy / c.viewHeight <= GROUND_LINE_MAX_FRAC, `local screen y frac ${sy / c.viewHeight}`);
+});

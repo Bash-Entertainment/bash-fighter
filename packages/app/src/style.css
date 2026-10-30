@@ -2024,6 +2024,20 @@ body.end-screen-open #net-mode-line {
 }
 
 
+/* Landscape phones (~390-430px tall): the 20-card list took 55% of the
+   sidebar, so the clipped match-status block pushed "N KOs · Nth of 20"
+   under the fixed #net-status chip. A shorter (still scrollable) list and
+   smaller rules text keep the player's own standing visible. */
+@media (max-height: 500px) {
+  .hud-list.dense {
+    max-height: 40%;
+  }
+
+  .match-status-mode {
+    font-size: 9px;
+  }
+}
+
 /* Replay viewer (issue #3) */
 #replay-picker-back-btn {
   margin-top: 0.5rem;
@@ -2432,6 +2446,21 @@ body.end-screen-open #net-mode-line {
     padding-right: 14px;
   }
 
+  /* The bottom-left connection chip sat on the touch stick; park it under
+     the top controls instead, clear of the status block on the left. */
+  #net-status {
+    top: 84px;
+    bottom: auto;
+    left: auto;
+    right: 12px;
+  }
+
+  /* The "You are X" card sat over the rules box in the HUD for its 2.6s;
+     drop it below the status block. */
+  .match-intro {
+    top: 30%;
+  }
+
   /* The spectate chip's bottom-right corner is the action buttons on a
      phone: playing at 256px it sat straight on Attack and Special. It goes
      above the whole control block (104px of buttons plus their margin). */
@@ -2646,3 +2675,23 @@ body:has(.leave-prompt) #attract-frame, body:has(.leave-prompt) .attract-caption
   100% { transform: scale(1); opacity: 0; }
 }
 @keyframes start-countdown-fade { 0%, 50% { opacity: 1; } 100% { opacity: 0; } }
+/* Desktop exit-intent prompt (ui/exit-intent-prompt.ts): top centre, non-modal. */
+.exit-intent {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 80;
+  width: min(440px, calc(100vw - 32px));
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--ink);
+}
+.exit-intent-head { display: flex; gap: 8px; justify-content: space-between; align-items: flex-start; }
+.exit-intent-title { font-weight: 600; }
+.exit-intent-close { background: none; border: 0; color: var(--ink-dim); font-size: 18px; line-height: 1; cursor: pointer; }
+.exit-intent-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }

@@ -21,6 +21,8 @@ import { MoveReferencePanel } from './ui/move-reference-panel.ts';
 import { SettingsPanel } from './ui/settings-panel.ts';
 import { shouldShowLeavePrompt } from './leave-prompt.ts';
 import { mountLeavePrompt } from './ui/leave-prompt-panel.ts';
+import { installErrorBuffer } from './error-buffer.ts';
+import { installExitIntentPrompt } from './ui/exit-intent-prompt.ts';
 import { FeedbackPanel } from './ui/feedback-panel.ts';
 import { TouchControls } from './ui/touch-controls.ts';
 import { WaitingScreen } from './ui/waiting-screen.ts';
@@ -359,6 +361,14 @@ onlineButton.textContent = 'Play online';
 // of most viewports.
 (startScreen.root.querySelector('#primary-actions') ?? startScreen.root).appendChild(onlineButton);
 
+installErrorBuffer();
+let liveMatchBeganAtMs = 0;
+installExitIntentPrompt({
+  playingLive: () => netMatch?.isPlayingLive() ?? false,
+  matchAgeSec: () => (liveMatchBeganAtMs > 0 ? (performance.now() - liveMatchBeganAtMs) / 1000 : 0),
+  matchIndex: () => getMatchesPlayed(),
+  isTouchActive: () => touchCapable,
+});
 if (shouldShowLeavePrompt()) {
   mountLeavePrompt(startScreen.root.querySelector('#primary-actions') ?? onlineButton, () => touchCapable);
 }
@@ -907,6 +917,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
     },
     onCountdown: (label) => startCountdown.show(label),
     onMatchBegan: (slot, name, joinedLate) => {
+      liveMatchBeganAtMs = performance.now();
       // Names the fighter that belongs to this player for the opening
       // couple of seconds. See ui/match-intro.ts for why.
       matchIntro.show(name, localPlayerColour(slot), joinedLate);

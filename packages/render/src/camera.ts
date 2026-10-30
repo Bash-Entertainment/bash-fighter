@@ -96,6 +96,10 @@ let smoothedView: CameraView | null = null;
  * like it has no idea who it should follow ... I had no idea what was
  * going on." Damping is not an accessibility nicety here, it is the
  * baseline. Reduced motion stays calmer still. */
+// Fraction of the half-view below the view centre at which the lowest
+// fighter is anchored (0.35 puts the ground ~65% down the screen); also the
+// lowest the followed local fighter may sit when a clamp pushes the view.
+const GROUND_BIAS = 0.35;
 const FOLLOW_TAU_MS = 90;
 const REDUCED_MOTION_TAU_MS = 260;
 /** A jump this large (in fractions of the view) is a cut, not a move: a
@@ -407,7 +411,6 @@ export function computeFitEveryoneCamera(
   // picks a point *inside* the same never-crop-a-fighter safe range
   // documented below -- changing this constant cannot by itself
   // introduce cropping, jitter, or a second competing clamp.
-  const GROUND_BIAS = 0.35;
   // With no fighters at all (e.g. a spectator view before anyone has
   // spawned) fMinY/fMaxY fall back to the whole arena above, and the
   // "whole arena" framing should stay plainly centered rather than
@@ -451,6 +454,12 @@ export function computeFitEveryoneCamera(
   }
   if (clamp.maxY - clamp.minY >= halfViewWorldY * 2) {
     centerY = Math.min(Math.max(centerY, clamp.minY + halfViewWorldY), clamp.maxY - halfViewWorldY);
+    if (positions.length > 0) {
+      // A blast rect closed in just below the ground would otherwise push
+      // the view bottom up against it and park the ground on the screen's
+      // bottom edge; showing a little void beyond the rect is harmless.
+      centerY = Math.min(centerY, Math.max(fMinY + GROUND_BIAS * halfViewWorldY, fMaxY - halfViewWorldY));
+    }
   }
 
   return { centerX, centerY, scale };
@@ -529,6 +538,14 @@ function applyMinFighterSizeFloor(
     centerY = Math.min(Math.max(centerY, clamp.minY + halfViewWorldY), clamp.maxY - halfViewWorldY);
   } else {
     centerY = (clamp.minY + clamp.maxY) / 2;
+  }
+
+  // The blast-rect clamp is only about not showing void; it must not park
+  // the followed fighter on the bottom row when the rect has closed in
+  // just below the ground.
+  if (localPlayerPos) {
+    const subjectY = Math.min(Math.max(localPlayerPos.y, clamp.minY), clamp.maxY);
+    centerY = Math.min(centerY, subjectY - cfg.paddingWorld + GROUND_BIAS * halfViewWorldY);
   }
 
   return { centerX, centerY, scale, minSizeFollow: true };
