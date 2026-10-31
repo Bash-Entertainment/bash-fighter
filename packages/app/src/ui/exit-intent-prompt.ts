@@ -1,8 +1,7 @@
 import { EXIT_INTENT_MIN_MATCH_AGE_SEC, EXIT_INTENT_SHOWN_KEY, shouldShowExitIntent } from '../exit-intent.ts';
-import { postLeaveReason } from '../feedback-post.ts';
-import { LEAVE_REASONS, settleLeavePrompt } from '../leave-prompt.ts';
+import { settleLeavePrompt } from '../leave-prompt.ts';
+import { mountQuickRating } from './quick-rating.ts';
 
-const MAX_TEXT = 200;
 const TAB_RETURN_MIN_AWAY_MS = 4000;
 
 export interface ExitIntentDeps {
@@ -42,7 +41,7 @@ export function installExitIntentPrompt(deps: ExitIntentDeps): void {
     if (!show) return;
     shownThisPage = true;
     markShown();
-    mount(deps, 'Leaving? One tap tells us what to fix.', 'exit-intent');
+    mount(deps, 'Leaving? How was it?', 'exit-intent');
   });
   // Phones have no exit-intent pointer: ask when the player comes back to
   // the tab after stepping away from a live match.
@@ -57,7 +56,7 @@ export function installExitIntentPrompt(deps: ExitIntentDeps): void {
     if (awayMs < TAB_RETURN_MIN_AWAY_MS || shownThisPage || wasShown()) return;
     shownThisPage = true;
     markShown();
-    mount(deps, 'Welcome back. What made you step away?', 'tab-return');
+    mount(deps, 'Welcome back. How was it?', 'tab-return');
   });
 }
 
@@ -66,67 +65,22 @@ function mount(deps: ExitIntentDeps, title: string, trigger: string): void {
   root.id = 'exit-intent';
   root.className = 'exit-intent';
   root.setAttribute('role', 'dialog');
-  root.setAttribute('aria-label', 'Why are you leaving?');
+  root.setAttribute('aria-label', 'How was it?');
   root.innerHTML = [
     '<div class="exit-intent-head">',
     `  <span class="exit-intent-title">${title}</span>`,
     '  <button type="button" class="exit-intent-close" aria-label="Dismiss">\u00d7</button>',
     '</div>',
-    '<div class="exit-intent-chips"></div>',
+    '<div class="exit-intent-body"></div>',
   ].join('');
   document.body.appendChild(root);
-  // Typing in the follow-up field must not drive the fighter or be swallowed by game keys.
-  for (const t of ['keydown', 'keyup'] as const) root.addEventListener(t, (e) => e.stopPropagation());
-
-  const chips = root.querySelector('.exit-intent-chips') as HTMLElement;
-  for (const r of LEAVE_REASONS) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'leave-prompt-chip';
-    b.textContent = r.label;
-    b.addEventListener('click', () => {
-      postLeaveReason(r.id, '', deps.isTouchActive(), {
-        trigger,
-        matchAgeSec: deps.matchAgeSec(),
-        matchIndex: deps.matchIndex(),
-      });
+  mountQuickRating(root.querySelector('.exit-intent-body') as HTMLElement, {
+    extra: () => ({ trigger, matchAgeSec: deps.matchAgeSec(), matchIndex: deps.matchIndex() }),
+    isTouchActive: deps.isTouchActive,
+    onDone: () => {
       settleLeavePrompt();
-      showFollowUp(root);
-    });
-    chips.appendChild(b);
-  }
-  (root.querySelector('.exit-intent-close') as HTMLButtonElement).addEventListener('click', () => root.remove());
-}
-
-function showFollowUp(root: HTMLElement): void {
-  root.innerHTML = [
-    '<div class="exit-intent-head">',
-    '  <span class="exit-intent-title">Thanks. Anything specific?</span>',
-    '  <button type="button" class="exit-intent-close" aria-label="Close">\u00d7</button>',
-    '</div>',
-    '<div class="leave-prompt-row">',
-    `  <input class="leave-prompt-input" type="text" maxlength="${MAX_TEXT}" placeholder="What happened? (optional)" aria-label="What happened" autocomplete="off" />`,
-    '  <button type="button" class="leave-prompt-send">Send</button>',
-    '</div>',
-  ].join('');
-  const input = root.querySelector('.leave-prompt-input') as HTMLInputElement;
-  (root.querySelector('.exit-intent-close') as HTMLButtonElement).addEventListener('click', () => root.remove());
-  (root.querySelector('.leave-prompt-send') as HTMLButtonElement).addEventListener('click', () => {
-    const comment = input.value.trim();
-    if (comment.length > 0) {
-      void fetch('/api/feedback', {
-        method: 'POST',
-        keepalive: true,
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          ...(new URLSearchParams(location.search).get('qa') === '1' ? { qa: true } : {}),
-          comment,
-          context: { trigger: 'exit-intent-text', viewport: { width: window.innerWidth, height: window.innerHeight } },
-        }),
-      }).catch(() => undefined);
-    }
-    root.textContent = 'Thanks';
-    setTimeout(() => root.remove(), 1500);
+      setTimeout(() => root.remove(), 1500);
+    },
   });
-  input.focus();
+  (root.querySelector('.exit-intent-close') as HTMLButtonElement).addEventListener('click', () => root.remove());
 }

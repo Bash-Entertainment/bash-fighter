@@ -1,4 +1,5 @@
 import type { LeaveReasonId } from './leave-prompt.ts';
+import type { QuickRatingId } from './quick-rating.ts';
 import { recentErrors } from './error-buffer.ts';
 import { readBuildSha } from './ui/feedback-panel.ts';
 
@@ -9,7 +10,7 @@ export interface LeaveReasonExtra {
 }
 
 /** Posts one leave-reason record. Fire-and-forget, keepalive so it survives the tab closing. */
-export function postLeaveReason(reason: LeaveReasonId, comment: string, touchControls: boolean, extra: LeaveReasonExtra = {}): void {
+export function postLeaveReason(reason: LeaveReasonId | QuickRatingId, comment: string, touchControls: boolean, extra: LeaveReasonExtra = {}): void {
   const buildSha = readBuildSha();
   const errors = recentErrors();
   void fetch('/api/feedback', {

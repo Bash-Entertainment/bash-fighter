@@ -30,7 +30,7 @@ const RATING_KEYS = [
   'touchErgonomics',
   'matchmakingClarity',
 ] as const;
-export const LEAVE_REASON_IDS = ['too-hard', 'confusing', 'laggy', 'boring', 'bug', 'just-looking', 'other'] as const;
+export const LEAVE_REASON_IDS = ['too-hard', 'confusing', 'laggy', 'boring', 'bug', 'just-looking', 'other', 'fun', 'meh'] as const;
 export const MATCH_RATINGS = ['bad', 'okay', 'good'] as const;
 export type MatchRating = (typeof MATCH_RATINGS)[number];
 export type LeaveReasonId = (typeof LEAVE_REASON_IDS)[number];

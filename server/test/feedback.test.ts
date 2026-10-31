@@ -415,3 +415,19 @@ test('feedback: a match-rating is stored with kind and rating; unknown ratings a
     assert.equal(lines[0]?.rating, 'okay');
   });
 });
+
+test('feedback: the one-tap quick ratings (fun, meh, confusing) are stored with their trigger', async () => {
+  await withServer(undefined, async (baseUrl, logPath) => {
+    for (const reason of ['fun', 'meh', 'confusing']) {
+      const res = await fetch(`${baseUrl}/api/feedback`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ kind: 'leave-reason', reason, context: { trigger: 'exit-intent', matchIndex: 1 } }),
+      });
+      assert.equal(res.status, 200, reason);
+    }
+    const lines = readLines(logPath);
+    assert.deepEqual(lines.map((l) => l.reason), ['fun', 'meh', 'confusing']);
+    assert.equal((lines[0].context as Record<string, unknown>).trigger, 'exit-intent');
+  });
+});
