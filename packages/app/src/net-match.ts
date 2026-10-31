@@ -3,6 +3,7 @@
 // every snapshot, and interpolates every remote fighter between the last
 // two received snapshots. See docs/PROTOCOL.md for the wire format this
 // implements against.
+import { wasFeedbackPrompted } from './exit-intent.ts';
 import {
   Sim,
   fixed as fx,
@@ -457,6 +458,7 @@ export class NetMatch {
       frameP95Ms: this.frameTimeTracker.getP95Ms(),
       devicePixelRatio: this.sessionDevicePixelRatio,
       requeued: this.requeued,
+      feedbackPrompted: wasFeedbackPrompted(),
       contextLostCount: this.contextLostCount,
       renderStalled: this.renderStalled,
       frameHistogram: this.frameTimeTracker.getHistogram(),

@@ -561,6 +561,15 @@ test('sessionReport: devicePixelRatio is kept when sane and dropped when not', (
 // 2026-09-19. Re-queue rate (Play again vs start screen) is the metric we
 // care most about, so requeued must survive a strict boolean and get
 // dropped otherwise -- never coerced from a truthy/falsy non-boolean.
+test('sessionReport: feedbackPrompted is kept only when a strict boolean', () => {
+  const sessionReportWith = (extra: Record<string, unknown>) =>
+    JSON.stringify({ t: 'sessionReport', firstInputMs: 100, inputTicks: 10, frameMedianMs: 16, frameP95Ms: 20, ...extra });
+  const kept = parseClientControl(sessionReportWith({ feedbackPrompted: true }));
+  assert.equal((kept as { feedbackPrompted?: boolean })?.feedbackPrompted, true);
+  const dropped = parseClientControl(sessionReportWith({ feedbackPrompted: 'yes' }));
+  assert.equal((dropped as { feedbackPrompted?: boolean })?.feedbackPrompted, undefined);
+});
+
 test('sessionReport: requeued is kept only when a strict boolean', () => {
   const sessionReportWith = (extra: Record<string, unknown>) =>
     JSON.stringify({ t: 'sessionReport', firstInputMs: 100, inputTicks: 10, frameMedianMs: 16, frameP95Ms: 20, ...extra });
@@ -665,3 +674,4 @@ test('sessionReport: still validates with neither renderResolution nor resolutio
   assert.equal('renderResolution' in msg, false);
   assert.equal('resolutionDowngrades' in msg, false);
 });
+
