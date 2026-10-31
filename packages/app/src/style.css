@@ -2697,7 +2697,7 @@ body:has(.leave-prompt) #attract-frame, body:has(.leave-prompt) .attract-caption
 .exit-intent-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 /* One-tap rating (ui/quick-rating.ts): exit-intent prompt and end screens. */
 .exit-intent-body { margin-top: 10px; }
-.quick-rating { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-top: 14px; }
+.quick-rating { display: flex; flex-direction: column; gap: 8px; width: 100%; min-width: min(290px, 100vw - 32px); align-self: center; box-sizing: border-box; margin-top: 14px; }
 .exit-intent-body .quick-rating { margin-top: 0; }
 .quick-rating:not(.quick-rating-thanks) { flex-direction: row; }
 .quick-rating-btn {
