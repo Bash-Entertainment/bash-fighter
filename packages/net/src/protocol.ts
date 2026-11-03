@@ -18,13 +18,15 @@
  * reality with no error anywhere.
  */
 
-/** Bumped to 3 for delta-compressed snapshots (2026-09-11): the server may
+/** Bumped to 4 for forgiving jumps (coyote time + jump buffer): the sim gained two fighter
+ *  state fields and a new jump rule, so builds on different sides would disagree about the
+ *  state. No wire framing changed. Bumped to 3 for delta-compressed snapshots (2026-09-11): the server may
  *  now send a `SNAPSHOT_DELTA` binary frame instead of a full `SNAPSHOT`,
  *  see "Binary: snapshot delta" below and the "Bandwidth Reduction Pass
  *  2026-09-11" wiki page. A mismatch is still refused explicitly at the
  *  handshake rather than silently misbehaving -- see the module comment
  *  above. (Was bumped to 2 for resume-token reconnection support.) */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /** Snapshots per second sent to each client. The sim runs at 60Hz; clients
  *  interpolate between snapshots and predict their own fighter, so the

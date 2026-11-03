@@ -216,7 +216,9 @@ export const FighterField = {
   RING_DAMAGE_TICK: 26, // last tick this fighter took ring (out-of-bounds) damage, -1 if never
   LAST_HIT_TICK: 27, // last tick a combat hit landed on this fighter, -1 if never (see DEATH_CAUSE below)
   HITSTOP_TICKS: 28, // ticks remaining of a sim-side impact freeze (see HITSTOP_* in knockback.ts); 0 = not frozen
-  FIELD_COUNT: 29,
+  COYOTE_TIMER: 29, // ticks of grounded-jump allowance left after leaving the ground without jumping
+  JUMP_BUFFER_TIMER: 30, // ticks a jump press stays queued waiting for landing; 0 = none
+  FIELD_COUNT: 31,
 } as const;
 
 /** Ring-pressure tuning (2026-09-10): the collapsing boundary no longer kills on contact. A
@@ -248,6 +250,12 @@ const RING_INWARD_PUSH = fx.fromFloat(0.35);
 /** Max jumps allowed per airborne phase: one grounded jump + one aerial
  * ("double") jump, matching standard platform-fighter convention. */
 export const MAX_JUMPS = 2;
+
+/** Ticks after leaving the ground (without jumping) in which a jump still counts as the
+ * grounded jump. 6 ticks = 100 ms at 60 Hz. */
+export const COYOTE_TICKS = 6;
+/** Ticks before landing in which a jump press is remembered and fires once grounded. */
+export const JUMP_BUFFER_TICKS = 6;
 
 const RNG_FIELD_WORDS = 4; // s0 lo/hi, s1 lo/hi
 const TICK_WORDS = 1;
@@ -508,6 +516,8 @@ export class Sim {
     d[base + FighterField.PLACEMENT] = 0;
     d[base + FighterField.JUMPS_USED] = 0;
     d[base + FighterField.PREV_JUMP_HELD] = 0;
+    d[base + FighterField.COYOTE_TIMER] = 0;
+    d[base + FighterField.JUMP_BUFFER_TIMER] = 0;
     d[base + FighterField.DROP_THROUGH_TIMER] = 0;
     d[base + FighterField.RING_DAMAGE_TICK] = -1;
     d[base + FighterField.LAST_HIT_TICK] = -1;
@@ -542,6 +552,8 @@ export class Sim {
     d[base + FighterField.INVULN_TIMER] = this.settings.respawnInvulnTicks;
     d[base + FighterField.JUMPS_USED] = 0;
     d[base + FighterField.PREV_JUMP_HELD] = 0;
+    d[base + FighterField.COYOTE_TIMER] = 0;
+    d[base + FighterField.JUMP_BUFFER_TIMER] = 0;
     d[base + FighterField.DROP_THROUGH_TIMER] = 0;
     d[base + FighterField.RING_DAMAGE_TICK] = -1;
     d[base + FighterField.LAST_HIT_TICK] = -1;
@@ -1100,6 +1112,7 @@ export class Sim {
         d[base + FighterField.DROP_THROUGH_TIMER] = 0;
       } else {
         grounded = false;
+        d[base + FighterField.COYOTE_TIMER] = 0;
       }
       hitstun = (hitstun - 1) | 0;
       if (hitstun === 0) {
@@ -1214,11 +1227,34 @@ export class Sim {
 
     let jumpsUsed = d[base + FighterField.JUMPS_USED] as number;
     if (grounded) jumpsUsed = 0; // landed (or never left): both jumps refreshed
-    if (jumpEdge && jumpsUsed < MAX_JUMPS && !droppingThrough) {
-      velY = grounded ? JUMP_VELOCITY : DOUBLE_JUMP_VELOCITY;
+
+    // Coyote time: shortly after leaving the ground unjumped, a jump is still the grounded jump.
+    let coyote = d[base + FighterField.COYOTE_TIMER] as number;
+    let canGroundJump = grounded;
+    if (grounded) {
+      coyote = COYOTE_TICKS;
+    } else if (coyote > 0 && jumpsUsed === 0) {
+      canGroundJump = true;
+      coyote = (coyote - 1) | 0;
+    }
+
+    // Jump buffer: a press that cannot fire (no jumps left) is remembered briefly and fires on landing.
+    let jumpBuffer = d[base + FighterField.JUMP_BUFFER_TIMER] as number;
+    const bufferedJump = grounded && jumpBuffer > 0;
+    const canJump = jumpsUsed < MAX_JUMPS && !droppingThrough;
+    if ((jumpEdge || bufferedJump) && canJump) {
+      velY = canGroundJump ? JUMP_VELOCITY : DOUBLE_JUMP_VELOCITY;
       grounded = false;
       jumpsUsed = (jumpsUsed + 1) | 0;
+      coyote = 0;
+      jumpBuffer = 0;
+    } else if (jumpEdge && !droppingThrough) {
+      jumpBuffer = JUMP_BUFFER_TICKS;
+    } else if (jumpBuffer > 0) {
+      jumpBuffer = (jumpBuffer - 1) | 0;
     }
+    d[base + FighterField.COYOTE_TIMER] = coyote;
+    d[base + FighterField.JUMP_BUFFER_TIMER] = jumpBuffer;
     d[base + FighterField.JUMPS_USED] = jumpsUsed;
 
     let dropThroughTimer = d[base + FighterField.DROP_THROUGH_TIMER] as number;
