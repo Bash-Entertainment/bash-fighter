@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BEST_KEY, nextGoalLine, recordKos, type StorageLike } from '../src/personal-best.ts';
+import { BEST_KEY, nextGoalLine, standingScoreLabel, recordKos, type StorageLike } from '../src/personal-best.ts';
 
 const mem = (init?: string): StorageLike & { v: string | null } => ({
   v: init ?? null,
@@ -34,3 +34,8 @@ test('next goal line names the best, empty without one', () => {
   assert.equal(nextGoalLine(mem()), '');
 });
 test('next goal singular', () => { assert.equal(nextGoalLine(mem('1')), 'Next: beat 1 KO'); });
+
+test('standing labels spell out KOs and falls', () => {
+  assert.equal(standingScoreLabel(5, 2), '5 KOs · 2 falls');
+  assert.equal(standingScoreLabel(1, 1), '1 KO · 1 fall');
+});

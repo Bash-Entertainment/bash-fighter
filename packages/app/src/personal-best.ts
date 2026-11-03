@@ -39,3 +39,9 @@ export function nextGoalLine(storage: StorageLike): string {
   const best = readBest(storage);
   return best === null || best < 1 ? '' : `Next: beat ${best} ${best === 1 ? 'KO' : 'KOs'}`;
 }
+
+export function standingScoreLabel(kos: number, falls: number): string {
+  return `${kos} ${kos === 1 ? 'KO' : 'KOs'} · ${falls} ${falls === 1 ? 'fall' : 'falls'}`;
+}
+
+export const ZERO_KO_TIP = 'Tip: attack with F (or the attack button on touch) and knock rivals off the stage to score.';

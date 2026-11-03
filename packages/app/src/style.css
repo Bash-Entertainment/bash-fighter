@@ -1179,6 +1179,13 @@ html, body {
   margin: 16px 0;
 }
 
+.tb-standings.tb-standings-single {
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-flow: row;
+  grid-template-rows: none;
+  width: min(380px, 92vw);
+}
+
 .tb-standing-row {
   display: grid;
   grid-template-columns: 24px 1fr auto;

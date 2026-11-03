@@ -9,7 +9,7 @@ import { PALETTE } from '@bash-fighter/render';
 import { AutoContinue } from './auto-continue.ts';
 import { MatchRatingRow } from './match-rating-row.ts';
 import { buildStandings, placementOf, tiedHeadline, type TimedBrawlScore } from '../timed-brawl.ts';
-import { recordKos, nextGoalLine } from '../personal-best.ts';
+import { recordKos, nextGoalLine, standingScoreLabel, ZERO_KO_TIP } from '../personal-best.ts';
 import { copyToClipboard } from '../join-link.ts';
 
 const PLAYER_HEX = PALETTE.playerColors.map((c) => `#${c.toString(16).padStart(6, '0')}`);
@@ -143,10 +143,11 @@ export class TimedBrawlEndScreen {
     const result = me ? recordKos(window.localStorage, me.koCount) : null;
     bestEl.textContent = result ? `Your KOs: ${result.kos} · Best: ${result.best}` : '';
     newBestEl.classList.toggle('hidden', !result?.isNew);
-    nextEl.textContent = nextGoalLine(window.localStorage);
+    nextEl.textContent = result && result.kos === 0 && result.best === 0 ? ZERO_KO_TIP : nextGoalLine(window.localStorage);
     this.lastResult = winnerSlot === null ? 'tied' : won ? 'won' : 'lost';
 
     this.list.innerHTML = '';
+    this.list.classList.toggle('tb-standings-single', standings.length <= 10);
     for (const row of standings) {
       const el = document.createElement('div');
       el.className = 'tb-standing-row';
@@ -165,7 +166,7 @@ export class TimedBrawlEndScreen {
       nameEl.textContent = label && label.length > 0 ? label : `#${row.slot + 1}`;
       const scoreEl = document.createElement('span');
       scoreEl.className = 'tb-score';
-      scoreEl.textContent = `${row.koCount} KO · ${row.deathCount} D`;
+      scoreEl.textContent = standingScoreLabel(row.koCount, row.deathCount);
       el.appendChild(placeEl);
       el.appendChild(nameEl);
       el.appendChild(scoreEl);
