@@ -51,11 +51,12 @@ import {
 } from '@bash-fighter/net';
 import { FixedTimestepLoop } from './loop.ts';
 import { hashStateBuffer } from '@bash-fighter/sim';
-import { BUTTON_ATTACK } from '@bash-fighter/sim';
+import { BUTTON_ATTACK, BUTTON_SPECIAL } from '@bash-fighter/sim';
 import { LOCAL_ATTACK_EVENT } from './ui/controls-hint.ts';
 import { AudioManager } from '@bash-fighter/audio';
 import { detectFighterEvents, detectItemEvents } from './effects-events.ts';
 import { countdownLabel, GO_LABEL } from './start-countdown.ts';
+import { isEnemyInRange, type AttackHintSample } from './attack-hint.ts';
 import { EffectsAudioBridge } from './effects-audio.ts';
 import type { PendingHitEffect, PendingEliminationEffect } from '@bash-fighter/render';
 
@@ -401,6 +402,9 @@ export class NetMatch {
   // properties (ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX) -- vite/tsc handle them
   // fine, but that test file needs to run outside that build pipeline.
   private attackAnnounced = false;
+  private attackOrSpecialPressed = false;
+  private attackHintShown = false;
+  private latestFighters: readonly FighterSnapshot[] = [];
 
   constructor(
     url: string,
@@ -459,6 +463,7 @@ export class NetMatch {
       devicePixelRatio: this.sessionDevicePixelRatio,
       requeued: this.requeued,
       feedbackPrompted: wasFeedbackPrompted(),
+      attackHintShown: this.attackHintShown,
       contextLostCount: this.contextLostCount,
       renderStalled: this.renderStalled,
       frameHistogram: this.frameTimeTracker.getHistogram(),
@@ -884,6 +889,7 @@ export class NetMatch {
       // same local input frame already computed above for the sim, never
       // adds a poll or touches the sim's inputs array.
       const hadInput = local.buttons !== 0 || local.stickX !== 0 || local.stickY !== 0;
+      if ((local.buttons & (BUTTON_ATTACK | BUTTON_SPECIAL)) !== 0) this.attackOrSpecialPressed = true;
       if (!this.attackAnnounced && (local.buttons & BUTTON_ATTACK) !== 0) {
         this.attackAnnounced = true;
         window.dispatchEvent(new Event(LOCAL_ATTACK_EVENT));
@@ -968,6 +974,7 @@ export class NetMatch {
       const currItems = [];
       for (let i = 0; i < this.numFighters; i++) currF.push(this.renderSim.getFighter(i));
       for (let i = 0; i < MAX_ITEMS; i++) currItems.push(this.renderSim.getItem(i));
+      this.latestFighters = currF;
 
       if (previousSnapState) {
         this.renderSim.loadState(previousSnapState);
@@ -1093,6 +1100,33 @@ export class NetMatch {
   nameFor(slot: number): string {
     const n = this.names[slot];
     return n && n.length > 0 ? n : `#${slot + 1}`;
+  }
+
+  /** Inputs for the contextual attack hint (see attack-hint.ts), or null
+   * for a spectator or before the first snapshot. Read-only: derived from
+   * confirmed snapshots and the local input history, never fed to the sim. */
+  attackHintSample(): AttackHintSample | null {
+    const me = this.latestFighters[this.mySlot];
+    if (this.spectating || this.mySlot < 0 || !me || me.eliminated) return null;
+    const freeze = this.matchSettings?.introFreezeTicks ?? 0;
+    const countdownDone = countdownLabel(this.localTick, freeze) === null && this.localTick >= freeze;
+    let enemyInRange = false;
+    for (let i = 0; i < this.latestFighters.length && !enemyInRange; i++) {
+      const other = this.latestFighters[i] as FighterSnapshot;
+      if (i === this.mySlot || other.eliminated) continue;
+      enemyInRange = isEnemyInRange(fx.toFloat(other.posX) - fx.toFloat(me.posX), fx.toFloat(other.posY) - fx.toFloat(me.posY));
+    }
+    return {
+      msSinceGo: countdownDone ? ((this.localTick - freeze) * 1000) / 60 : null,
+      attackOrSpecialPressed: this.attackOrSpecialPressed,
+      enemyInRange,
+      tookDamage: me.percent > 0,
+    };
+  }
+
+  /** Records for telemetry that the attack hint was put on screen. */
+  noteAttackHintShown(): void {
+    this.attackHintShown = true;
   }
 
   hasStarted(): boolean {

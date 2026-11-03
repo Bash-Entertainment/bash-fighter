@@ -71,6 +71,7 @@ export interface StoredSessionEndRecord {
   requeued: boolean | null;
   /** Visitor had been shown the one-tap feedback prompt (see exit-intent.ts). */
   feedbackPrompted?: boolean | null;
+  attackHintShown?: boolean | null;
   /** Self-declared QA hint for this seat (see Seat.qa / ClientSessionProfile.qa).
    *  Always present (true or false) on records written by this code;
    *  absent from records written before this field existed, which the
@@ -245,6 +246,7 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       devicePixelRatio: report?.devicePixelRatio ?? null,
       requeued: report?.requeued ?? (conn.requeuedAtJoin ? true : null),
       feedbackPrompted: report?.feedbackPrompted ?? null,
+      attackHintShown: report?.attackHintShown ?? null,
       source: profile?.source ?? null,
       matchIndex: profile?.matchIndex ?? null,
       qa: seat.qa,

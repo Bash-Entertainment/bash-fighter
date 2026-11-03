@@ -474,6 +474,7 @@ export function buildSessionReportMessage(input: {
    *  match-end overlay or win screen, rather than the start screen. */
   requeued?: boolean;
   feedbackPrompted?: boolean;
+  attackHintShown?: boolean;
   /** See SessionReportMessage.contextLostCount. Optional/omitted (not
    *  sent as 0) when the caller has no count to report, matching every
    *  other optional field's "absent means not tracked" convention. */
@@ -527,6 +528,7 @@ export function buildSessionReportMessage(input: {
     msg.devicePixelRatio = Math.round(input.devicePixelRatio * 100) / 100;
   }
   if (typeof input.feedbackPrompted === 'boolean') msg.feedbackPrompted = input.feedbackPrompted;
+  if (typeof input.attackHintShown === 'boolean') msg.attackHintShown = input.attackHintShown;
   if (typeof input.requeued === 'boolean') {
     msg.requeued = input.requeued;
   }

@@ -570,6 +570,15 @@ test('sessionReport: feedbackPrompted is kept only when a strict boolean', () =>
   assert.equal((dropped as { feedbackPrompted?: boolean })?.feedbackPrompted, undefined);
 });
 
+test('sessionReport: attackHintShown is kept only when a strict boolean', () => {
+  const sessionReportWith = (extra: Record<string, unknown>) =>
+    JSON.stringify({ t: 'sessionReport', firstInputMs: 100, inputTicks: 10, frameMedianMs: 16, frameP95Ms: 20, ...extra });
+  const kept = parseClientControl(sessionReportWith({ attackHintShown: true }));
+  assert.equal((kept as { attackHintShown?: boolean })?.attackHintShown, true);
+  const dropped = parseClientControl(sessionReportWith({ attackHintShown: 1 }));
+  assert.equal((dropped as { attackHintShown?: boolean })?.attackHintShown, undefined);
+});
+
 test('sessionReport: requeued is kept only when a strict boolean', () => {
   const sessionReportWith = (extra: Record<string, unknown>) =>
     JSON.stringify({ t: 'sessionReport', firstInputMs: 100, inputTicks: 10, frameMedianMs: 16, frameP95Ms: 20, ...extra });

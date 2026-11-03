@@ -250,6 +250,8 @@ export interface SessionReportMessage {
    *  prompt (exit-intent or tab-return). Lets us tell "saw it, ignored it"
    *  from "never saw it". */
   feedbackPrompted?: boolean;
+  /** True when the contextual attack hint was shown to this seat (first-match newcomers only). */
+  attackHintShown?: boolean;
   /** Count of WebGL `webglcontextlost` events this seat's client has
    *  observed so far this match (2026-09-14; see wiki "Camera Framing"
    *  sibling page on renderer robustness). Almost always 0 -- a lost
@@ -1018,6 +1020,7 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
       : undefined;
   const requeued = typeof obj.requeued === 'boolean' ? obj.requeued : undefined;
   const feedbackPrompted = typeof obj.feedbackPrompted === 'boolean' ? obj.feedbackPrompted : undefined;
+  const attackHintShown = typeof obj.attackHintShown === 'boolean' ? obj.attackHintShown : undefined;
   const contextLostCount = clampFiniteNumber(obj.contextLostCount, 0, 10_000_000);
   const renderStalled = typeof obj.renderStalled === 'boolean' ? obj.renderStalled : undefined;
   const frameHistogram = sanitiseFrameHistogram(obj.frameHistogram);
@@ -1047,7 +1050,7 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
       ? renderResolutionRaw
       : undefined;
   const resolutionDowngrades = clampFiniteNumber(obj.resolutionDowngrades, 0, 64);
-  if ([firstInputMs, inputTicks, frameMedianMs, frameP95Ms, devicePixelRatio, requeued, feedbackPrompted, contextLostCount, renderStalled, frameHistogram, hiddenFrames, networkHitchCount, keyboardInputTicks, touchInputTicks, gamepadInputTicks, slowFrameCount, slowFrameFightersAliveBuckets, slowFrameFightersOnScreenBuckets, slowFrameEffectsLoadBuckets, slowFrameHitchCoincidentCount, slowFrameTransitionCoincidentCount, visibleMs, hiddenMs, renderResolution, resolutionDowngrades].every((v) => v === undefined)) return null;
+  if ([firstInputMs, inputTicks, frameMedianMs, frameP95Ms, devicePixelRatio, requeued, feedbackPrompted, attackHintShown, contextLostCount, renderStalled, frameHistogram, hiddenFrames, networkHitchCount, keyboardInputTicks, touchInputTicks, gamepadInputTicks, slowFrameCount, slowFrameFightersAliveBuckets, slowFrameFightersOnScreenBuckets, slowFrameEffectsLoadBuckets, slowFrameHitchCoincidentCount, slowFrameTransitionCoincidentCount, visibleMs, hiddenMs, renderResolution, resolutionDowngrades].every((v) => v === undefined)) return null;
   const out: SessionReportMessage = {
     t: 'sessionReport',
     firstInputMs: firstInputMs === undefined ? null : firstInputMs,
@@ -1058,6 +1061,7 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   if (devicePixelRatio !== undefined) out.devicePixelRatio = Math.round(devicePixelRatio * 100) / 100;
   if (requeued !== undefined) out.requeued = requeued;
   if (feedbackPrompted !== undefined) out.feedbackPrompted = feedbackPrompted;
+  if (attackHintShown !== undefined) out.attackHintShown = attackHintShown;
   if (contextLostCount !== undefined) out.contextLostCount = Math.round(contextLostCount);
   if (renderStalled !== undefined) out.renderStalled = renderStalled;
   if (frameHistogram !== undefined) out.frameHistogram = frameHistogram;

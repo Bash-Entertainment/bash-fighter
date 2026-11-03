@@ -49,6 +49,7 @@ function hasAttackedBefore(): boolean {
 
 export class TouchControls {
   private attackBtn!: HTMLButtonElement;
+  private attackHintLabel!: HTMLDivElement;
   readonly root: HTMLDivElement;
   readonly source = new TouchSource();
 
@@ -83,6 +84,10 @@ export class TouchControls {
     buttons.appendChild(this.makeButton('special', 'Special'));
     this.attackBtn = this.makeButton('attack', 'Attack');
     buttons.appendChild(this.attackBtn);
+    this.attackHintLabel = document.createElement('div');
+    this.attackHintLabel.className = 'touch-attack-hint-label hidden';
+    this.attackHintLabel.textContent = 'Tap to attack';
+    buttons.appendChild(this.attackHintLabel);
     buttons.appendChild(this.makeButton('jump', 'Jump'));
     this.root.appendChild(buttons);
 
@@ -102,6 +107,13 @@ export class TouchControls {
     // corner is taken so the number moves above the stick.
     const stick = this.stickBase.getBoundingClientRect();
     this.onBottomLeftInsetChange(stick.height + STICK_READOUT_GAP_PX);
+  }
+
+  /** Contextual attack hint (see ui/attack-hint.ts): highlight the Attack
+   * button and label it. Presentation only. */
+  setTouchAttackHint(on: boolean): void {
+    this.attackBtn.classList.toggle('hinted', on);
+    this.attackHintLabel.classList.toggle('hidden', !on);
   }
 
   hide(): void {
@@ -134,6 +146,7 @@ export class TouchControls {
     this.source.setButton(name, true);
     btn.classList.add('pressed');
     if (name === 'attack') btn.classList.remove('beckon');
+    if (name === 'attack') btn.classList.remove('hinted');
     this.updateActiveCount();
   }
 

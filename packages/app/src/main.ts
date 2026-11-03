@@ -17,8 +17,9 @@ import { StartCountdown } from './ui/start-countdown.ts';
 import { MatchIntro } from './ui/match-intro.ts';
 import { MatchOverlay, SPECTATE_OFFER, type MatchOverlayContent } from './ui/match-overlay.ts';
 import { ControlsHint } from './ui/controls-hint.ts';
+import { AttackHint } from './ui/attack-hint.ts';
 import { MoveReferencePanel } from './ui/move-reference-panel.ts';
-import { SettingsPanel } from './ui/settings-panel.ts';
+import { SettingsPanel, codeLabel } from './ui/settings-panel.ts';
 import { shouldShowLeavePrompt } from './leave-prompt.ts';
 import { mountLeavePrompt } from './ui/leave-prompt-panel.ts';
 import { installErrorBuffer } from './error-buffer.ts';
@@ -431,6 +432,10 @@ function loadReducedMotionPref(): boolean {
 let reducedMotionPref = loadReducedMotionPref();
 setReducedMotion(reducedMotionPref);
 
+const attackHint = new AttackHint(appRoot, touchCapable ? touchControls : null, () =>
+  codeLabel(currentBindings.p1.attack),
+);
+
 const settingsPanel = new SettingsPanel(
   appRoot,
   { ...currentBindings, reducedMotion: reducedMotionPref, volume: audio.volumeLevel },
@@ -821,6 +826,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
       waitingScreen.show();
     },
     onMatchOver: (winnerIndex, resolved, leaderboard, settings) => {
+      attackHint.dismiss();
       clearSpectateStallTimer();
       // The sim has genuinely finished in every branch below (resolved
       // or an abandoned teardown) -- resume here once, rather than in
@@ -996,6 +1002,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
   // match has actually started so it never shows fighter cards over the
   // waiting-for-players screen.
   let announcedStart = false;
+  let attackHintEligible = false;
   const onlineHudTick = (): void => {
     if (generation !== matchGeneration) return;
     if (netMatch && netMatch.hasStarted() && !netMatch.isOver()) {
@@ -1004,6 +1011,13 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
         pauseLobbyMusic();
         audio.play('match_start');
         controlsHint.maybeShow(touchCapable);
+        attackHint.reset();
+        attackHintEligible = getMatchesPlayed() === 1;
+      }
+      if (attackHintEligible && attackHint.update(netMatch.attackHintSample())) {
+        // The hint says the same thing in context; do not stack both.
+        controlsHint.dispose();
+        netMatch.noteAttackHintShown();
       }
       hud.show();
       // A spectator (?watch=CODE, or any pure-spectate seat) holds no

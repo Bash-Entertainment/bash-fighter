@@ -52,7 +52,7 @@ const CODE_LABELS: Record<string, string> = {
   Backquote: '`',
 };
 
-function codeLabel(code: string): string {
+export function codeLabel(code: string): string {
   if (CODE_LABELS[code]) return CODE_LABELS[code];
   if (/^Key[A-Z]$/.test(code)) return code.slice(3);
   if (/^Digit[0-9]$/.test(code)) return code.slice(5);
