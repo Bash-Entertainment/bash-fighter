@@ -62,7 +62,9 @@ export function rookieScaleForMatchesPlayed(matchesPlayed: number): number {
 }
 
 /** Online matches open with a 3-second frozen "3, 2, 1" countdown. */
-export const ONLINE_INTRO_FREEZE_TICKS = 180;
+// Countdown test 10-30..11-06 failed its pre-stated line (leave<20s 45.4% > 42%),
+// so online matches start without the frozen 3-2-1. Was 180.
+export const ONLINE_INTRO_FREEZE_TICKS = 0;
 
 export const DEFAULT_MATCH_SETTINGS: MatchSettings = {
   winCondition: 'battleRoyale',
