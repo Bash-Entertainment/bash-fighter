@@ -1428,11 +1428,12 @@ html, body {
 }
 
 #net-status {
-  /* Bottom-left, not top-left: the HUD owns the top-left corner and the
-     two overlapped, with the badge sitting on top of the survivors line. */
+  /* Top-right, clear of the HUD's top-left roster and the fighter's damage
+     readout, which is drawn in the bottom-left corner (see
+     computeLocalDamageReadout). Below the top controls row. */
   position: fixed;
-  bottom: 14px;
-  left: 22px;
+  top: 84px;
+  right: 12px;
   padding: 6px 12px;
   font-family: 'JetBrains Mono', 'Menlo', monospace;
   font-size: 13px;
@@ -2451,15 +2452,6 @@ body.end-screen-open #net-mode-line {
   .screen {
     padding-left: 14px;
     padding-right: 14px;
-  }
-
-  /* The bottom-left connection chip sat on the touch stick; park it under
-     the top controls instead, clear of the status block on the left. */
-  #net-status {
-    top: 84px;
-    bottom: auto;
-    left: auto;
-    right: 12px;
   }
 
   /* The "You are X" card sat over the rules box in the HUD for its 2.6s;
