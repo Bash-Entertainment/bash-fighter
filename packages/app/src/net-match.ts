@@ -18,9 +18,9 @@ import {
 } from '@bash-fighter/sim';
 import { PLACEHOLDER_CHARACTER, createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID } from '@bash-fighter/content';
 import type { CharacterData } from '@bash-fighter/sim';
-import { InputManager, isTouchCapable } from '@bash-fighter/input';
+import { InputManager, isTouchCapable, shouldIgnoreKeydown } from '@bash-fighter/input';
 import { markLeftMidMatch } from './leave-prompt.ts';
-import { buildClientProfile, visitSource, nextMatchIndex, buildSessionReportMessage, InputActivityTracker, InputUsageTracker, FrameTimeTracker, NetworkHitchTracker, SlowFrameTracker, SLOW_FRAME_THRESHOLD_MS } from './session-report.ts';
+import { buildClientProfile, visitSource, nextMatchIndex, buildSessionReportMessage, InputActivityTracker, InputUsageTracker, UnboundInputTracker, FrameTimeTracker, NetworkHitchTracker, SlowFrameTracker, SLOW_FRAME_THRESHOLD_MS } from './session-report.ts';
 import { readBuildSha } from './ui/feedback-panel.ts';
 import {
   Renderer,
@@ -348,6 +348,18 @@ export class NetMatch {
   // Observed input-device usage for this match, keyed by real source --
   // see InputUsageTracker and docs/MEASUREMENT.md "Capability vs usage".
   private inputUsage = new InputUsageTracker();
+  // Measurement-only probe of dead online inputs (arrows, J/K/Z/X/Enter,
+  // mouse clicks) -- see UnboundInputTracker. Counts only while live.
+  private unboundInput = new UnboundInputTracker();
+  private canvasRoot: HTMLElement | null = null;
+  private readonly unboundKeyHandler = (e: KeyboardEvent): void => {
+    if (!this.isPlayingLive() || shouldIgnoreKeydown(e.target, e.code)) return;
+    this.unboundInput.recordKeyDown(e.code, e.repeat, new Set(Object.values(this.input.slots[0]!.binding)));
+  };
+  private readonly unboundPointerHandler = (e: PointerEvent): void => {
+    if (!this.isPlayingLive() || (e.target as { tagName?: string } | null)?.tagName !== 'CANVAS') return;
+    this.unboundInput.recordPointerDown(e.pointerType);
+  };
   private frameTimeTracker = new FrameTimeTracker();
   // See NetworkHitchTracker's doc comment (session-report.ts) -- counts
   // gaps between received server snapshots big enough to be a network
@@ -443,6 +455,9 @@ export class NetMatch {
     // nothing in this codebase reads this global on its own.
     if (typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__debugRenderer = this.renderer;
     this.input.attach(window);
+    this.canvasRoot = parent;
+    window.addEventListener('keydown', this.unboundKeyHandler);
+    parent.addEventListener('pointerdown', this.unboundPointerHandler);
     document.addEventListener('visibilitychange', this.visibilityHandler);
     window.addEventListener('pagehide', this.pageHideHandler);
   }
@@ -472,6 +487,9 @@ export class NetMatch {
       keyboardInputTicks: this.inputUsage.getKeyboardTicks(),
       touchInputTicks: this.inputUsage.getTouchTicks(),
       gamepadInputTicks: this.inputUsage.getGamepadTicks(),
+      arrowKeyPresses: this.unboundInput.getArrowKeyPresses(),
+      altAttackKeyPresses: this.unboundInput.getAltAttackKeyPresses(),
+      canvasMouseClicks: this.unboundInput.getCanvasMouseClicks(),
       slowFrameCount: this.slowFrameTracker.getCount(),
       slowFrameFightersAliveBuckets: this.slowFrameTracker.getFightersAliveBuckets(),
       slowFrameFightersOnScreenBuckets: this.slowFrameTracker.getFightersOnScreenBuckets(),
@@ -677,6 +695,9 @@ export class NetMatch {
     window.removeEventListener('pagehide', this.pageHideHandler);
     this.loop?.stop();
     this.input.detach(window);
+    window.removeEventListener('keydown', this.unboundKeyHandler);
+    this.canvasRoot?.removeEventListener('pointerdown', this.unboundPointerHandler);
+    this.canvasRoot = null;
     this.ws?.close();
     if (this.renderWatchdogTimer !== null) {
       clearTimeout(this.renderWatchdogTimer);
@@ -838,6 +859,7 @@ export class NetMatch {
     // and no final report gets out.
     this.inputActivity = new InputActivityTracker();
     this.inputUsage = new InputUsageTracker();
+    this.unboundInput = new UnboundInputTracker();
     this.frameTimeTracker = new FrameTimeTracker();
     this.networkHitchTracker = new NetworkHitchTracker();
     this.visibilityChangedAtMs = null;

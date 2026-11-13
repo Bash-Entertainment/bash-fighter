@@ -437,6 +437,25 @@ describe('client telemetry: device-capability buckets and frame/network histogra
     assert.equal(msg.touchInputTicks, 10_000_000);
   });
 
+  test('sessionReport: unbound-input counts are kept when valid, clamped and rounded when garbage, absent when not numbers', () => {
+    const valid = parseClientControl(
+      sessionReportWith({ arrowKeyPresses: 12, altAttackKeyPresses: 0, canvasMouseClicks: 3.6 }),
+    ) as SessionReportMessage;
+    assert.equal(valid.arrowKeyPresses, 12);
+    assert.equal(valid.altAttackKeyPresses, 0);
+    assert.equal(valid.canvasMouseClicks, 4);
+
+    const clamped = parseClientControl(
+      sessionReportWith({ arrowKeyPresses: -1, altAttackKeyPresses: 1e12, canvasMouseClicks: 'many' }),
+    ) as SessionReportMessage;
+    assert.equal(clamped.arrowKeyPresses, 0);
+    assert.equal(clamped.altAttackKeyPresses, 10_000_000);
+    assert.equal('canvasMouseClicks' in clamped, false);
+
+    const old = parseClientControl(sessionReportWith({})) as SessionReportMessage;
+    assert.equal('arrowKeyPresses' in old, false);
+  });
+
   test('sessionReport: an old client sending none of the input-usage fields leaves them absent, not zero', () => {
     const msg = parseClientControl(sessionReportWith({})) as SessionReportMessage;
     assert.equal('keyboardInputTicks' in msg, false);

@@ -102,6 +102,9 @@ export interface StoredSessionEndRecord {
   keyboardInputTicks: number | null;
   touchInputTicks: number | null;
   gamepadInputTicks: number | null;
+  arrowKeyPresses: number | null;
+  altAttackKeyPresses: number | null;
+  canvasMouseClicks: number | null;
   /** Slow-frame attribution (2026-09-15, see docs/MEASUREMENT.md
    *  "Slow-frame attribution"). Device/canvas context is a once-per-
    *  connection snapshot from hello.profile; the slowFrame* fields are
@@ -259,6 +262,9 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       keyboardInputTicks: report?.keyboardInputTicks ?? null,
       touchInputTicks: report?.touchInputTicks ?? null,
       gamepadInputTicks: report?.gamepadInputTicks ?? null,
+      arrowKeyPresses: report?.arrowKeyPresses ?? null,
+      altAttackKeyPresses: report?.altAttackKeyPresses ?? null,
+      canvasMouseClicks: report?.canvasMouseClicks ?? null,
       canvasWidthPx: profile?.canvasWidthPx ?? null,
       canvasHeightPx: profile?.canvasHeightPx ?? null,
       screenWidthBucket: profile?.screenWidthBucket ?? null,

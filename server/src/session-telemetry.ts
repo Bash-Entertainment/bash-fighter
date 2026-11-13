@@ -165,6 +165,9 @@ export function logSessionEnd(conn: SessionEndConnLike, match: Match): void {
       keyboardInputTicks: report?.keyboardInputTicks ?? null,
       touchInputTicks: report?.touchInputTicks ?? null,
       gamepadInputTicks: report?.gamepadInputTicks ?? null,
+      arrowKeyPresses: report?.arrowKeyPresses ?? null,
+      altAttackKeyPresses: report?.altAttackKeyPresses ?? null,
+      canvasMouseClicks: report?.canvasMouseClicks ?? null,
       // Slow-frame attribution (2026-09-15, see docs/MEASUREMENT.md
       // "Slow-frame attribution") -- device/canvas context sent once in
       // hello.profile, plus per-match slow-frame-conditioned histograms

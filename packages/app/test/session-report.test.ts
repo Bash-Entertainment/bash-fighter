@@ -10,6 +10,7 @@ import {
   buildSessionReportMessage,
   InputActivityTracker,
   InputUsageTracker,
+  UnboundInputTracker,
   FrameTimeTracker,
   NetworkHitchTracker,
   bucketHardwareConcurrency,
@@ -393,4 +394,20 @@ test('buildSessionReportMessage: slowFrame* fields omitted when absent, carried 
   assert.deepEqual(carried.slowFrameFightersAliveBuckets, [0, 1, 1, 2]);
   assert.equal(carried.slowFrameHitchCoincidentCount, 2);
   assert.equal(carried.slowFrameTransitionCoincidentCount, 1);
+});
+
+test('UnboundInputTracker: counts dead online inputs, skipping repeats and keys the player has bound', () => {
+  const tracker = new UnboundInputTracker();
+  const bound = new Set(['KeyA', 'KeyJ']);
+  tracker.recordKeyDown('ArrowLeft', false, bound);
+  tracker.recordKeyDown('ArrowLeft', true, bound);
+  tracker.recordKeyDown('KeyK', false, bound);
+  tracker.recordKeyDown('Enter', false, bound);
+  tracker.recordKeyDown('KeyJ', false, bound);
+  tracker.recordKeyDown('KeyA', false, bound);
+  tracker.recordPointerDown('mouse');
+  tracker.recordPointerDown('touch');
+  assert.equal(tracker.getArrowKeyPresses(), 1);
+  assert.equal(tracker.getAltAttackKeyPresses(), 2);
+  assert.equal(tracker.getCanvasMouseClicks(), 1);
 });

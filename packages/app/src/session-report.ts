@@ -235,6 +235,42 @@ export class InputUsageTracker {
   }
 }
 
+const ARROW_KEY_CODES: ReadonlySet<string> = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
+const ALT_ATTACK_KEY_CODES: ReadonlySet<string> = new Set(['KeyJ', 'KeyK', 'KeyZ', 'KeyX', 'Enter']);
+
+/** Measurement-only probe for inputs that do nothing online: online play
+ *  reads just the P1 keyboard binding, so arrow keys, J/K/Z/X/Enter and
+ *  mouse clicks are dead. Counts how often players try them. Keys the
+ *  player has bound are skipped (a remap makes them real controls), and
+ *  held-key auto-repeat is not counted. Never affects gameplay. */
+export class UnboundInputTracker {
+  private arrowKeyPresses = 0;
+  private altAttackKeyPresses = 0;
+  private canvasMouseClicks = 0;
+
+  recordKeyDown(code: string, repeat: boolean, boundCodes: ReadonlySet<string>): void {
+    if (repeat || boundCodes.has(code)) return;
+    if (ARROW_KEY_CODES.has(code)) this.arrowKeyPresses += 1;
+    else if (ALT_ATTACK_KEY_CODES.has(code)) this.altAttackKeyPresses += 1;
+  }
+
+  recordPointerDown(pointerType: string): void {
+    if (pointerType === 'mouse') this.canvasMouseClicks += 1;
+  }
+
+  getArrowKeyPresses(): number {
+    return this.arrowKeyPresses;
+  }
+
+  getAltAttackKeyPresses(): number {
+    return this.altAttackKeyPresses;
+  }
+
+  getCanvasMouseClicks(): number {
+    return this.canvasMouseClicks;
+  }
+}
+
 const MAX_FRAME_SAMPLES = 300; // ~5s at 60fps -- plenty for a median/p95, capped so this never grows unbounded across a long match.
 
 /** Number of buckets in the frame-time histogram: one per boundary in
@@ -495,6 +531,12 @@ export function buildSessionReportMessage(input: {
   touchInputTicks?: number;
   /** See SessionReportMessage.gamepadInputTicks. Same convention. */
   gamepadInputTicks?: number;
+  /** See SessionReportMessage.arrowKeyPresses. Same convention. */
+  arrowKeyPresses?: number;
+  /** See SessionReportMessage.altAttackKeyPresses. Same convention. */
+  altAttackKeyPresses?: number;
+  /** See SessionReportMessage.canvasMouseClicks. Same convention. */
+  canvasMouseClicks?: number;
   /** See SessionReportMessage.slowFrameCount. Same convention. */
   slowFrameCount?: number;
   /** See SessionReportMessage.slowFrameFightersAliveBuckets. Same convention. */
@@ -540,6 +582,9 @@ export function buildSessionReportMessage(input: {
   if (input.keyboardInputTicks !== undefined) msg.keyboardInputTicks = input.keyboardInputTicks;
   if (input.touchInputTicks !== undefined) msg.touchInputTicks = input.touchInputTicks;
   if (input.gamepadInputTicks !== undefined) msg.gamepadInputTicks = input.gamepadInputTicks;
+  if (input.arrowKeyPresses !== undefined) msg.arrowKeyPresses = input.arrowKeyPresses;
+  if (input.altAttackKeyPresses !== undefined) msg.altAttackKeyPresses = input.altAttackKeyPresses;
+  if (input.canvasMouseClicks !== undefined) msg.canvasMouseClicks = input.canvasMouseClicks;
   if (input.slowFrameCount !== undefined) msg.slowFrameCount = input.slowFrameCount;
   if (input.slowFrameFightersAliveBuckets !== undefined) msg.slowFrameFightersAliveBuckets = input.slowFrameFightersAliveBuckets;
   if (input.slowFrameFightersOnScreenBuckets !== undefined) msg.slowFrameFightersOnScreenBuckets = input.slowFrameFightersOnScreenBuckets;

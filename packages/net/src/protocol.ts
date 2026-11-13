@@ -328,6 +328,18 @@ export interface SessionReportMessage {
    *  connected gamepad actually producing the frame. Optional/absent
    *  means "not tracked". */
   gamepadInputTicks?: number;
+  /** Unbound-input probe (measurement only): non-repeat keydowns this
+   *  match on ArrowLeft/Right/Up/Down that are not in the player's P1
+   *  binding, counted while the match is live. Online play reads only the
+   *  P1 binding, so these presses do nothing; this measures how often
+   *  players try. Optional/absent means "not tracked". */
+  arrowKeyPresses?: number;
+  /** Same probe for KeyJ, KeyK, KeyZ, KeyX and Enter (common attack keys
+   *  in other games), again excluding keys the player bound. */
+  altAttackKeyPresses?: number;
+  /** Same probe for `pointerdown` with pointerType 'mouse' on the game
+   *  canvas -- clicking does nothing online. */
+  canvasMouseClicks?: number;
   /** Cumulative count, this match so far, of *rendered* frames whose
    *  delta met or exceeded `SLOW_FRAME_THRESHOLD_MS` (2026-09-15, see
    *  docs/MEASUREMENT.md "Slow-frame attribution") -- deliberately a
@@ -1029,6 +1041,9 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   const keyboardInputTicks = clampFiniteNumber(obj.keyboardInputTicks, 0, 10_000_000);
   const touchInputTicks = clampFiniteNumber(obj.touchInputTicks, 0, 10_000_000);
   const gamepadInputTicks = clampFiniteNumber(obj.gamepadInputTicks, 0, 10_000_000);
+  const arrowKeyPresses = clampFiniteNumber(obj.arrowKeyPresses, 0, 10_000_000);
+  const altAttackKeyPresses = clampFiniteNumber(obj.altAttackKeyPresses, 0, 10_000_000);
+  const canvasMouseClicks = clampFiniteNumber(obj.canvasMouseClicks, 0, 10_000_000);
   const slowFrameCount = clampFiniteNumber(obj.slowFrameCount, 0, 10_000_000);
   const slowFrameFightersAliveBuckets = sanitiseFixedNumberArray(obj.slowFrameFightersAliveBuckets, SLOW_FRAME_BUCKET_COUNT);
   const slowFrameFightersOnScreenBuckets = sanitiseFixedNumberArray(obj.slowFrameFightersOnScreenBuckets, SLOW_FRAME_BUCKET_COUNT);
@@ -1050,7 +1065,7 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
       ? renderResolutionRaw
       : undefined;
   const resolutionDowngrades = clampFiniteNumber(obj.resolutionDowngrades, 0, 64);
-  if ([firstInputMs, inputTicks, frameMedianMs, frameP95Ms, devicePixelRatio, requeued, feedbackPrompted, attackHintShown, contextLostCount, renderStalled, frameHistogram, hiddenFrames, networkHitchCount, keyboardInputTicks, touchInputTicks, gamepadInputTicks, slowFrameCount, slowFrameFightersAliveBuckets, slowFrameFightersOnScreenBuckets, slowFrameEffectsLoadBuckets, slowFrameHitchCoincidentCount, slowFrameTransitionCoincidentCount, visibleMs, hiddenMs, renderResolution, resolutionDowngrades].every((v) => v === undefined)) return null;
+  if ([firstInputMs, inputTicks, frameMedianMs, frameP95Ms, devicePixelRatio, requeued, feedbackPrompted, attackHintShown, contextLostCount, renderStalled, frameHistogram, hiddenFrames, networkHitchCount, keyboardInputTicks, touchInputTicks, gamepadInputTicks, arrowKeyPresses, altAttackKeyPresses, canvasMouseClicks, slowFrameCount, slowFrameFightersAliveBuckets, slowFrameFightersOnScreenBuckets, slowFrameEffectsLoadBuckets, slowFrameHitchCoincidentCount, slowFrameTransitionCoincidentCount, visibleMs, hiddenMs, renderResolution, resolutionDowngrades].every((v) => v === undefined)) return null;
   const out: SessionReportMessage = {
     t: 'sessionReport',
     firstInputMs: firstInputMs === undefined ? null : firstInputMs,
@@ -1070,6 +1085,9 @@ function sanitiseSessionReport(obj: Record<string, unknown>): SessionReportMessa
   if (keyboardInputTicks !== undefined) out.keyboardInputTicks = Math.round(keyboardInputTicks);
   if (touchInputTicks !== undefined) out.touchInputTicks = Math.round(touchInputTicks);
   if (gamepadInputTicks !== undefined) out.gamepadInputTicks = Math.round(gamepadInputTicks);
+  if (arrowKeyPresses !== undefined) out.arrowKeyPresses = Math.round(arrowKeyPresses);
+  if (altAttackKeyPresses !== undefined) out.altAttackKeyPresses = Math.round(altAttackKeyPresses);
+  if (canvasMouseClicks !== undefined) out.canvasMouseClicks = Math.round(canvasMouseClicks);
   if (slowFrameCount !== undefined) out.slowFrameCount = Math.round(slowFrameCount);
   if (slowFrameFightersAliveBuckets !== undefined) out.slowFrameFightersAliveBuckets = slowFrameFightersAliveBuckets;
   if (slowFrameFightersOnScreenBuckets !== undefined) out.slowFrameFightersOnScreenBuckets = slowFrameFightersOnScreenBuckets;
