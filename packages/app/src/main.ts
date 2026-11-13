@@ -18,6 +18,10 @@ import { MatchIntro } from './ui/match-intro.ts';
 import { MatchOverlay, SPECTATE_OFFER, type MatchOverlayContent } from './ui/match-overlay.ts';
 import { ControlsHint } from './ui/controls-hint.ts';
 import { AttackHint } from './ui/attack-hint.ts';
+
+// Off since 2026-11-13: the hint missed its pre-stated line (zero-attack
+// share of first-match leavers 38% vs <=20% keep line, 41% before).
+const ATTACK_HINT_ENABLED = false;
 import { MoveReferencePanel } from './ui/move-reference-panel.ts';
 import { SettingsPanel, codeLabel } from './ui/settings-panel.ts';
 import { shouldShowLeavePrompt } from './leave-prompt.ts';
@@ -1012,7 +1016,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
         audio.play('match_start');
         controlsHint.maybeShow(touchCapable);
         attackHint.reset();
-        attackHintEligible = getMatchesPlayed() === 1;
+        attackHintEligible = ATTACK_HINT_ENABLED && getMatchesPlayed() === 1;
       }
       if (attackHintEligible && attackHint.update(netMatch.attackHintSample())) {
         // The hint says the same thing in context; do not stack both.
