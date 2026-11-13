@@ -762,6 +762,14 @@ export class NetMatch {
           // retrying that seat and surface a plain disconnect rather than
           // looping on a token that will never work again.
           this.setResumeToken(null);
+          if (!this.hasStarted()) {
+            // A token left over from an earlier page load (typically the
+            // server restarted since, issue #60). We were never in a match
+            // on this NetMatch, so the player only asked to play: join fresh.
+            this.ws?.close();
+            this.connect(this.name, this.characterId);
+            return;
+          }
         }
         this.events.onStateChange?.('error', `${msg.code}: ${msg.message}`);
         this.ws?.close();
