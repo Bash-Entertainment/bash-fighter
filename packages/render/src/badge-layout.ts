@@ -177,7 +177,10 @@ export function computeBadgePlacements(
     // all, and the bare number as the absolute last non-empty rung.
     const tiers: { label: string; hasPercent: boolean }[] = [];
     if (nameLabel) tiers.push({ label: nameLabel + pctSuffix, hasPercent: pct !== undefined });
-    tiers.push({ label: numberLabel + pctSuffix, hasPercent: pct !== undefined });
+    // "number+%" only for a nameless fighter: next to a name it reads as a
+    // garbled fragment ("9 60%") to a player who has never seen slot
+    // numbers, so a named fighter goes straight from name+% to %.
+    if (!nameLabel || pct === undefined) tiers.push({ label: numberLabel + pctSuffix, hasPercent: pct !== undefined });
     // Once a percent is known, the narrowest rung is the percent alone,
     // and the ladder stops there: a bare slot number is no narrower than
     // "47%" yet a new player cannot decode it. Playing production on

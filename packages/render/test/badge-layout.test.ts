@@ -300,3 +300,24 @@ test('an on-screen local pointer is unrotated and not flagged off-screen', () =>
   assert.equal(p.angle, 0);
   assert.equal(p.x, 600);
 });
+
+test('a named fighter never shows the "slot number + percent" label; it drops from name+% straight to %', () => {
+  // "9 60%" reads as a garbled fragment to a player who has never seen
+  // slot numbers. Only a nameless fighter may use number+%.
+  let sawPercentOnly = false;
+  for (let spacing = 4; spacing <= 120; spacing += 2) {
+    const candidates: BadgeCandidate[] = [];
+    const names: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      candidates.push({ ...makeCandidate(i, 100 + i * spacing, 400, false), percent: 30 + i });
+      names.push(`Fighter${i}`);
+    }
+    const placements = computeBadgePlacements(candidates, [], names, undefined, fakeMeasureText);
+    assertNoOverlaps(placements, []);
+    for (const p of placements) {
+      assert.doesNotMatch(p.label, /^\d+ \d+%$/, `spacing ${spacing}px: slot-number label "${p.label}"`);
+      if (/^\d+%$/.test(p.label)) sawPercentOnly = true;
+    }
+  }
+  assert.ok(sawPercentOnly, 'expected crowded badges to fall back to percent-only');
+});
