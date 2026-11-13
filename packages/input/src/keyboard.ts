@@ -67,6 +67,14 @@ export class KeyboardSource {
     target.removeEventListener('keyup', this.onUp);
   }
 
+  press(code: string): void {
+    this.held.add(code);
+  }
+
+  release(code: string): void {
+    this.held.delete(code);
+  }
+
   isHeld(code: string): boolean {
     return this.held.has(code);
   }

@@ -7,7 +7,8 @@
 // see wiki "Gamepad Priority Fix"). Below that, touch still always wins
 // while a control is actively held.
 import { fixed as fx, makeInputFrame, type InputFrame } from '@bash-fighter/sim';
-import { BUTTON_BY_FIELD, BUTTON_FIELDS, DEFAULT_P1_BINDING, DEFAULT_P2_BINDING, type KeyBinding } from './bindings.ts';
+import { BUTTON_BY_FIELD, BUTTON_FIELDS, DEFAULT_P1_BINDING, DEFAULT_P2_BINDING, type BindingField, type KeyBinding } from './bindings.ts';
+import { codesForField, MOUSE_ATTACK_CODE, type KeyAliases } from './aliases.ts';
 import { KeyboardSource } from './keyboard.ts';
 import { pollGamepad, listConnectedGamepads, isNeutralFrame } from './gamepad.ts';
 import { TouchSource } from './touch.ts';
@@ -25,6 +26,7 @@ export {
   type BindingField,
   type PersistedBindings,
 } from './bindings.ts';
+export { ONLINE_ALIASES, MOUSE_ATTACK_CODE, codesForField, type KeyAliases } from './aliases.ts';
 export { shouldIgnoreKeydown } from './keyboard.ts';
 export { listConnectedGamepads, isNeutralFrame } from './gamepad.ts';
 export { isTouchCapable, TouchSource, type TouchButton } from './touch.ts';
@@ -33,6 +35,8 @@ export interface PlayerSlotConfig {
   binding: KeyBinding;
   /** Gamepad index to prefer for this slot, or null for keyboard-only. */
   gamepadIndex: number | null;
+  /** Extra keys that trigger an action in addition to `binding`. */
+  aliases?: KeyAliases;
 }
 
 /** Which real input source produced a given slot's most recent
@@ -42,17 +46,18 @@ export interface PlayerSlotConfig {
 export type InputSourceKind = 'touch' | 'gamepad' | 'keyboard';
 
 
-function keyboardFrame(kb: KeyboardSource, binding: KeyBinding): InputFrame {
+function keyboardFrame(kb: KeyboardSource, binding: KeyBinding, aliases?: KeyAliases): InputFrame {
+  const held = (field: BindingField): boolean => codesForField(binding, aliases, field).some((c) => kb.isHeld(c));
   let buttons = 0;
   for (const field of BUTTON_FIELDS) {
-    if (kb.isHeld(binding[field])) buttons |= BUTTON_BY_FIELD[field];
+    if (held(field)) buttons |= BUTTON_BY_FIELD[field];
   }
   let stickX = 0;
   let stickY = 0;
-  if (kb.isHeld(binding.left)) stickX = fx.sub(stickX, fx.ONE);
-  if (kb.isHeld(binding.right)) stickX = fx.add(stickX, fx.ONE);
-  if (kb.isHeld(binding.down)) stickY = fx.sub(stickY, fx.ONE);
-  if (kb.isHeld(binding.up)) stickY = fx.add(stickY, fx.ONE);
+  if (held('left')) stickX = fx.sub(stickX, fx.ONE);
+  if (held('right')) stickX = fx.add(stickX, fx.ONE);
+  if (held('down')) stickY = fx.sub(stickY, fx.ONE);
+  if (held('up')) stickY = fx.add(stickY, fx.ONE);
   return makeInputFrame(buttons, stickX, stickY);
 }
 
@@ -89,6 +94,34 @@ export class InputManager {
 
   setBinding(slot: number, binding: KeyBinding): void {
     (this.slots[slot] as PlayerSlotConfig).binding = binding;
+  }
+
+  setAliases(slot: number, aliases: KeyAliases | undefined): void {
+    (this.slots[slot] as PlayerSlotConfig).aliases = aliases;
+  }
+
+  /** Treat a primary-button mouse press on `surface` (only when the press
+   * lands on a <canvas>, not on HUD buttons or overlays) as holding
+   * MOUSE_ATTACK_CODE. Touch and pen are ignored: touch has its own
+   * on-screen controls. Returns a function that removes the listeners. */
+  attachCanvasMouse(surface: HTMLElement, target: Window = window): () => void {
+    const onDown = (e: PointerEvent): void => {
+      if (e.pointerType !== 'mouse' || e.button !== 0) return;
+      if ((e.target as { tagName?: string } | null)?.tagName !== 'CANVAS') return;
+      this.keyboard.press(MOUSE_ATTACK_CODE);
+    };
+    const onUp = (e: PointerEvent): void => {
+      if (e.pointerType === 'mouse' && e.button === 0) this.keyboard.release(MOUSE_ATTACK_CODE);
+    };
+    surface.addEventListener('pointerdown', onDown);
+    target.addEventListener('pointerup', onUp);
+    target.addEventListener('pointercancel', onUp);
+    return () => {
+      surface.removeEventListener('pointerdown', onDown);
+      target.removeEventListener('pointerup', onUp);
+      target.removeEventListener('pointercancel', onUp);
+      this.keyboard.release(MOUSE_ATTACK_CODE);
+    };
   }
 
   setGamepadIndex(slot: number, gamepadIndex: number | null): void {
@@ -152,7 +185,7 @@ export class InputManager {
         return pad;
       }
     }
-    const kb = keyboardFrame(this.keyboard, cfg.binding);
+    const kb = keyboardFrame(this.keyboard, cfg.binding, cfg.aliases);
     // Semantics for a frame with no real input from anything this slot
     // has: rather than flapping lastSource to 'keyboard' every neutral
     // frame (which would make the usage counters look like everyone is

@@ -18,7 +18,7 @@ import {
 } from '@bash-fighter/sim';
 import { PLACEHOLDER_CHARACTER, createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID } from '@bash-fighter/content';
 import type { CharacterData } from '@bash-fighter/sim';
-import { InputManager, isTouchCapable, shouldIgnoreKeydown } from '@bash-fighter/input';
+import { InputManager, isTouchCapable, shouldIgnoreKeydown, ONLINE_ALIASES } from '@bash-fighter/input';
 import { markLeftMidMatch } from './leave-prompt.ts';
 import { buildClientProfile, visitSource, nextMatchIndex, buildSessionReportMessage, InputActivityTracker, InputUsageTracker, UnboundInputTracker, FrameTimeTracker, NetworkHitchTracker, SlowFrameTracker, SLOW_FRAME_THRESHOLD_MS } from './session-report.ts';
 import { readBuildSha } from './ui/feedback-panel.ts';
@@ -187,6 +187,7 @@ export class NetMatch {
   private snapshotDecoder = new SnapshotStreamDecoder();
   readonly renderer: Renderer;
   readonly input = new InputManager();
+  private detachCanvasMouse: (() => void) | null = null;
   private ws: WebSocket | null = null;
   private loop: FixedTimestepLoop | null = null;
   private name = '';
@@ -348,7 +349,7 @@ export class NetMatch {
   // Observed input-device usage for this match, keyed by real source --
   // see InputUsageTracker and docs/MEASUREMENT.md "Capability vs usage".
   private inputUsage = new InputUsageTracker();
-  // Measurement-only probe of dead online inputs (arrows, J/K/Z/X/Enter,
+  // Measurement-only probe of alternative inputs (arrows, J/K/Z/X/Enter,
   // mouse clicks) -- see UnboundInputTracker. Counts only while live.
   private unboundInput = new UnboundInputTracker();
   private canvasRoot: HTMLElement | null = null;
@@ -455,6 +456,8 @@ export class NetMatch {
     // nothing in this codebase reads this global on its own.
     if (typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__debugRenderer = this.renderer;
     this.input.attach(window);
+    this.input.setAliases(0, ONLINE_ALIASES);
+    this.detachCanvasMouse = this.input.attachCanvasMouse(parent);
     this.canvasRoot = parent;
     window.addEventListener('keydown', this.unboundKeyHandler);
     parent.addEventListener('pointerdown', this.unboundPointerHandler);
@@ -695,6 +698,8 @@ export class NetMatch {
     window.removeEventListener('pagehide', this.pageHideHandler);
     this.loop?.stop();
     this.input.detach(window);
+    this.detachCanvasMouse?.();
+    this.detachCanvasMouse = null;
     window.removeEventListener('keydown', this.unboundKeyHandler);
     this.canvasRoot?.removeEventListener('pointerdown', this.unboundPointerHandler);
     this.canvasRoot = null;

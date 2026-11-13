@@ -238,11 +238,13 @@ export class InputUsageTracker {
 const ARROW_KEY_CODES: ReadonlySet<string> = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
 const ALT_ATTACK_KEY_CODES: ReadonlySet<string> = new Set(['KeyJ', 'KeyK', 'KeyZ', 'KeyX', 'Enter']);
 
-/** Measurement-only probe for inputs that do nothing online: online play
- *  reads just the P1 keyboard binding, so arrow keys, J/K/Z/X/Enter and
- *  mouse clicks are dead. Counts how often players try them. Keys the
- *  player has bound are skipped (a remap makes them real controls), and
- *  held-key auto-repeat is not counted. Never affects gameplay. */
+/** Measurement-only probe of how often players reach for arrow keys,
+ *  J/K/Z/X/Enter and mouse clicks. Online play maps most of these as
+ *  aliases (see ONLINE_ALIASES in packages/input), so the counts now mean
+ *  "used an alternative control" rather than "pressed a dead key"; Enter
+ *  is still unmapped. Keys the player has bound are skipped (a remap makes
+ *  them real controls), and held-key auto-repeat is not counted. Never
+ *  affects gameplay. */
 export class UnboundInputTracker {
   private arrowKeyPresses = 0;
   private altAttackKeyPresses = 0;
