@@ -69,6 +69,8 @@ export interface StoredSessionEndRecord {
   frameP95Ms: number | null;
   devicePixelRatio: number | null;
   requeued: boolean | null;
+  /** Requeued match started by the end-screen countdown, not a click. */
+  autoContinued: boolean | null;
   /** Visitor had been shown the one-tap feedback prompt (see exit-intent.ts). */
   feedbackPrompted?: boolean | null;
   attackHintShown?: boolean | null;
@@ -248,6 +250,7 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       frameP95Ms: report?.frameP95Ms ?? null,
       devicePixelRatio: report?.devicePixelRatio ?? null,
       requeued: report?.requeued ?? (conn.requeuedAtJoin ? true : null),
+      autoContinued: report?.autoContinued ?? null,
       feedbackPrompted: report?.feedbackPrompted ?? null,
       attackHintShown: report?.attackHintShown ?? null,
       source: profile?.source ?? null,

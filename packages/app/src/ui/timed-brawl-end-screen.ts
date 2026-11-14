@@ -26,7 +26,7 @@ export class TimedBrawlEndScreen {
   autoContinueEnabled = false;
   private readonly autoContinue!: AutoContinue;
   private readonly rating: MatchRatingRow;
-  private readonly onRematch: () => void;
+  private readonly onRematch: (autoContinued?: boolean) => void;
   private lastResult: 'won' | 'lost' | 'tied' = 'tied';
   private inviteLink: string | null = null;
   private onInviteCopied: (() => void) | undefined;
@@ -43,7 +43,7 @@ export class TimedBrawlEndScreen {
   // Same feedback block as WinScreen (see feedback-panel.ts, 2026-09-13):
   // this is the Timed Brawl equivalent of "the moment a player has an
   // opinion", so it gets the identical prominent-but-not-pushy treatment.
-  constructor(parent: HTMLElement, onRematch: () => void, onOpenFeedback?: (result: string) => void) {
+  constructor(parent: HTMLElement, onRematch: (autoContinued?: boolean) => void, onOpenFeedback?: (result: string) => void) {
     this.root = document.createElement('div');
     this.root.className = 'screen hidden';
     this.root.id = 'timed-brawl-end-screen';
@@ -174,7 +174,7 @@ export class TimedBrawlEndScreen {
     }
     this.rating.open('timed-brawl');
     this.root.classList.remove('hidden');
-    if (this.autoContinueEnabled) this.autoContinue.start(this.onRematch);
+    if (this.autoContinueEnabled) this.autoContinue.start(() => this.onRematch(true));
     document.body.classList.add('end-screen-open');
   }
 

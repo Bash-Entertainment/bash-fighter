@@ -509,6 +509,8 @@ export function buildSessionReportMessage(input: {
   /** True when this match was entered via "Play again" on the elimination/
    *  match-end overlay or win screen, rather than the start screen. */
   requeued?: boolean;
+  /** True when a requeued match was started by the end-screen countdown rather than a click. */
+  autoContinued?: boolean;
   feedbackPrompted?: boolean;
   attackHintShown?: boolean;
   /** See SessionReportMessage.contextLostCount. Optional/omitted (not
@@ -574,6 +576,7 @@ export function buildSessionReportMessage(input: {
   if (typeof input.requeued === 'boolean') {
     msg.requeued = input.requeued;
   }
+  if (typeof input.autoContinued === 'boolean') msg.autoContinued = input.autoContinued;
   if (input.contextLostCount !== undefined) msg.contextLostCount = input.contextLostCount;
   if (input.renderStalled !== undefined) msg.renderStalled = input.renderStalled;
   if (input.frameHistogram !== undefined) msg.frameHistogram = input.frameHistogram;

@@ -715,7 +715,7 @@ function serverUrl(): string {
 // overlay, match-end overlay, win screen, timed-brawl end screen, or the
 // spectate-stall chip) rather than the start screen's "Play online"
 // button -- feeds the requeued session-report field (see net-match.ts).
-async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = false): Promise<void> {
+async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = false, autoContinued = false): Promise<void> {
   if (requeued && !joinCode && pendingInviteCode) {
     joinCode = pendingInviteCode;
   }
@@ -951,7 +951,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
           // of play, so the default outcome of doing nothing should be
           // another match rather than the end of the session. Pressing
           // "Keep spectating" cancels it.
-          { label: 'Play again', autoAfterSec: 4, onClick: () => void beginOnlineMatch(true) },
+          { label: 'Play again', autoAfterSec: 4, onClick: (auto) => void beginOnlineMatch(true, undefined, false, auto === true) },
           ...(inviteLinkAction() ? [inviteLinkAction()!] : []),
           {
             label: 'Keep spectating',
@@ -992,7 +992,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
     onContextLost: onRendererContextLost,
     onContextRestored: onRendererContextRestored,
     onRenderStalled: onRendererRenderStalled,
-  }, audio, isQaSession(), requestedArenaId(), requeued, requestedJoinCode, requestedSpectate);
+  }, audio, isQaSession(), requestedArenaId(), requeued, requestedJoinCode, requestedSpectate, autoContinued);
   netMatch = net;
   net.input.setBinding(0, currentBindings.p1);
   net.input.setBinding(1, currentBindings.p2);
@@ -1070,9 +1070,9 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
 // match and clicking Rematch silently dropped you into local play).
 const winScreen = new WinScreen(
   appRoot,
-  () => {
+  (autoContinued) => {
     if (lastMatchWasOnline) {
-      void beginOnlineMatch(true);
+      void beginOnlineMatch(true, undefined, false, autoContinued === true);
     } else {
       void beginMatch();
     }
@@ -1089,9 +1089,9 @@ const winScreen = new WinScreen(
 // winScreen: whichever mode was actually being played.
 const timedBrawlEndScreen = new TimedBrawlEndScreen(
   appRoot,
-  () => {
+  (autoContinued) => {
     if (lastMatchWasOnline) {
-      void beginOnlineMatch(true);
+      void beginOnlineMatch(true, undefined, false, autoContinued === true);
     } else {
       void beginMatch();
     }

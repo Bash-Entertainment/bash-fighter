@@ -12,13 +12,13 @@ const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
 const netMatch = readFileSync(new URL('../src/net-match.ts', import.meta.url), 'utf8');
 
 test('beginOnlineMatch defaults requeued to false for the start-screen path', () => {
-  assert.match(main, /async function beginOnlineMatch\(requeued = false, joinCode\?: string, spectate = false\): Promise<void>/);
+  assert.match(main, /async function beginOnlineMatch\(requeued = false, joinCode\?: string, spectate = false, autoContinued = false\): Promise<void>/);
   const startScreenIdx = main.indexOf("void beginOnlineMatch();");
   assert.notEqual(startScreenIdx, -1, 'start screen must call beginOnlineMatch() with no argument');
 });
 
 test('every "Play again" style action passes requeued=true into beginOnlineMatch', () => {
-  const playAgainCallSites = [...main.matchAll(/label: 'Play again',[^}]*?onClick: \(\) => void beginOnlineMatch\((true)?\)/g)];
+  const playAgainCallSites = [...main.matchAll(/label: 'Play again',[^}]*?onClick: (?:\(\)|\(auto\)) => void beginOnlineMatch\((true)(?:, undefined, false, auto === true)?\)/g)];
   assert.ok(playAgainCallSites.length >= 2, 'expected the elimination overlay and match-end overlay Play again buttons');
   for (const m of playAgainCallSites) {
     assert.equal(m[1], 'true', 'a Play again button must call beginOnlineMatch(true)');
@@ -27,16 +27,30 @@ test('every "Play again" style action passes requeued=true into beginOnlineMatch
   // The win screen / timed-brawl-end-screen rematch callback, and the
   // spectate-stall chip's own "Play again" control.
   assert.match(main, /new SpectateChip\(appRoot, \(\) => void beginOnlineMatch\(true\)\)/);
-  const rematchCalls = [...main.matchAll(/void beginOnlineMatch\(true\);/g)];
+  const rematchCalls = [...main.matchAll(/void beginOnlineMatch\(true(, undefined, false, autoContinued === true)?\);/g)];
   assert.ok(rematchCalls.length >= 2, 'expected the win screen and timed-brawl end screen rematch callbacks to pass true');
 });
 
 test('beginOnlineMatch forwards requeued into the NetMatch constructor', () => {
-  assert.match(main, /}, audio, isQaSession\(\), requestedArenaId\(\), requeued, requestedJoinCode, requestedSpectate\);/);
+  assert.match(main, /}, audio, isQaSession\(\), requestedArenaId\(\), requeued, requestedJoinCode, requestedSpectate, autoContinued\);/);
 });
 
 test('NetMatch accepts a requeued constructor param and carries it into the session report', () => {
-  assert.match(netMatch, /requeued = false,\s*\n\s*joinCodeRequest\?: string,\s*\n\s*spectateRequest = false,\s*\n\s*\)\s*{/);
+  assert.match(netMatch, /requeued = false,\s*\n\s*joinCodeRequest\?: string,\s*\n\s*spectateRequest = false,\s*\n\s*autoContinued = false,\s*\n\s*\)\s*{/);
   assert.match(netMatch, /this\.requeued = requeued;/);
+  assert.match(netMatch, /this\.autoContinued = autoContinued;/);
   assert.match(netMatch, /requeued: this\.requeued,/);
+});
+
+test('only the countdown paths mark a match autoContinued; clicks leave it false', () => {
+  for (const file of ['win-screen.ts', 'timed-brawl-end-screen.ts']) {
+    const src = readFileSync(new URL(`../src/ui/${file}`, import.meta.url), 'utf8');
+    assert.match(src, /this\.autoContinue\.start\(\(\) => this\.onRematch\(true\)\);/, `${file} countdown must pass true`);
+    assert.match(src, /this\.autoContinue\.cancel\(\);\s*onRematch\(\);/, `${file} click must pass nothing`);
+  }
+  const overlay = readFileSync(new URL('../src/ui/match-overlay.ts', import.meta.url), 'utf8');
+  assert.match(overlay, /btn\.textContent = action\.label;\s*action\.onClick\(true\);/);
+  assert.match(overlay, /this\.cancelCountdown\(\);\s*action\.onClick\(\);/);
+  assert.match(main, /\(autoContinued\) => \{\s*if \(lastMatchWasOnline\) \{\s*void beginOnlineMatch\(true, undefined, false, autoContinued === true\);/);
+  assert.match(netMatch, /autoContinued: this\.autoContinued,/);
 });

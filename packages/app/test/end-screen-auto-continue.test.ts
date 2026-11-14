@@ -19,7 +19,7 @@ test('the countdown is cancelled by any interaction outside the button', () => {
 
 test('both end screens start the countdown on show and cancel it on hide', () => {
   for (const [name, src] of [['win', win], ['timed brawl', timed]] as const) {
-    assert.match(src, /if \(this\.autoContinueEnabled\) this\.autoContinue\.start\(this\.onRematch\);/, name);
+    assert.match(src, /if \(this\.autoContinueEnabled\) this\.autoContinue\.start\(\(\) => this.onRematch\(true\)\);/, name);
     const hideBody = src.slice(src.indexOf('hide('));
     assert.ok(
       hideBody.indexOf('this.autoContinue.cancel();') < hideBody.indexOf("classList.add('hidden')"),

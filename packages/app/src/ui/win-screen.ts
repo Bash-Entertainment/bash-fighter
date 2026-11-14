@@ -18,7 +18,7 @@ export class WinScreen {
   autoContinueEnabled = false;
   private readonly autoContinue!: AutoContinue;
   private readonly rating: MatchRatingRow;
-  private readonly onRematch: () => void;
+  private readonly onRematch: (autoContinued?: boolean) => void;
   private lastResult: 'won' | 'eliminated' | 'no_survivor' = 'no_survivor';
   private inviteLink: string | null = null;
   private onInviteCopied: (() => void) | undefined;
@@ -38,7 +38,7 @@ export class WinScreen {
   // (2026-09-13, see feedback-panel.ts) -- prominent but not pushy: a
   // plain text line under the existing Play again button, not a second
   // modal popped over the result.
-  constructor(parent: HTMLElement, onRematch: () => void, onOpenFeedback?: (result: string) => void) {
+  constructor(parent: HTMLElement, onRematch: (autoContinued?: boolean) => void, onOpenFeedback?: (result: string) => void) {
     this.root = document.createElement('div');
     this.root.className = 'screen hidden';
     this.root.id = 'win-screen';
@@ -117,7 +117,7 @@ export class WinScreen {
     if (winnerIndex === null) this.lastResult = 'no_survivor';
     this.rating.open('battle-royale');
     this.root.classList.remove('hidden');
-    if (this.autoContinueEnabled) this.autoContinue.start(this.onRematch);
+    if (this.autoContinueEnabled) this.autoContinue.start(() => this.onRematch(true));
     document.body.classList.add('end-screen-open');
   }
 
