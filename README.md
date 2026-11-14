@@ -24,7 +24,7 @@ of playable characters, see `docs/ARCHITECTURE.md` and
 `packages/content/src/characters` — the roster is data-driven and grows
 over time, so it isn't enumerated here.
 
-![Bash Fighter mid-match: six fighters remaining, arena collapsed, items on the ground](docs/images/gameplay-ffa.png)
+![Bash Fighter mid-match: twenty fighters in a Timed Brawl, each with its name and damage percent](docs/images/gameplay-ffa.png)
 *Screenshot from a real match on the live server — a 20-player lobby collapsed down to 6.*
 
 ## Game design
