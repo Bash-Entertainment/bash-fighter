@@ -224,6 +224,8 @@ export class NetMatch {
   // construction, like sessionDevicePixelRatio above, since it describes
   // how THIS session began, not anything that can change mid-match.
   private readonly requeued: boolean;
+  /** True when the end-screen countdown, not a click, started this match. */
+  private readonly autoContinued: boolean;
   private readonly matchIndex: number;
   private stopped = false;
   private reconnectAttempt = 0;
@@ -428,6 +430,7 @@ export class NetMatch {
     requeued = false,
     joinCodeRequest?: string,
     spectateRequest = false,
+    autoContinued = false,
   ) {
     this.url = url;
     this.events = events;
@@ -437,6 +440,7 @@ export class NetMatch {
     this.qaMode = qaMode;
     this.arenaRequest = arenaRequest;
     this.requeued = requeued;
+    this.autoContinued = autoContinued;
     this.joinCodeRequest = joinCodeRequest;
     this.spectateRequest = spectateRequest;
     this.matchIndex = spectateRequest ? 0 : nextMatchIndex();
@@ -480,6 +484,7 @@ export class NetMatch {
       frameP95Ms: this.frameTimeTracker.getP95Ms(),
       devicePixelRatio: this.sessionDevicePixelRatio,
       requeued: this.requeued,
+      autoContinued: this.autoContinued,
       feedbackPrompted: wasFeedbackPrompted(),
       attackHintShown: this.attackHintShown,
       contextLostCount: this.contextLostCount,

@@ -9,7 +9,8 @@
 // it the moment the situation resolves (reconnected, new match joined).
 export interface MatchOverlayAction {
   label: string;
-  onClick: () => void;
+  /** `autoContinued` is true only when the countdown fired it, not a click. */
+  onClick: (autoContinued?: boolean) => void;
   /** 'primary' (amber, the expected next click) or 'plain' (quiet text
    * link, an alternative). Defaults to 'primary'. */
   kind?: 'primary' | 'plain';
@@ -150,7 +151,7 @@ export class MatchOverlay {
       }
       this.cancelCountdown();
       btn.textContent = action.label;
-      action.onClick();
+      action.onClick(true);
     }, 1000);
   }
 

@@ -621,6 +621,20 @@ test('sessionReport: requeued is kept only when a strict boolean', () => {
   );
 });
 
+test('sessionReport: autoContinued is kept only when a strict boolean', () => {
+  const sessionReportWith = (extra: Record<string, unknown>) =>
+    JSON.stringify({ t: 'sessionReport', firstInputMs: 100, inputTicks: 10, frameMedianMs: 16, frameP95Ms: 20, ...extra });
+
+  for (const good of [true, false]) {
+    const parsed = parseClientControl(sessionReportWith({ autoContinued: good })) as { autoContinued?: boolean } | null;
+    assert.equal(parsed?.autoContinued, good);
+  }
+  for (const bad of [1, 0, 'true', null, undefined, {}]) {
+    const parsed = parseClientControl(sessionReportWith({ autoContinued: bad })) as { autoContinued?: boolean } | null;
+    assert.equal(parsed?.autoContinued, undefined, `autoContinued ${String(bad)} must be dropped`);
+  }
+});
+
 test('hello accepts requeued only as a strict boolean', () => {
   const hello = (extra: Record<string, unknown>) =>
     parseClientControl(JSON.stringify({ t: 'hello', protocolVersion: PROTOCOL_VERSION, name: 'Ash', ...extra })) as {
