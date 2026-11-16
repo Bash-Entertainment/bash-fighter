@@ -89,7 +89,13 @@ export const FALL_HEADROOM_WORLD = 40;
 // same padding camera.ts's own fSpanX uses -- optional and ignored
 // below that population, so every existing caller that doesn't pass it
 // keeps the old, un-trimmed behaviour exactly.
-export const ARENA_FLOOR_SLACK_MIN_COUNT = 12;
+// DESKTOP-FRAMING PASS (2026-11-16): lowered from 12 to 6 (where the
+// population taper below begins). With 6-11 fighters left, the whole
+// platform footprint used to be the zoom floor, so a half-lobby huddled in
+// the middle of a wide stage was framed at the same scale as the opening
+// 20-fighter spread and left both sides of the screen empty. Below 6 the
+// taper already shrinks the floor, and 2-3 fighter endgames keep it.
+export const ARENA_FLOOR_SLACK_MIN_COUNT = 6;
 export const ARENA_FLOOR_SLACK_FACTOR = 1.05;
 
 export function computeFramingFloor(

@@ -501,6 +501,32 @@ test('a large, tightly-spread lobby zooms in past the raw arena footprint, never
   }
 });
 
+// Desktop-framing pass (2026-11-16): half a lobby (6-11 fighters) huddled in
+// the middle of a wide stage used to be framed at the same scale as the
+// opening 20-fighter spread, leaving both sides of the screen empty.
+test('half a lobby huddled mid-stage zooms in past the full arena footprint and still contains everyone', () => {
+  const arena: ArenaBounds = { minX: -480, maxX: 480, minY: -40, maxY: 150 };
+  const c = cfg({
+    viewWidth: 1080,
+    viewHeight: 720,
+    minScale: 1.6,
+    maxScale: 5.5,
+    arena,
+    clampBounds: { minX: -620, maxX: 620, minY: -260, maxY: 520 },
+  });
+  const positions = Array.from({ length: 8 }, (_, i) => ({ x: -150 + (i / 7) * 300, y: 0 }));
+  const arenaFootprintScale = c.viewWidth / (arena.maxX - arena.minX);
+  const view = computeRawCamera(positions, c);
+  assert.ok(
+    view.scale > arenaFootprintScale * 1.4,
+    `scale ${view.scale} should be well past the arena-footprint scale ${arenaFootprintScale}`,
+  );
+  const halfW = c.viewWidth / 2 / view.scale;
+  for (const f of positions) {
+    assert.ok(f.x >= view.centerX - halfW && f.x <= view.centerX + halfW, `fighter at x=${f.x} outside frame`);
+  }
+});
+
 // Regression: a small cluster (below the slack-cap population threshold)
 // keeps the full, un-slacked arena floor -- the "still looks like an
 // arena" behaviour for 2-3 fighter endgames must be unaffected.

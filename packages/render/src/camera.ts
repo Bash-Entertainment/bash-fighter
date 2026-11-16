@@ -8,6 +8,7 @@
 // much bigger one — it only ever reads positions + bounds, no fighter
 // count or stage size baked in.
 import { FIGHTER_WORLD_HEIGHT, MIN_FIGHTER_PX } from './fighter-scale.ts';
+import { ARENA_FLOOR_SLACK_FACTOR, ARENA_FLOOR_SLACK_MIN_COUNT } from './framing.ts';
 
 export interface CameraView {
   centerX: number;
@@ -325,12 +326,11 @@ export function computeFitEveryoneCamera(
   // world-unit of forced span comes straight out of on-screen fighter
   // pixels. Capping the floor's contribution to a fixed multiple of the
   // fighters' *own* spread -- only once the lobby is large enough that
-  // the fighters' spread is itself already arena-sized -- removes that
+  // the fighters' spread is itself already arena-sized (see
+  // ARENA_FLOOR_SLACK_MIN_COUNT in framing.ts) -- removes that
   // unused margin without touching the low-population "still look like
   // an arena" behaviour at all (small lobbies/endgames are below
   // ARENA_FLOOR_SLACK_MIN_COUNT and keep the full, unslacked floor).
-  const ARENA_FLOOR_SLACK_MIN_COUNT = 12;
-  const ARENA_FLOOR_SLACK_FACTOR = 1.05;
   // X-ONLY, on purpose (2026-09-15 follow-up): fSpanY reflects the
   // fighters' *current* vertical spread, which is ~0 for a ground-
   // hugging pack and only grows when someone actually jumps. Capping
