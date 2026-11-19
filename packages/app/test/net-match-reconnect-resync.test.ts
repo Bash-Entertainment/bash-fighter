@@ -2,10 +2,9 @@
 // resumed reconnect's startMatch() resets NetMatch's prediction clock
 // (localTick) to 0 unconditionally, but the first snapshot after a resume
 // carries the real, large mid-match server tick. Without resyncing forward,
-// localTick stays permanently behind snap.tick and handleBinary's replay
-// loop (`for t = snap.tick+1; t <= localTick`) never runs again for the
-// rest of the match -- the local player's own prediction goes silently
-// dead after any reconnect. Found and measured with
+// localTick stays permanently behind snap.tick for the rest of the match
+// (at the time this also silenced handleBinary's replay loop, which then ran
+// from snap.tick+1 to localTick). Found and measured with
 // scripts/reconnect-divergence-harness.mjs (replay window drifted to -52,
 // -123, -192 ticks over three reconnect cycles without this guard).
 //
