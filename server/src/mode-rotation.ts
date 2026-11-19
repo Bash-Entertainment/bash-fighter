@@ -76,11 +76,7 @@ export const TIMED_BRAWL_TIME_LIMIT_TICKS = 60 * 60 * 1.5;
  *  3-10 Oct: only 9 of 94 real sessions stayed to a match end, and a
  *  player who never sees the end screen can never re-queue. A shorter
  *  first match puts the rematch prompt in front of more of them. */
-/** Shortened again to 40s (2026-11-13): since 10-30, 78% of players who
- *  reach match 1's end screen requeue, but most leave mid-match; 19 of 130
- *  mid-match leavers left between 40s and 60s. Experiment, pre-registered
- *  readout 2026-11-20. */
-export const FIRST_MATCH_TIME_LIMIT_TICKS = 60 * 40;
+export const FIRST_MATCH_TIME_LIMIT_TICKS = 60 * 60;
 
 /** Stocks' starting-life count in the rotation. 2 lives, chosen from a
  *  measurement (scripts/stocks-metrics.mjs, 2026-09-12), not taste: a
