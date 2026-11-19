@@ -45,9 +45,13 @@ export function shouldIgnoreKeydown(target: EventTarget | null, code: string): b
 
 export class KeyboardSource {
   private readonly held = new Set<string>();
+  // Keys pressed since the last poll. The game samples input once per 60Hz
+  // tick, so a tap shorter than a tick (down and up between two samples)
+  // used to vanish; this keeps it visible to exactly one sample.
+  private readonly pressedSincePoll = new Set<string>();
   private readonly onDown = (e: KeyboardEvent): void => {
     if (shouldIgnoreKeydown(e.target, e.code)) return;
-    this.held.add(e.code);
+    this.press(e.code);
   };
   private readonly onUp = (e: KeyboardEvent): void => {
     // Always process key-up even if the target looks like a control: if a
@@ -69,6 +73,7 @@ export class KeyboardSource {
 
   press(code: string): void {
     this.held.add(code);
+    this.pressedSincePoll.add(code);
   }
 
   release(code: string): void {
@@ -79,9 +84,20 @@ export class KeyboardSource {
     return this.held.has(code);
   }
 
+  /** What an input sample should read: held now, or tapped since the last
+   * sample. Call endPoll() after each sample. */
+  isDownForPoll(code: string): boolean {
+    return this.held.has(code) || this.pressedSincePoll.has(code);
+  }
+
+  endPoll(): void {
+    this.pressedSincePoll.clear();
+  }
+
   /** Release everything — used when the window loses focus so a key stuck
    * "down" during an alt-tab doesn't ghost-hold a direction forever. */
   reset(): void {
     this.held.clear();
+    this.pressedSincePoll.clear();
   }
 }
