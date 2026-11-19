@@ -2,12 +2,13 @@
 // or spectating it. Matches are fully isolated: no shared mutable state
 // between matches, no global game instance.
 import { randomBytes } from 'node:crypto';
-import { Sim, makeInputFrame, rookieScaleForMatchesPlayed, BUTTON_ATTACK, ONLINE_INTRO_FREEZE_TICKS, type InputFrame, type MatchSettings, type WinCondition } from '@bash-fighter/sim/src/index.ts';
+import { Sim, rookieScaleForMatchesPlayed, BUTTON_ATTACK, ONLINE_INTRO_FREEZE_TICKS, type InputFrame, type MatchSettings, type WinCondition } from '@bash-fighter/sim/src/index.ts';
 import { newSeatTrace, observeTick, sampleSecond, type SeatTrace } from './session-trace.ts';
 import { BotController, BotDifficulty, deriveBotSeed, type BotDifficultyValue } from '@bash-fighter/sim/src/ai/bot.ts';
 import { createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID, pickArenaId, isKnownArenaId } from '@bash-fighter/content/src/index.ts';
 import { SNAPSHOT_HZ, dedupeName } from '@bash-fighter/net/src/protocol.ts';
 import { recordTickDurationMs } from './tick-metrics.ts';
+import { InputQueue } from './input-queue.ts';
 import { PRODUCTION_DEFAULT_BOT_DIFFICULTY_NAME } from './match-defaults.ts';
 
 // --- Reconnection (see wiki "Netcode Design Part 3") ------------------------
@@ -97,11 +98,9 @@ export interface Seat {
    *  to DEFAULT_CHARACTER_ID for bots and for any client that didn't send
    *  one -- see resolveCharacterId's fallback for unknown ids too. */
   characterId: string;
-  /** Latest input received for this slot. Empty (neutral) input is used for
-   *  ticks where nothing has arrived yet, or once disconnected -- unchanged
-   *  from before reconnection existed. */
-  pendingInput: InputFrame;
-  lastInputTick: number;
+  /** Inputs received for this slot, consumed one per tick. Neutral until
+   *  something arrives, and again once disconnected. */
+  inputs: InputQueue;
   /** Opaque resume token for this seat, or null once released (and never
    *  issued for a bot seat -- there is no human to reconnect). The ONLY way
    *  to reclaim this seat is presenting this exact string back in a
@@ -476,8 +475,7 @@ export class Match {
       eliminatedAtTick: null,
       isBot,
       characterId,
-      pendingInput: makeInputFrame(),
-      lastInputTick: -1,
+      inputs: new InputQueue(),
       attackPresses: 0,
       attackHeldLast: false,
       hitsLanded: 0,
@@ -542,7 +540,7 @@ export class Match {
   /** Reclaims a disconnected seat for a new connection: cancels its grace
    *  timer and marks it connected again. The caller (transport layer) is
    *  responsible for wiring the new socket to this slot and does not need
-   *  to touch pendingInput -- it already holds neutral input from
+   *  to touch the input queue -- it already holds neutral input from
    *  markDisconnected and the client will send fresh input immediately.
    *  Returns false if the seat is not in a reclaimable state; defensive,
    *  callers are expected to have gone through findReclaimableSeat first. */
@@ -580,8 +578,8 @@ export class Match {
     // Reject inputs far in the future/past: a hostile client could otherwise
     // send garbage tick numbers to confuse reconciliation on other clients'
     // logs, though the server sim itself never trusts the client tick for
-    // anything beyond bookkeeping (it always applies the latest input on
-    // its own next tick regardless of what tick the client claims).
+    // anything beyond bookkeeping (it applies inputs in arrival order, one
+    // per tick, regardless of what tick the client claims).
     if (tick < 0) return;
     // attackPresses: count a rising edge (was not held, now held) of any
     // attack source in the input the server is about to apply for this
@@ -592,8 +590,7 @@ export class Match {
     if (attackHeldNow && !seat.attackHeldLast) seat.attackPresses++;
     seat.attackHeldLast = attackHeldNow;
     if (input.buttons !== 0 || input.stickX !== 0 || input.stickY !== 0) seat.trace.hadInput = true;
-    seat.pendingInput = input;
-    seat.lastInputTick = Math.max(seat.lastInputTick, tick);
+    seat.inputs.push(input, tick);
   }
 
   /** Called by the transport layer when a seat's socket closes. The fighter
@@ -606,7 +603,7 @@ export class Match {
     const seat = this.seats[slot];
     if (!seat) return;
     seat.connected = false;
-    seat.pendingInput = makeInputFrame();
+    seat.inputs.clear();
     seat.disconnectedAt = Date.now();
     this.clearGraceTimer(slot);
     if (seat.isBot || seat.eliminated || seat.resumeToken === null || this.phase === 'ended') return;
@@ -762,7 +759,7 @@ export class Match {
     if (!sim) return;
     const inputs: InputFrame[] = this.seats.map((s) => {
       const bot = this.bots.get(s.slot);
-      return bot ? bot.nextInput(sim) : s.pendingInput;
+      return bot ? bot.nextInput(sim) : s.inputs.next();
     });
     const tickStart = process.hrtime.bigint();
     sim.advance(inputs);
@@ -875,7 +872,7 @@ export class Match {
 
     if (this.tick % SNAPSHOT_EVERY_N_TICKS === 0) {
       const acked = new Map<number, number>();
-      for (const seat of this.seats) acked.set(seat.slot, seat.lastInputTick);
+      for (const seat of this.seats) acked.set(seat.slot, seat.inputs.lastAppliedTick);
       this.events.onSnapshot(this.tick, acked);
     }
 
