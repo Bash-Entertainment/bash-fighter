@@ -1132,6 +1132,9 @@ export class Sim {
       const total = move ? moveTotalDuration(move) : 0;
       moveFrame = (moveFrame + 1) | 0;
       if (!grounded) {
+        // Aerials keep full air control, as in the rest of the genre;
+        // freezing drift made every air attack stall the fighter mid-air.
+        velX = fx.mul(input.stickX, MOVE_SPEED);
         velY = fx.add(velY, GRAVITY);
         velY = fx.max(velY, TERMINAL_VELOCITY);
       } else {
@@ -1190,7 +1193,7 @@ export class Sim {
       }
       if (findMove(character, chosen)) {
         this.startMove(index, base, chosen);
-        this.writeBack(base, { posX, posY, velX: 0, velY, grounded, facing, moveId: chosen, moveFrame: 0, hitstun, shieldStun });
+        this.writeBack(base, { posX, posY, velX: grounded ? 0 : velX, velY, grounded, facing, moveId: chosen, moveFrame: 0, hitstun, shieldStun });
         return;
       }
     }
