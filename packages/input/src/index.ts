@@ -47,7 +47,7 @@ export type InputSourceKind = 'touch' | 'gamepad' | 'keyboard';
 
 
 function keyboardFrame(kb: KeyboardSource, binding: KeyBinding, aliases?: KeyAliases): InputFrame {
-  const held = (field: BindingField): boolean => codesForField(binding, aliases, field).some((c) => kb.isHeld(c));
+  const held = (field: BindingField): boolean => codesForField(binding, aliases, field).some((c) => kb.isDownForPoll(c));
   let buttons = 0;
   for (const field of BUTTON_FIELDS) {
     if (held(field)) buttons |= BUTTON_BY_FIELD[field];
@@ -139,7 +139,9 @@ export class InputManager {
    * frame; the app layer samples the latest returned pair on each fixed
    * 60Hz sim tick (poll-and-hold, not per-tick re-polling of the DOM). */
   poll(): InputFrame[] {
-    return this.slots.map((_, i) => this.pollSlot(i));
+    const frames = this.slots.map((_, i) => this.pollSlot(i));
+    this.keyboard.endPoll();
+    return frames;
   }
 
   /** Register (or clear, passing null) the touch source that should be

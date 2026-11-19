@@ -156,3 +156,33 @@ test('KeyboardSource: typing in a text field never reaches the game', () => {
     assert.equal(source.isHeld(code), false, `${code} typed into a name field must not drive the fighter`);
   }
 });
+
+test('KeyboardSource: a tap released before the next poll is still read by that poll, once', () => {
+  const win = new FakeWindow();
+  const source = new KeyboardSource();
+  source.attach(win as unknown as Window);
+
+  // An ~8 ms tap lands entirely between two 60Hz samples.
+  fireDown(win, 'KeyJ', new FakeGameSurface());
+  fireUp(win, 'KeyJ', new FakeGameSurface());
+  assert.equal(source.isHeld('KeyJ'), false);
+  assert.equal(source.isDownForPoll('KeyJ'), true, 'the sample after the tap sees it');
+  source.endPoll();
+  assert.equal(source.isDownForPoll('KeyJ'), false, 'and the one after does not');
+});
+
+test('KeyboardSource: a held key stays down across polls; reset() drops a pending tap', () => {
+  const win = new FakeWindow();
+  const source = new KeyboardSource();
+  source.attach(win as unknown as Window);
+
+  fireDown(win, 'KeyD', new FakeGameSurface());
+  source.endPoll();
+  assert.equal(source.isDownForPoll('KeyD'), true);
+
+  fireDown(win, 'KeyJ', new FakeGameSurface());
+  fireUp(win, 'KeyJ', new FakeGameSurface());
+  source.reset();
+  assert.equal(source.isDownForPoll('KeyJ'), false);
+  assert.equal(source.isDownForPoll('KeyD'), false);
+});
