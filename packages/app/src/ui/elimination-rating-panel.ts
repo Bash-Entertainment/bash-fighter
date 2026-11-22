@@ -15,7 +15,7 @@ export class EliminationRatingPanel {
     private readonly isTouchActive: () => boolean,
   ) {}
 
-  show(mode: string, placement: number): void {
+  show(mode: string, placement: number, trigger = 'eliminated', autoHideMs = 0): void {
     this.hide();
     const root = document.createElement('div');
     root.className = 'elim-rating';
@@ -30,13 +30,19 @@ export class EliminationRatingPanel {
     ].join('');
     this.parent.appendChild(root);
     mountQuickRating(root.querySelector('.exit-intent-body') as HTMLElement, {
-      extra: () => ({ trigger: 'eliminated', mode, placement }),
+      extra: () => ({ trigger, mode, placement }),
       isTouchActive: this.isTouchActive,
       graceMs: ELIMINATION_RATING_GRACE_MS,
       onDone: () => setTimeout(() => this.hide(), 1500),
     });
     (root.querySelector('.exit-intent-close') as HTMLButtonElement).addEventListener('click', () => this.hide());
     this.root = root;
+    if (autoHideMs > 0) {
+      // Unanswered, it must not sit over the HUD while the player fights on.
+      let touched = false;
+      root.addEventListener('pointerdown', () => { touched = true; });
+      setTimeout(() => { if (this.root === root && !touched) this.hide(); }, autoHideMs);
+    }
   }
 
   /** On a phone, moves the panel from the top (over the HUD) to just above the spectate chip. */

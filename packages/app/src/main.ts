@@ -258,7 +258,7 @@ function onRendererInitFailed(where: string, error: unknown): void {
 }
 const spectateChip = new SpectateChip(appRoot, () => void beginOnlineMatch(true));
 const eliminationRatingOffer = new EliminationRatingOffer();
-const eliminationRatingPanel = new EliminationRatingPanel(appRoot, () => 'ontouchstart' in window);
+const eliminationRatingPanel = new EliminationRatingPanel(appRoot, () => touchCapable);
 const matchIntro = new MatchIntro(appRoot);
 const startCountdown = new StartCountdown(appRoot);
 /** The 20-slot FFA palette entry for a seat, as a CSS colour -- the same
@@ -1061,6 +1061,15 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
             }
           : undefined,
       );
+      // Timed Brawl never eliminates, and first matches are always Timed
+      // Brawl, so a first knockout (not in the opening seconds) is the
+      // moment to offer the rating there.
+      if (isTimedBrawl(onlineSettings) && holdingASeat
+        && (netMatch.currentSnapshots()[netMatch.localSlot()]?.deathCount ?? 0) > 0
+        && liveMatchBeganAtMs > 0 && performance.now() - liveMatchBeganAtMs >= 20_000
+        && eliminationRatingOffer.claim()) {
+        eliminationRatingPanel.show(netModeLine.textContent || 'online', 0, 'knocked-out', 15000);
+      }
     } else {
       hud.hide();
       inMatchMovesButton.classList.add('hidden');
