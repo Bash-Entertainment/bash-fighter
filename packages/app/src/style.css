@@ -2795,12 +2795,14 @@ body:has(.leave-prompt) #attract-frame, body:has(.leave-prompt) .attract-caption
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 700 clamp(22px, 5vw, 40px) / 1.2 system-ui, sans-serif;
+  font: 700 clamp(18px, 4vw, 30px) / 1.2 var(--font-ui);
   background: rgba(10, 10, 12, 0.82);
   border: 1px solid #333b45;
   padding: 0.25em 0.7em;
   animation: ko-callout 2000ms linear forwards;
 }
+/* The one-tap rating can open on the same knockout; sit below it. */
+body:has(.elim-rating:not(.elim-rating-docked)) .ko-callout { top: auto; bottom: 30%; }
 @keyframes ko-callout {
   0% { opacity: 0; }
   8% { opacity: 1; }
