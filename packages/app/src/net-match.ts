@@ -34,6 +34,7 @@ import {
 } from '@bash-fighter/render';
 import { currentArenaBounds, previewArenaBounds } from './arena-preview.ts';
 import { resyncLocalTickAfterSnapshot } from './reconnect-resync.ts';
+import { reconcilePrediction } from './prediction-replay.ts';
 import { getMatchesPlayed, recordMatchPlayed } from './matches-played.ts';
 
 // See packages/app/src/match.ts for why these mirror the sim's private
@@ -1073,39 +1074,17 @@ export class NetMatch {
     }
 
     // Reconciliation: adopt the authoritative state, then replay every
-    // locally-buffered input newer than what the server has acked, so the
-    // local fighter's predicted position stays correct instead of
-    // snapping backwards every time a snapshot arrives.
+    // locally-buffered input newer than what the server has applied, so the
+    // local fighter's predicted position stays put instead of snapping back
+    // by a round trip's worth of movement every snapshot.
     //
-    // Resync guard (task #28231): startMatch() resets this.localTick to 0
-    // unconditionally, including on a resumed reconnect -- but a resume's
-    // first snapshot carries the real, large mid-match server tick. Without
-    // this guard, this.localTick (small, counting ticks-since-resume) stays
-    // permanently far behind snap.tick, so the loop below (`t <=
-    // this.localTick`) never executes again for the rest of the match: the
-    // local player's own prediction goes silently dead after any reconnect,
-    // and gets worse with every subsequent one. Found via
-    // scripts/reconnect-divergence-harness.mjs, which showed the replay
-    // window drifting to -52, -123, -192 ticks over three reconnect cycles
-    // with this guard absent, and pinned at 0 with it present. This does not
-    // touch remote fighters or eliminations (those always come straight
-    // from the authoritative snapshot via renderSim, never localSim), so it
-    // is a prediction/responsiveness regression, not the survivor-list
-    // divergence from the original report -- but it is real and it is a
-    // genuine consequence of the reconnect path the prior pass didn't
-    // exercise.
+    // Resync guard (task #28231): startMatch() resets this.localTick to 0,
+    // including on a resumed reconnect whose first snapshot carries the real,
+    // large mid-match server tick. Jumping forward keeps the countdown and
+    // match clock (both read localTick) in step with the server.
     this.localTick = resyncLocalTickAfterSnapshot(this.localTick, snap.tick);
-    this.localSim.loadState(snap.state);
-    for (const tick of Array.from(this.inputHistory.keys())) {
-      if (tick <= snap.ackedInputTick) this.inputHistory.delete(tick);
-    }
-    const replayInputs: InputFrame[] = new Array(this.numFighters).fill(null).map(() => makeInputFrame());
-    for (let t = snap.tick + 1; t <= this.localTick; t++) {
-      const recorded = this.inputHistory.get(t);
-      if (!this.spectating && this.mySlot >= 0 && recorded) replayInputs[this.mySlot] = recorded;
-      else if (!this.spectating && this.mySlot >= 0) replayInputs[this.mySlot] = makeInputFrame();
-      this.localSim.advance(replayInputs);
-    }
+    const slot = !this.spectating && this.mySlot >= 0 ? this.mySlot : -1;
+    reconcilePrediction(this.localSim, snap.state, this.inputHistory, snap.ackedInputTick, slot, this.numFighters);
   }
 
   /** FighterSnapshots for the HUD -- same shape as Match.currentSnapshots()

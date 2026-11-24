@@ -389,6 +389,20 @@ test('feedback: exit-intent bug report keeps trigger, match age/index and clampe
   });
 });
 
+test('feedback: an elimination rating keeps trigger, mode and placement', async () => {
+  await withServer(undefined, async (baseUrl, logPath) => {
+    const res = await fetch(`${baseUrl}/api/feedback`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kind: 'leave-reason', reason: 'confusing', context: { trigger: 'eliminated', mode: 'Battle Royale', placement: 14 } }),
+    });
+    assert.equal(res.status, 200);
+    const [line] = readLines(logPath);
+    assert.equal(line.reason, 'confusing');
+    assert.deepEqual([line.context.trigger, line.context.mode, line.context.placement], ['eliminated', 'Battle Royale', 14]);
+  });
+});
+
 test('feedback: a match-rating is stored with kind and rating; unknown ratings and mixed kinds are rejected', async () => {
   await withServer({}, async (baseUrl, logPath) => {
     const post = (body: unknown) =>

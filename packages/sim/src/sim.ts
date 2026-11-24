@@ -55,6 +55,27 @@ export const JUMP_VELOCITY: Fixed = fx.fromFloat(14.0);
 export const DOUBLE_JUMP_VELOCITY: Fixed = fx.fromFloat(14.0 * 0.85);
 export const MOVE_SPEED: Fixed = fx.fromFloat(4.5);
 export const TERMINAL_VELOCITY: Fixed = fx.fromFloat(-20.0);
+
+// --- Control feel: input buffer, coyote time, short hop, fast-fall --------
+/** Ticks a fresh jump or attack press stays queued when it cannot act yet
+ * (hitstun, shield stun, attack recovery, no jumps left before landing): it
+ * fires on the first tick it becomes legal. 6 ticks = 100 ms at 60 Hz. */
+export const INPUT_BUFFER_TICKS = 6;
+/** Ticks after leaving the ground without jumping in which a jump is still
+ * the full grounded jump. 5 ticks = 83 ms. */
+export const COYOTE_TICKS = 5;
+/** Releasing jump within this many ticks after a grounded takeoff cuts the
+ * jump to a short hop. */
+export const SHORT_HOP_WINDOW_TICKS = 4;
+/** A short hop's apex as a fraction of a full grounded jump's apex. */
+const SHORT_HOP_HEIGHT_RATIO = 0.55;
+/** Apex height is v^2 / 2g, so cutting a rising velocity v to
+ * sqrt(v^2 - (1 - ratio) * v0^2) leaves exactly `ratio` of the full apex,
+ * whichever tick inside the window the release lands on. */
+const SHORT_HOP_CUT_V2: Fixed = fx.mul(fx.mul(JUMP_VELOCITY, JUMP_VELOCITY), fx.fromFloat(1 - SHORT_HOP_HEIGHT_RATIO));
+/** Fall speed once a fighter fast-falls (down while airborne and past the
+ * apex): 1.6x TERMINAL_VELOCITY, held until landing, jumping, or a hit. */
+export const FAST_FALL_VELOCITY: Fixed = fx.mul(TERMINAL_VELOCITY, fx.fromFloat(1.6));
 /** Safety margin for hit-resolution broad-phase queries: comfortably
  * larger than any character's hurtbox/hitbox half-extent, so a query
  * against SpatialGrid (which buckets entities by center point, not by
@@ -216,7 +237,13 @@ export const FighterField = {
   RING_DAMAGE_TICK: 26, // last tick this fighter took ring (out-of-bounds) damage, -1 if never
   LAST_HIT_TICK: 27, // last tick a combat hit landed on this fighter, -1 if never (see DEATH_CAUSE below)
   HITSTOP_TICKS: 28, // ticks remaining of a sim-side impact freeze (see HITSTOP_* in knockback.ts); 0 = not frozen
-  FIELD_COUNT: 29,
+  PREV_ATTACK_HELD: 29, // 0/1: BUTTON_ATTACK state last tick, for edge-triggering the attack buffer
+  JUMP_BUFFER: 30, // ticks a fresh jump press stays queued (see INPUT_BUFFER_TICKS); 0 = none
+  ATTACK_BUFFER: 31, // ticks a fresh attack press stays queued; 0 = none
+  COYOTE_TIMER: 32, // ticks left in which an airborne, unjumped fighter still gets the grounded jump
+  SHORT_HOP_TIMER: 33, // ticks left in which releasing jump cuts a grounded jump to a short hop
+  FAST_FALLING: 34, // 0/1: falling at FAST_FALL_VELOCITY until landing, jumping or getting hit
+  FIELD_COUNT: 35,
 } as const;
 
 /** Ring-pressure tuning (2026-09-10): the collapsing boundary no longer kills on contact. A
@@ -248,6 +275,13 @@ const RING_INWARD_PUSH = fx.fromFloat(0.35);
 /** Max jumps allowed per airborne phase: one grounded jump + one aerial
  * ("double") jump, matching standard platform-fighter convention. */
 export const MAX_JUMPS = 2;
+
+/** Buffer countdown for one button: a fresh press (re)arms it, otherwise it
+ * runs down to 0. Nonzero means the press is still waiting to fire. */
+function nextBufferTicks(pressedThisTick: boolean, ticksLeft: number): number {
+  if (pressedThisTick) return INPUT_BUFFER_TICKS;
+  return ticksLeft > 0 ? (ticksLeft - 1) | 0 : 0;
+}
 
 const RNG_FIELD_WORDS = 4; // s0 lo/hi, s1 lo/hi
 const TICK_WORDS = 1;
@@ -512,6 +546,18 @@ export class Sim {
     d[base + FighterField.RING_DAMAGE_TICK] = -1;
     d[base + FighterField.LAST_HIT_TICK] = -1;
     d[base + FighterField.HITSTOP_TICKS] = 0;
+    this.clearControlFeel(base);
+  }
+
+  /** Drops every queued press and movement-feel timer (match start, respawn). */
+  private clearControlFeel(base: number): void {
+    const d = this.data;
+    d[base + FighterField.PREV_ATTACK_HELD] = 0;
+    d[base + FighterField.JUMP_BUFFER] = 0;
+    d[base + FighterField.ATTACK_BUFFER] = 0;
+    d[base + FighterField.COYOTE_TIMER] = 0;
+    d[base + FighterField.SHORT_HOP_TIMER] = 0;
+    d[base + FighterField.FAST_FALLING] = 0;
   }
 
   /** Mid-match life reset after a non-final KO: position/percent/shield
@@ -546,6 +592,7 @@ export class Sim {
     d[base + FighterField.RING_DAMAGE_TICK] = -1;
     d[base + FighterField.LAST_HIT_TICK] = -1;
     d[base + FighterField.HITSTOP_TICKS] = 0;
+    this.clearControlFeel(base);
     this.setState(base, FighterStateId.IDLE);
   }
 
@@ -1039,13 +1086,19 @@ export class Sim {
       d[base + FighterField.DROP_THROUGH_TIMER] = (d[base + FighterField.DROP_THROUGH_TIMER] as number) - 1;
     }
 
-    // Edge-trigger bookkeeping for the jump button: updated unconditionally
-    // every tick (even through hitstun/attack/respawn states) so a held
-    // button never queues up a jump that fires the instant control returns
-    // to the player — only the tick the button transitions low->high counts.
+    // Edge-trigger bookkeeping for jump and attack: updated unconditionally
+    // every tick (even through hitstun/attack/respawn states). A fresh press
+    // is queued for INPUT_BUFFER_TICKS so one made during hitstun, attack
+    // recovery or just before landing still fires once it becomes legal; a
+    // button merely held from long before never queues anything.
     const jumpHeldNow = (input.buttons & BUTTON_JUMP) !== 0;
     const jumpEdge = jumpHeldNow && (d[base + FighterField.PREV_JUMP_HELD] as number) === 0;
     d[base + FighterField.PREV_JUMP_HELD] = jumpHeldNow ? 1 : 0;
+    const attackHeldNow = (input.buttons & BUTTON_ATTACK) !== 0;
+    const attackEdge = attackHeldNow && (d[base + FighterField.PREV_ATTACK_HELD] as number) === 0;
+    d[base + FighterField.PREV_ATTACK_HELD] = attackHeldNow ? 1 : 0;
+    d[base + FighterField.JUMP_BUFFER] = nextBufferTicks(jumpEdge, d[base + FighterField.JUMP_BUFFER] as number);
+    d[base + FighterField.ATTACK_BUFFER] = nextBufferTicks(attackEdge, d[base + FighterField.ATTACK_BUFFER] as number);
 
     if (state === FighterStateId.DEAD) {
       // Eliminated for good: no physics, no input, no timers.
@@ -1075,6 +1128,19 @@ export class Sim {
     let moveFrame = d[base + FighterField.MOVE_FRAME] as number;
 
     const character = this.characters[index] as CharacterData;
+
+    // Coyote time: the value read here is this tick's allowance; grounded and
+    // in control refills it, airborne counts it down, a hit cancels it.
+    const coyoteTicks = d[base + FighterField.COYOTE_TIMER] as number;
+    d[base + FighterField.COYOTE_TIMER] =
+      hitstun > 0 ? 0 : grounded ? COYOTE_TICKS : coyoteTicks > 0 ? (coyoteTicks - 1) | 0 : 0;
+
+    if (hitstun > 0) {
+      d[base + FighterField.SHORT_HOP_TIMER] = 0;
+      d[base + FighterField.FAST_FALLING] = 0;
+    } else {
+      velY = this.applyShortHopRelease(base, velY, jumpHeldNow);
+    }
 
     if (hitstun > 0) {
       velX = fx.add(velX, fx.mul(input.stickX, HITSTUN_DI_ACCEL_PER_TICK));
@@ -1132,8 +1198,12 @@ export class Sim {
       const total = move ? moveTotalDuration(move) : 0;
       moveFrame = (moveFrame + 1) | 0;
       if (!grounded) {
-        velY = fx.add(velY, GRAVITY);
-        velY = fx.max(velY, TERMINAL_VELOCITY);
+        // Aerials keep full air control, as in the rest of the genre;
+        // freezing drift made every air attack stall the fighter mid-air.
+        velX = fx.mul(input.stickX, MOVE_SPEED);
+        // An aerial never starts a fast-fall (down-air is held down by
+        // definition); one already under way carries through it.
+        velY = this.applyAirborneGravity(base, velY, input.stickY, false);
       } else {
         velX = 0;
       }
@@ -1172,12 +1242,13 @@ export class Sim {
       return;
     }
 
-    const wantsAttack = (input.buttons & BUTTON_ATTACK) !== 0;
+    const wantsAttack = attackHeldNow || (d[base + FighterField.ATTACK_BUFFER] as number) > 0;
     const heldItemSlot = wantsAttack ? this.findHeldItemSlot(index) : -1;
     if (heldItemSlot >= 0) {
       // Holding an item takes over the attack button entirely; the
       // character's own moves don't fire until the item is used/gone.
       this.useHeldItem(index, heldItemSlot);
+      d[base + FighterField.ATTACK_BUFFER] = 0;
       this.writeBack(base, { posX, posY, velX, velY, grounded, facing, moveId, moveFrame, hitstun, shieldStun });
       return;
     }
@@ -1190,7 +1261,8 @@ export class Sim {
       }
       if (findMove(character, chosen)) {
         this.startMove(index, base, chosen);
-        this.writeBack(base, { posX, posY, velX: 0, velY, grounded, facing, moveId: chosen, moveFrame: 0, hitstun, shieldStun });
+        d[base + FighterField.ATTACK_BUFFER] = 0;
+        this.writeBack(base, { posX, posY, velX: grounded ? 0 : velX, velY, grounded, facing, moveId: chosen, moveFrame: 0, hitstun, shieldStun });
         return;
       }
     }
@@ -1204,8 +1276,9 @@ export class Sim {
     // instead of jumping -- the standard genre convention. Solid ground
     // (a stage's main floor) is never droppable this way, so this only
     // applies when the platform actually standing on is 'pass-through'.
+    const jumpRequested = (d[base + FighterField.JUMP_BUFFER] as number) > 0;
     let droppingThrough = false;
-    if (grounded && jumpEdge && input.stickY < fx.neg(STICK_MOVE_THRESHOLD)) {
+    if (grounded && jumpRequested && input.stickY < fx.neg(STICK_MOVE_THRESHOLD)) {
       const standingOn = this.findStandingPlatform(posX, posY);
       if (standingOn && standingOn.kind === 'pass-through') {
         droppingThrough = true;
@@ -1214,10 +1287,16 @@ export class Sim {
 
     let jumpsUsed = d[base + FighterField.JUMPS_USED] as number;
     if (grounded) jumpsUsed = 0; // landed (or never left): both jumps refreshed
-    if (jumpEdge && jumpsUsed < MAX_JUMPS && !droppingThrough) {
-      velY = grounded ? JUMP_VELOCITY : DOUBLE_JUMP_VELOCITY;
+    const canGroundJump = grounded || (coyoteTicks > 0 && jumpsUsed === 0);
+    if (droppingThrough) {
+      d[base + FighterField.JUMP_BUFFER] = 0;
+    } else if (jumpRequested && jumpsUsed < MAX_JUMPS) {
+      velY = canGroundJump ? JUMP_VELOCITY : DOUBLE_JUMP_VELOCITY;
       grounded = false;
       jumpsUsed = (jumpsUsed + 1) | 0;
+      d[base + FighterField.JUMP_BUFFER] = 0;
+      d[base + FighterField.SHORT_HOP_TIMER] = canGroundJump ? SHORT_HOP_WINDOW_TICKS : 0;
+      d[base + FighterField.FAST_FALLING] = 0;
     }
     d[base + FighterField.JUMPS_USED] = jumpsUsed;
 
@@ -1233,8 +1312,7 @@ export class Sim {
     }
 
     if (!grounded) {
-      velY = fx.add(velY, GRAVITY);
-      velY = fx.max(velY, TERMINAL_VELOCITY);
+      velY = this.applyAirborneGravity(base, velY, input.stickY, !droppingThrough && dropThroughTimer === 0);
     }
 
     const prevY = posY;
@@ -1283,6 +1361,38 @@ export class Sim {
     return best;
   }
 
+  /** Short hop: releasing jump inside the window after a grounded takeoff
+   * cuts the rising velocity so the apex lands at SHORT_HOP_HEIGHT_RATIO of
+   * a full jump's. */
+  private applyShortHopRelease(base: number, velY: Fixed, jumpHeld: boolean): Fixed {
+    const d = this.data;
+    const ticksLeft = d[base + FighterField.SHORT_HOP_TIMER] as number;
+    if (ticksLeft === 0) return velY;
+    if (jumpHeld) {
+      d[base + FighterField.SHORT_HOP_TIMER] = (ticksLeft - 1) | 0;
+      return velY;
+    }
+    d[base + FighterField.SHORT_HOP_TIMER] = 0;
+    if (velY <= 0) return velY;
+    const cutV2 = fx.sub(fx.mul(velY, velY), SHORT_HOP_CUT_V2);
+    return cutV2 > 0 ? fx.sqrt(cutV2) : 0;
+  }
+
+  /** Gravity for a fighter in control and airborne. Holding down once past
+   * the apex starts a fast-fall, which stays on until landing, jumping or a
+   * hit clears FAST_FALLING. `canStartFastFall` is false during a
+   * drop-through, so holding down there does not plunge through the
+   * platforms below, and during aerial attacks. */
+  private applyAirborneGravity(base: number, velY: Fixed, stickY: Fixed, canStartFastFall: boolean): Fixed {
+    const d = this.data;
+    if ((d[base + FighterField.FAST_FALLING] as number) === 0) {
+      const startsFastFall = canStartFastFall && velY <= 0 && stickY < fx.neg(STICK_MOVE_THRESHOLD);
+      if (!startsFastFall) return fx.max(fx.add(velY, GRAVITY), TERMINAL_VELOCITY);
+      d[base + FighterField.FAST_FALLING] = 1;
+    }
+    return FAST_FALL_VELOCITY;
+  }
+
   private writeBack(
     base: number,
     v: {
@@ -1304,6 +1414,7 @@ export class Sim {
     d[base + FighterField.VEL_X] = v.velX;
     d[base + FighterField.VEL_Y] = v.velY;
     d[base + FighterField.GROUNDED] = v.grounded ? 1 : 0;
+    if (v.grounded) d[base + FighterField.FAST_FALLING] = 0;
     d[base + FighterField.FACING] = v.facing;
     d[base + FighterField.MOVE_ID] = v.moveId;
     d[base + FighterField.MOVE_FRAME] = v.moveFrame;

@@ -226,6 +226,9 @@ Sent to every connected client (players and spectators) at `SNAPSHOT_HZ`
 (2026-09-11, see wiki "Bandwidth Reduction Pass 2026-09-11") this is
 **delta-compressed**: a full keyframe only periodically, deltas the rest of
 the time. Which shape a given frame is is the first byte (`tag`).
+Protocol version 4 (control feel: input buffer, coyote time, short hop,
+fast-fall) added six per-fighter state fields, so snapshots carry six more
+values per fighter; no framing changed.
 
 ### Full keyframe (`tag=2`, `SNAPSHOT`)
 

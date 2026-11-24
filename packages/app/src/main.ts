@@ -12,6 +12,8 @@ import { SimMatchAdapter } from './spectator/sim-adapter.ts';
 import { SpectatorController } from './spectator/controller.ts';
 import { NetMatch, clearStoredResumeToken, type ConnectionState } from './net-match.ts';
 import { getMatchesPlayed } from './matches-played.ts';
+import { EliminationRatingOffer } from './elimination-rating.ts';
+import { EliminationRatingPanel } from './ui/elimination-rating-panel.ts';
 import { SpectateChip } from './ui/spectate-chip.ts';
 import { StartCountdown } from './ui/start-countdown.ts';
 import { MatchIntro } from './ui/match-intro.ts';
@@ -255,6 +257,8 @@ function onRendererInitFailed(where: string, error: unknown): void {
   showContextLostOverlay();
 }
 const spectateChip = new SpectateChip(appRoot, () => void beginOnlineMatch(true));
+const eliminationRatingOffer = new EliminationRatingOffer();
+const eliminationRatingPanel = new EliminationRatingPanel(appRoot, () => touchCapable);
 const matchIntro = new MatchIntro(appRoot);
 const startCountdown = new StartCountdown(appRoot);
 /** The 20-slot FFA palette entry for a seat, as a CSS colour -- the same
@@ -729,6 +733,8 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
   lastEliminationContent = null;
   clearSpectateStallTimer();
   spectateChip.hide();
+  eliminationRatingOffer.reset();
+  eliminationRatingPanel.hide();
   startScreen.hide();
   startScreenActive = false;
   attractMode.stop();
@@ -836,6 +842,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
       // or an abandoned teardown) -- resume here once, rather than in
       // each branch, so nothing can fall through without it.
       resumeLobbyMusic();
+      eliminationRatingPanel.hide();
       hud.hide();
       inMatchMovesButton.classList.add('hidden');
       inMatchSettingsButton.classList.add('hidden');
@@ -958,6 +965,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
             onClick: () => {
               matchOverlay.hide();
               spectateChip.show();
+              eliminationRatingPanel.dockAboveChip();
             },
             kind: 'plain',
           },
@@ -978,6 +986,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
         ],
       };
       matchOverlay.show(lastEliminationContent);
+      if (eliminationRatingOffer.claim()) eliminationRatingPanel.show(netModeLine.textContent || 'online', placement);
       clearSpectateStallTimer();
       // Recurring, not one-shot: the player may dismiss this re-shown
       // overlay again ("Keep spectating") and the match may still never
@@ -1052,6 +1061,15 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
             }
           : undefined,
       );
+      // Timed Brawl never eliminates, and first matches are always Timed
+      // Brawl, so a first knockout (not in the opening seconds) is the
+      // moment to offer the rating there.
+      if (isTimedBrawl(onlineSettings) && holdingASeat
+        && (netMatch.currentSnapshots()[netMatch.localSlot()]?.deathCount ?? 0) > 0
+        && liveMatchBeganAtMs > 0 && performance.now() - liveMatchBeganAtMs >= 20_000
+        && eliminationRatingOffer.claim()) {
+        eliminationRatingPanel.show(netModeLine.textContent || 'online', 0, 'knocked-out', 15000);
+      }
     } else {
       hud.hide();
       inMatchMovesButton.classList.add('hidden');
