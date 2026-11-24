@@ -36,7 +36,7 @@ import {
 import { computeCurrentBlastRect, computeShrinkProgress } from './arena-shrink.ts';
 import { SpatialGrid } from './broadphase.ts';
 import { nextBounded } from './math/prng.ts';
-import { findItemType, type ItemSet, type ItemTypeDef } from './items/types.ts';
+import { findItemType, ItemTypeId, type ItemSet, type ItemTypeDef } from './items/types.ts';
 import { DEFAULT_ITEM_SET } from './items/default-items.ts';
 import type { HazardConfig } from './hazards/types.ts';
 import { DEFAULT_HAZARD_CONFIG } from './hazards/default-hazard.ts';
@@ -461,7 +461,7 @@ export class Sim {
       this.itemsData[base + ItemField.OWNER] = -1;
       this.itemsData[base + ItemField.FUSE] = -1;
     }
-    this.itemSpawnCooldown = ITEM_SPAWN_INTERVAL_TICKS;
+    this.itemSpawnCooldown = this.settings.itemSpawnIntervalTicks;
     this.hazardSpawnCooldown = hazardConfig.spawnIntervalMaxTicks;
   }
 
@@ -1020,6 +1020,7 @@ export class Sim {
     this.stepItems();
     this.stepHazards();
     this.trySpawnItem();
+    this.refillWeapons();
     this.trySpawnHazard();
     for (let i = 0; i < this.numFighters; i++) {
       this.checkBlastZone(i);
@@ -1869,7 +1870,7 @@ export class Sim {
   private trySpawnItem(): void {
     this.itemSpawnCooldown -= 1;
     if (this.itemSpawnCooldown > 0) return;
-    this.itemSpawnCooldown = ITEM_SPAWN_INTERVAL_TICKS;
+    this.itemSpawnCooldown = this.settings.itemSpawnIntervalTicks;
 
     const spawnPoints = this.arena.spawnPoints;
     if (this.itemSet.length === 0 || spawnPoints.length === 0) return;
@@ -1882,6 +1883,8 @@ export class Sim {
     const type = this.itemSet[typeDraw.value % this.itemSet.length] as ItemTypeDef;
     const point = spawnPoints[pointDraw.value % spawnPoints.length] as { x: Fixed; y: Fixed };
 
+    // Keep one slot free for Weapon Drop refills while that is active.
+    if (this.settings.weaponSlots.length > 0 && this.freeItemSlots() <= 1) return;
     for (let slot = 0; slot < MAX_ITEMS; slot++) {
       const base = slot * ItemField.FIELD_COUNT;
       if ((this.itemsData[base + ItemField.ACTIVE] as number) === 1) continue;
@@ -1900,6 +1903,47 @@ export class Sim {
     }
     // No free slot: the draw is discarded, item is "lost". Deterministic
     // either way since it depends only on state, not wall-clock timing.
+  }
+
+  private freeItemSlots(): number {
+    let free = 0;
+    for (let slot = 0; slot < MAX_ITEMS; slot++) {
+      if ((this.itemsData[slot * ItemField.FIELD_COUNT + ItemField.ACTIVE] as number) === 0) free++;
+    }
+    return free;
+  }
+
+  /** Weapon Drop: hand an empty-handed, in-play weapon slot a Slam Bat.
+   * Stateless (a pure function of tick and current state), so server and
+   * client prediction agree without new serialized fields. */
+  private refillWeapons(): void {
+    const s = this.settings;
+    if (s.weaponSlots.length === 0) return;
+    const t = this.tick - s.introFreezeTicks;
+    if (t < 0 || t >= s.weaponUntilTick || t % Math.max(1, s.weaponRefillTicks) !== 0) return;
+    const bat = findItemType(this.itemSet, ItemTypeId.BAT);
+    if (!bat) return;
+    for (const fighter of s.weaponSlots) {
+      if (fighter < 0 || fighter >= this.numFighters) continue;
+      if (!this.isTargetable(fighter) || this.findHeldItemSlot(fighter) !== -1) continue;
+      const fBase = fighter * FighterField.FIELD_COUNT;
+      for (let slot = 0; slot < MAX_ITEMS; slot++) {
+        const base = slot * ItemField.FIELD_COUNT;
+        if ((this.itemsData[base + ItemField.ACTIVE] as number) === 1) continue;
+        this.itemsData[base + ItemField.ACTIVE] = 1;
+        this.itemsData[base + ItemField.TYPE] = bat.id;
+        this.itemsData[base + ItemField.POS_X] = this.data[fBase + FighterField.POS_X] as number;
+        this.itemsData[base + ItemField.POS_Y] = fx.add(this.data[fBase + FighterField.POS_Y] as number, ITEM_HELD_OFFSET_Y);
+        this.itemsData[base + ItemField.VEL_X] = 0;
+        this.itemsData[base + ItemField.VEL_Y] = 0;
+        this.itemsData[base + ItemField.STATE] = ItemState.HELD;
+        this.itemsData[base + ItemField.HOLDER] = fighter;
+        this.itemsData[base + ItemField.OWNER] = fighter;
+        this.itemsData[base + ItemField.TIMER] = bat.despawnTicks;
+        this.itemsData[base + ItemField.FUSE] = -1;
+        break;
+      }
+    }
   }
 
   /** Falling-debris hazard (this task's item 2): pure function of tick +

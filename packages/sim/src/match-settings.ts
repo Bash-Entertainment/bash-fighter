@@ -45,6 +45,16 @@ export interface MatchSettings {
    * time limit is extended by the same amount so match length is
    * unchanged. 0 = no freeze (offline play, fixtures). */
   introFreezeTicks: number;
+  /** Weapon Drop (2026-11-24): these fighter slots are handed a Slam Bat
+   * whenever they are empty-handed and in play, checked every
+   * weaponRefillTicks, until weaponUntilTick ticks after the intro freeze.
+   * Gives a new player a big, easy-to-land hit from the first second.
+   * Empty = no effect. */
+  weaponSlots: number[];
+  weaponUntilTick: number;
+  weaponRefillTicks: number;
+  /** Ticks between world item spawns. */
+  itemSpawnIntervalTicks: number;
 }
 
 /** Knockback multiplier for a first-match human's hits on bots (16.16
@@ -65,6 +75,12 @@ export function rookieScaleForMatchesPlayed(matchesPlayed: number): number {
 // Countdown test 10-30..11-06 failed its pre-stated line (leave<20s 45.4% > 42%),
 // so online matches start without the frozen 3-2-1. Was 180.
 export const ONLINE_INTRO_FREEZE_TICKS = 0;
+
+/** Weapon Drop online values: a bat for first-match players for the first
+ * 60s, refilled 2s after each swing; world items every 2.5s instead of 5s. */
+export const ONLINE_WEAPON_UNTIL_TICK = 60 * 60;
+export const ONLINE_WEAPON_REFILL_TICKS = 120;
+export const ONLINE_ITEM_SPAWN_INTERVAL_TICKS = 150;
 
 export const DEFAULT_MATCH_SETTINGS: MatchSettings = {
   winCondition: 'battleRoyale',
@@ -94,6 +110,10 @@ export const DEFAULT_MATCH_SETTINGS: MatchSettings = {
   botSlots: [],
   rookieScales: [],
   introFreezeTicks: 0,
+  weaponSlots: [],
+  weaponUntilTick: 0,
+  weaponRefillTicks: 120,
+  itemSpawnIntervalTicks: 300,
   shrinkFullyClosedTick: 60 * 60 * 8, // 8 minutes (was 6) -- Lever 6, 2026-09-10 pass 3: individual fights now last longer with Levers 3/4, ease ring pacing further
 };
 

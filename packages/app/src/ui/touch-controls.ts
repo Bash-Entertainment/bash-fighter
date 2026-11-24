@@ -111,7 +111,8 @@ export class TouchControls {
 
   /** Contextual attack hint (see ui/attack-hint.ts): highlight the Attack
    * button and label it. Presentation only. */
-  setTouchAttackHint(on: boolean): void {
+  setTouchAttackHint(on: boolean, weapon = false): void {
+    this.attackHintLabel.textContent = weapon ? 'Tap to swing your bat' : 'Tap to attack';
     this.attackBtn.classList.toggle('hinted', on);
     this.attackHintLabel.classList.toggle('hidden', !on);
   }

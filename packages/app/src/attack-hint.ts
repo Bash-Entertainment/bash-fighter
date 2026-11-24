@@ -14,6 +14,8 @@ export interface AttackHintSample {
   /** A live enemy is within hitting reach (see isEnemyInRange). */
   enemyInRange: boolean;
   tookDamage: boolean;
+  /** This player gets Weapon Drop bats, so the hint talks about the bat. */
+  weaponDrop?: boolean;
 }
 
 export function isEnemyInRange(dx: number, dy: number): boolean {

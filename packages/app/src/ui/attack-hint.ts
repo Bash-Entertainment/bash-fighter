@@ -7,7 +7,7 @@ import { shouldShowAttackHint, type AttackHintSample } from '../attack-hint.ts';
 
 export interface AttackHintTarget {
   /** Highlights the on-screen Attack button with a label; touch only. */
-  setTouchAttackHint(on: boolean): void;
+  setTouchAttackHint(on: boolean, weapon?: boolean): void;
 }
 
 export class AttackHint {
@@ -42,9 +42,11 @@ export class AttackHint {
     if (this.visible || !shouldShowAttackHint(sample)) return false;
     this.visible = true;
     if (this.touch) {
-      this.touch.setTouchAttackHint(true);
+      this.touch.setTouchAttackHint(true, sample.weaponDrop === true);
     } else {
-      this.el.textContent = `Press ${this.attackKeyLabel()} to attack`;
+      this.el.textContent = sample.weaponDrop
+        ? `Press ${this.attackKeyLabel()} to swing your bat`
+        : `Press ${this.attackKeyLabel()} to attack`;
       this.el.classList.toggle('reduced', isReducedMotion());
       this.el.classList.remove('hidden');
     }

@@ -2,7 +2,7 @@
 // or spectating it. Matches are fully isolated: no shared mutable state
 // between matches, no global game instance.
 import { randomBytes } from 'node:crypto';
-import { Sim, rookieScaleForMatchesPlayed, BUTTON_ATTACK, ONLINE_INTRO_FREEZE_TICKS, type InputFrame, type MatchSettings, type WinCondition } from '@bash-fighter/sim/src/index.ts';
+import { Sim, rookieScaleForMatchesPlayed, BUTTON_ATTACK, ONLINE_INTRO_FREEZE_TICKS, ONLINE_WEAPON_UNTIL_TICK, ONLINE_WEAPON_REFILL_TICKS, ONLINE_ITEM_SPAWN_INTERVAL_TICKS, type InputFrame, type MatchSettings, type WinCondition } from '@bash-fighter/sim/src/index.ts';
 import { newSeatTrace, observeTick, sampleSecond, type SeatTrace } from './session-trace.ts';
 import { BotController, BotDifficulty, deriveBotSeed, type BotDifficultyValue } from '@bash-fighter/sim/src/ai/bot.ts';
 import { createMatchSim, resolveCharacterId, DEFAULT_CHARACTER_ID, pickArenaId, isKnownArenaId } from '@bash-fighter/content/src/index.ts';
@@ -666,6 +666,11 @@ export class Match {
     settingsOverride.rookieSlots = rookieSeats.map((s) => s.slot);
     settingsOverride.rookieScales = rookieSeats.map((s) => rookieScaleForMatchesPlayed(s.rookieMatchesPlayed as number));
     settingsOverride.botSlots = this.seats.filter((s) => s.isBot).map((s) => s.slot);
+    // Weapon Drop (2026-11-24): every human holds a bat for the first minute.
+    settingsOverride.weaponSlots = this.seats.filter((s) => !s.isBot).map((s) => s.slot);
+    settingsOverride.weaponUntilTick = ONLINE_WEAPON_UNTIL_TICK;
+    settingsOverride.weaponRefillTicks = ONLINE_WEAPON_REFILL_TICKS;
+    settingsOverride.itemSpawnIntervalTicks = ONLINE_ITEM_SPAWN_INTERVAL_TICKS;
     this.sim = createMatchSim(this.seed, this.seats.length, settingsOverride, characters, this.arenaId);
     this.lastPercent = new Array(this.seats.length).fill(0);
     this.lastDamageTick = new Array(this.seats.length).fill(-Match.COMBAT_WINDOW_TICKS - 1);

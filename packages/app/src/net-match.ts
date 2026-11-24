@@ -1140,6 +1140,7 @@ export class NetMatch {
       attackOrSpecialPressed: this.attackOrSpecialPressed,
       enemyInRange,
       tookDamage: me.percent > 0,
+      weaponDrop: this.matchSettings?.weaponSlots.includes(this.mySlot) ?? false,
     };
   }
 
