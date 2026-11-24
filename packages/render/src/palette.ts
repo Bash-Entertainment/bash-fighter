@@ -56,6 +56,7 @@ export const PALETTE = {
   // first, colour second, never by colour alone.
   itemThrown: 0xc9c3b4, // Debug Rock: pale stone
   itemBat: 0xb7803e, // wood-brown bat
+  itemBatGlow: 0xe8b23c, // amber halo on a held bat (Weapon Drop)
   itemBomb: 0x2c2f33, // dark shell, danger stripe drawn separately
   itemHeal: 0x6fae72, // muted green cross
   itemOutline: 0x0b0d10,

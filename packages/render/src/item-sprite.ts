@@ -64,13 +64,24 @@ export class ItemSprite {
   // Bat: a long thin handle+barrel, oriented along facing so it reads as
   // a melee weapon rather than a pickup blob.
   private drawBat(g: Graphics, state: ItemVisualState): void {
-    const len = SIZE * 2.1;
+    // A held bat is drawn bigger with an amber halo: it is the player's
+    // weapon (Weapon Drop), so it has to read at 20-fighter zoom.
+    const k = state.held ? 1.7 : 1;
+    const len = SIZE * 2.1 * k;
+    const w = SIZE * k;
     const f = state.facing;
-    g.moveTo(-len * 0.35 * f, SIZE * 0.35);
-    g.lineTo(len * 0.65 * f, SIZE * 0.12);
-    g.lineTo(len * 0.65 * f, -SIZE * 0.12);
-    g.lineTo(-len * 0.35 * f, -SIZE * 0.35);
-    g.closePath();
+    const outline = (): void => {
+      g.moveTo(-len * 0.35 * f, w * 0.35);
+      g.lineTo(len * 0.65 * f, w * 0.12);
+      g.lineTo(len * 0.65 * f, -w * 0.12);
+      g.lineTo(-len * 0.35 * f, -w * 0.35);
+      g.closePath();
+    };
+    if (state.held) {
+      outline();
+      g.stroke({ color: PALETTE.itemBatGlow, width: 6, alpha: 0.45 });
+    }
+    outline();
     g.fill({ color: PALETTE.itemBat });
     g.stroke({ color: PALETTE.itemOutline, width: 1.5 });
   }
