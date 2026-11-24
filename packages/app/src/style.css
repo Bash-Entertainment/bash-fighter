@@ -2469,6 +2469,12 @@ body.end-screen-open #net-mode-line {
     left: 12px;
   }
 
+  /* After "Keep spectating" the rating leaves the HUD and sits on the chip. */
+  .elim-rating.elim-rating-docked {
+    top: auto;
+    bottom: 180px;
+  }
+
   /* The elimination overlay used to take 414px of a 493px-tall phone
      screen behind a near-opaque backdrop, so "keep watching this one play
      out" was an empty offer -- and 71% of real sessions end at the
@@ -2739,6 +2745,23 @@ body:has(.leave-prompt) #attract-frame, body:has(.leave-prompt) .attract-caption
 .exit-intent-title { font-weight: 600; }
 .exit-intent-close { background: none; border: 0; color: var(--ink-dim); font-size: 18px; line-height: 1; cursor: pointer; }
 .exit-intent-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.elim-rating {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  width: min(360px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--ink);
+}
+.elim-rating .exit-intent-body { margin-top: 10px; }
 /* One-tap rating (ui/quick-rating.ts): exit-intent prompt and end screens. */
 .exit-intent-body { margin-top: 10px; }
 .quick-rating { display: flex; flex-direction: column; gap: 8px; width: 100%; min-width: min(290px, 100vw - 32px); align-self: center; box-sizing: border-box; margin-top: 14px; }

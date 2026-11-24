@@ -7,6 +7,8 @@ export interface LeaveReasonExtra {
   trigger?: string;
   matchAgeSec?: number;
   matchIndex?: number;
+  mode?: string;
+  placement?: number;
 }
 
 /** Posts one leave-reason record. Fire-and-forget, keepalive so it survives the tab closing. */
