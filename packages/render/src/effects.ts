@@ -5,6 +5,17 @@
 // advance() cadence. See EffectsLayer.spawnHit/spawnElimination/shake.
 import { Container, Graphics } from 'pixi.js';
 import { PALETTE } from './palette.ts';
+import {
+  KO_BURST_LIFE_MS,
+  KO_BURST_RAYS,
+  MAX_KO_BURSTS,
+  SQUASH_RECOVER_MS,
+  isBigHit,
+  koBurstAnchor,
+  sparkCount,
+  squashScale,
+  victimPauseMs,
+} from './impact-tuning.ts';
 
 export interface HitEffectInput {
   /** Screen-space contact point (already camera-transformed). */
@@ -27,6 +38,19 @@ export interface HitEffectInput {
   shakeAttenuation?: number;
   /** The local player landed this hit: bigger punch. */
   landed?: boolean;
+  /** Percent damage this hit dealt; scales the spark burst alongside strength. */
+  damage?: number;
+}
+
+interface VictimImpact {
+  remainingMs: number;
+  totalMs: number;
+  strength: number;
+  dirX: number;
+  dirY: number;
+  /** World position the victim's picture is held at while frozen. */
+  heldX: number;
+  heldY: number;
 }
 
 interface Particle {
@@ -144,6 +168,8 @@ export class EffectsLayer {
   // gets hit again just never appears here.
   private flashRemainingMs = new Map<number, number>();
   private flashTotalMs = new Map<number, number>();
+  private victimImpacts = new Map<number, VictimImpact>();
+  private koBurstRemainingMs: number[] = [];
 
   // Screen shake state: an offset applied by the caller to the world
   // container's position. Multiple hits in the same short window are
@@ -184,8 +210,8 @@ export class EffectsLayer {
    * unmistakably bigger than a jab. */
   spawnHit(input: HitEffectInput): void {
     const strength = Math.max(0, Math.min(1, input.strength));
-    const sparkCount = 3 + Math.round(strength * 6);
-    for (let i = 0; i < sparkCount; i++) {
+    const count = sparkCount(strength, input.damage ?? 0);
+    for (let i = 0; i < count; i++) {
       if (this.particles.length >= MAX_SPARK_PARTICLES) {
         // Same degrade-gracefully rule as MAX_TRAIL_SEGMENTS: drop the
         // oldest (closest to fading anyway) rather than skip the new
@@ -233,7 +259,33 @@ export class EffectsLayer {
     this.popLayer.addChild(pop);
     this.pops.push({ g: pop, ageMs: 0, lifeMs: 120 + strength * 80, baseScale: 1 });
 
-    this.addShake(strength, input.landed ? 1.6 : 1, input.shakeAttenuation ?? 1);
+    // Screen kick is reserved for big hits so a jab-heavy brawl leaves the
+    // camera still; addShake itself honours the Reduce screen shake setting.
+    if (isBigHit(strength)) this.addShake(strength, input.landed ? 1.6 : 1, input.shakeAttenuation ?? 1);
+  }
+
+  /** Hold a victim's picture still for a few ms and squash it along the
+   * knockback axis. Heavier hits hold longer (see victimPauseMs); light hits
+   * do nothing. Wall-clock only: the sim keeps ticking underneath. */
+  pauseVictim(fighterIndex: number, strength: number, dirX: number, dirY: number, worldX: number, worldY: number): void {
+    const pauseMs = victimPauseMs(strength);
+    if (pauseMs <= 0) return;
+    const totalMs = pauseMs + SQUASH_RECOVER_MS;
+    this.victimImpacts.set(fighterIndex, { remainingMs: totalMs, totalMs, strength, dirX, dirY, heldX: worldX, heldY: worldY });
+  }
+
+  /** The victim's held world position while its picture is frozen, else null. */
+  heldPosition(fighterIndex: number): { x: number; y: number } | null {
+    const impact = this.victimImpacts.get(fighterIndex);
+    if (!impact || impact.remainingMs <= SQUASH_RECOVER_MS) return null;
+    return { x: impact.heldX, y: impact.heldY };
+  }
+
+  /** Squash multipliers for this fighter's sprite right now ({1,1} when idle). */
+  squashFor(fighterIndex: number): { x: number; y: number } {
+    const impact = this.victimImpacts.get(fighterIndex);
+    if (!impact) return { x: 1, y: 1 };
+    return squashScale(impact.remainingMs, impact.totalMs, impact.strength, impact.dirX, impact.dirY);
   }
 
   /** Mark a fighter as launched by the local player so trailFighter draws a heavy amber streak. */
@@ -284,21 +336,51 @@ export class EffectsLayer {
     this.lastTrailPos.delete(fighterIndex);
   }
 
-  /** A bigger, screen-anchored moment for an elimination: a bright ring
-   * pop at the fighter's last position and a stronger shake. Kept flat
-   * and geometric -- no glow/bloom -- per the project's visual language. */
-  spawnElimination(x: number, y: number, shakeAttenuation = 1): void {
+  /** Blast-zone KO: a ring plus a radial ray burst at the screen edge the
+   * fighter left through, fanning back toward the arena, with a strong shake.
+   * Flat geometry only (no glow). At most MAX_KO_BURSTS live at once; further
+   * KOs in that window still shake and play audio but skip the burst. */
+  spawnElimination(x: number, y: number, vw: number, vh: number, shakeAttenuation = 1): void {
+    this.addShake(1, /* eliminationBoost */ 1.5, shakeAttenuation);
+    if (this.koBurstRemainingMs.length >= MAX_KO_BURSTS) return;
+    this.koBurstRemainingMs.push(KO_BURST_LIFE_MS);
+    const anchor = koBurstAnchor(x, y, vw, vh);
+
     const ring = new Graphics();
-    ring.circle(0, 0, 6);
-    ring.stroke({ color: PALETTE.danger, width: 4 });
-    ring.position.set(x, y);
+    ring.circle(0, 0, 14);
+    ring.stroke({ color: PALETTE.danger, width: 5 });
+    ring.position.set(anchor.x, anchor.y);
+    this.addPop(ring, KO_BURST_LIFE_MS, 1);
+
+    const centre = Math.atan2(anchor.inwardY, anchor.inwardX);
+    for (let i = 0; i < KO_BURST_RAYS; i++) {
+      if (this.particles.length >= MAX_SPARK_PARTICLES) break;
+      const angle = centre + ((i / (KO_BURST_RAYS - 1)) - 0.5) * Math.PI * 1.4;
+      const g = new Graphics();
+      g.roundRect(-16, -3, 32, 6, 3);
+      g.fill({ color: i % 2 === 0 ? 0xffffff : LAUNCH_TRAIL_COLOR });
+      g.position.set(anchor.x, anchor.y);
+      g.rotation = angle;
+      this.particleLayer.addChild(g);
+      const speed = 6 + (i % 3) * 2;
+      this.particles.push({
+        g,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        ageMs: 0,
+        lifeMs: KO_BURST_LIFE_MS,
+        size: 4,
+      });
+    }
+  }
+
+  private addPop(g: Graphics, lifeMs: number, baseScale: number): void {
     if (this.pops.length >= MAX_POPS) {
       const oldest = this.pops.shift();
       oldest?.g.destroy();
     }
-    this.popLayer.addChild(ring);
-    this.pops.push({ g: ring, ageMs: 0, lifeMs: 380, baseScale: 1 });
-    this.addShake(1, /* eliminationBoost */ 1.5, shakeAttenuation);
+    this.popLayer.addChild(g);
+    this.pops.push({ g, ageMs: 0, lifeMs, baseScale });
   }
 
   /** Quadrature-ish combine so simultaneous hits (common with 20
@@ -346,6 +428,12 @@ export class EffectsLayer {
       if (next <= 0) this.flashRemainingMs.delete(idx);
       else this.flashRemainingMs.set(idx, next);
     }
+
+    for (const [idx, impact] of this.victimImpacts) {
+      impact.remainingMs -= dtMs;
+      if (impact.remainingMs <= 0) this.victimImpacts.delete(idx);
+    }
+    this.koBurstRemainingMs = this.koBurstRemainingMs.map((ms) => ms - dtMs).filter((ms) => ms > 0);
 
     this.particles = this.particles.filter((p) => {
       p.ageMs += dtMs;

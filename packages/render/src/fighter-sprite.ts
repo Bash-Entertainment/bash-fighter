@@ -140,7 +140,7 @@ export class FighterSprite {
     // hitstun itself has ended (hitstun on a light jab can be very short).
     const flash = state.flashAmount ?? 0;
     const baseTint = state.hitstun > 0 ? PALETTE.danger : this.bodyColor;
-    const tint = flash > 0 ? lerpColor(baseTint, PALETTE.hud, flash * 0.85) : baseTint;
+    const tint = flash > 0 ? lerpColor(baseTint, 0xffffff, flash) : baseTint;
 
     drawSilhouetteForCharacter(g, tint, state.facing, pose, state.characterName);
 

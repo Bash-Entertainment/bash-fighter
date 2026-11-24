@@ -67,6 +67,7 @@ export class EffectsAudioBridge {
           strength: ev.strength,
           strong: ev.strong,
           landed,
+          damage: ev.damage,
         });
         this.audio.playHit({
           damage: ev.damage,

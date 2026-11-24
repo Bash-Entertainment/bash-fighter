@@ -124,6 +124,8 @@ export interface PendingHitEffect {
   dirX: number; // world-space direction (Y-up), need not be normalized
   dirY: number;
   strength: number; // 0..1
+  /** Percent damage dealt; scales the spark burst. */
+  damage?: number;
   strong: boolean; // true = heavy hit, drives longer flash + optional freeze
   /** True when the local player landed this hit: adds hit-pause, a stronger punch and a launch trail. */
   landed?: boolean;
@@ -1218,7 +1220,9 @@ export class Renderer {
         strength: hit.strength,
         shakeAttenuation: hit.landed ? 1 : shakeAttenuationFor(hit.worldX, hit.worldY),
         landed: hit.landed,
+        damage: hit.damage,
       });
+      this.effects.pauseVictim(hit.fighterIndex, hit.strength, hit.dirX, -hit.dirY, hit.worldX, hit.worldY);
       this.effects.flashFighter(hit.fighterIndex, hit.strong || !!hit.landed);
       if (hit.landed) {
         this.effects.markLaunch(hit.fighterIndex, 250 + hit.strength * 450);
@@ -1228,7 +1232,7 @@ export class Renderer {
     }
     for (const elim of frame.eliminationEffects ?? []) {
       const screen = worldToScreen(elim.worldX, elim.worldY, cam, vw, vh);
-      this.effects.spawnElimination(screen.x, screen.y, shakeAttenuationFor(elim.worldX, elim.worldY));
+      this.effects.spawnElimination(screen.x, screen.y, vw, vh, shakeAttenuationFor(elim.worldX, elim.worldY));
     }
 
     // Freeze-frame: hold the last drawn picture for a few milliseconds on
@@ -1272,10 +1276,12 @@ export class Renderer {
       }
       fightersAlive += 1;
       sprite.root.visible = true;
-      const screen = worldToScreen(f.x, f.y, cam, vw, vh);
+      const held = this.effects.heldPosition(i);
+      const screen = worldToScreen(held?.x ?? f.x, held?.y ?? f.y, cam, vw, vh);
       if (screen.x >= 0 && screen.x <= vw && screen.y >= 0 && screen.y <= vh) fightersOnScreen += 1;
       sprite.root.position.set(screen.x, screen.y);
-      sprite.root.scale.set(cam.scale); // silhouette is drawn in world units
+      const squash = this.effects.squashFor(i);
+      sprite.root.scale.set(cam.scale * squash.x, cam.scale * squash.y); // silhouette is drawn in world units
       this.effects.trailFighter(i, screen.x, screen.y, f.hitstun > 0);
       const char = frame.characters[i] as CharacterData | undefined;
       const isLocalPlayer = frame.localPlayerIndex === i;
