@@ -143,6 +143,8 @@ export interface RenderFrame {
   hash: string;
   /** Slot wearing the Timed Brawl crown, if any. Drawn as an amber marker above its badge. */
   crownSlot?: number | null;
+  /** Slot that last knocked the local player out, marked with an amber target ring until revenge or timeout. */
+  revengeSlot?: number | null;
   /** Live arena bounds (e.g. a shrinking battle-royale blast zone) to
    * draw and frame instead of the static stage bounds. Falls back to the
    * Renderer's static StageBounds-derived arena when omitted. */
@@ -437,6 +439,8 @@ export class Renderer {
   private readonly localPointer = new Graphics();
   private readonly crownMarker = new Graphics();
   private crownSlot: number | null = null;
+  private readonly revengeMarker = new Graphics();
+  private revengeSlot: number | null = null;
   // Fixed screen-space corner readout of the local player's own damage --
   // see computeLocalDamageReadout in badge-layout.ts for why this exists
   // separately from the in-world badge: at true 20-fighter phone density
@@ -659,6 +663,7 @@ export class Renderer {
     this.badgeContainer.addChild(this.badgeLeaders);
     this.badgeContainer.addChild(this.localPointer);
     this.badgeContainer.addChild(this.crownMarker);
+    this.badgeContainer.addChild(this.revengeMarker);
     this.localDamageText.anchor.set(0, 1);
     this.badgeContainer.addChild(this.localDamageText);
 
@@ -922,6 +927,7 @@ export class Renderer {
     }
     this.drawLocalPointer(followedPlacements);
     this.drawCrown(followedPlacements);
+    this.drawRevenge(followedPlacements);
   }
 
   /** Small flat amber crown, constant pixel size, above the crowned fighter's badge. */
@@ -936,6 +942,21 @@ export class Renderer {
       .poly([x - 8, y, x - 8, y - 9, x - 4, y - 4, x, y - 11, x + 4, y - 4, x + 8, y - 9, x + 8, y])
       .fill({ color: 0xe8b23c })
       .stroke({ color: PALETTE.fighterOutline, width: 1 });
+  }
+
+  /** Amber target ring, constant pixel size, beside the badge of the fighter the local player wants revenge on. */
+  private drawRevenge(placements: readonly FollowedBadgePlacement[]): void {
+    this.revengeMarker.clear();
+    const p = this.revengeSlot === null ? undefined : placements.find((q) => q.candidate.slot === this.revengeSlot);
+    this.revengeMarker.visible = Boolean(p);
+    if (!p) return;
+    const x = p.box.left - 9;
+    const y = (p.box.top + p.box.bottom) / 2;
+    this.revengeMarker
+      .circle(x, y, 6)
+      .stroke({ color: 0xe8b23c, width: 2 })
+      .circle(x, y, 1.5)
+      .fill({ color: 0xe8b23c });
   }
 
   /** Joins a staggered badge to its own fighter's head with a hairline.
@@ -1334,6 +1355,7 @@ export class Renderer {
     this.lastFrameFightersOnScreen = fightersOnScreen;
     this.names = frame.names;
     this.crownSlot = frame.crownSlot ?? null;
+    this.revengeSlot = frame.revengeSlot ?? null;
     this.layoutBadges(badgeCandidates, bodyBoxes);
     this.drawLocalDamageReadout(localFighter?.eliminated ? undefined : localFighter?.percent);
 

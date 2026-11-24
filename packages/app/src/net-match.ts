@@ -59,6 +59,8 @@ import { detectFighterEvents, detectItemEvents } from './effects-events.ts';
 import { countdownLabel, GO_LABEL } from './start-countdown.ts';
 import { isEnemyInRange, type AttackHintSample } from './attack-hint.ts';
 import { EffectsAudioBridge } from './effects-audio.ts';
+import { KoTracker } from './ko-callout.ts';
+import { showFellOff, showKoedBy, showRevenge } from './ui/ko-callout.ts';
 import type { PendingHitEffect, PendingEliminationEffect } from '@bash-fighter/render';
 
 // Placeholder used only until the real match arena is known (see
@@ -267,6 +269,8 @@ export class NetMatch {
   private currSnapState: Int32Array | null = null;
   private currSnapAt = 0;
   private currSnapTick = 0;
+  /** Who knocked the local player out and who they should take revenge on; confirmed snapshots only. */
+  private readonly koTracker = new KoTracker();
   // Hash of the last-applied authoritative snapshot, shown in the F3
   // debug overlay (formatDebugText) so a live cross-reference against the
   // server's own state is possible at a glance -- see "Client-Server
@@ -1026,6 +1030,13 @@ export class NetMatch {
 
         const fighterEvents = detectFighterEvents(prevF, currF, this.numFighters);
         const itemEvents = detectItemEvents(prevItems, currItems, MAX_ITEMS);
+        if (!this.spectating) {
+          for (const ev of this.koTracker.observe(prevF, currF, this.mySlot, snap.tick)) {
+            if (ev.type === 'koedBy') showKoedBy(this.nameFor(ev.attacker), ev.attacker);
+            else if (ev.type === 'fell') showFellOff();
+            else showRevenge();
+          }
+        }
         const { hitEffects, eliminationEffects } = this.effectsBridge.consume(
           [...fighterEvents, ...itemEvents],
           currF,
@@ -1310,6 +1321,7 @@ export class NetMatch {
       localPlayerIndex: !this.spectating && this.mySlot >= 0 ? this.mySlot : undefined,
       names: this.names,
       crownSlot: this.renderSim.getCrownHolder(),
+      revengeSlot: this.spectating ? null : this.koTracker.revengeSlot(this.currSnapTick),
       liveArenaBounds: currentArenaBounds(this.renderSim.getCurrentBlastRect()),
       previewArenaBounds: previewArenaBounds(
         this.renderSim.getArena(),
