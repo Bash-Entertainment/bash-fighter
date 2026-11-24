@@ -7,6 +7,8 @@ import type { PendingHitEffect, PendingEliminationEffect } from '@bash-fighter/r
 import { AudioManager } from '@bash-fighter/audio';
 import type { EffectEvent } from './effects-events.ts';
 import { showKoPop } from './ui/ko-pop.ts';
+import { AnnouncerTracker } from './announcer.ts';
+import { showAnnouncerCall } from './ui/announcer.ts';
 
 export class EffectsAudioBridge {
   /** One entry per fighter slot, used only to look up weight for "a hit
@@ -19,6 +21,8 @@ export class EffectsAudioBridge {
    * treatment. -1 (e.g. a pure spectator) means every event is treated
    * as "other". */
   private localFighterIndex = 0;
+
+  private readonly announcer = new AnnouncerTracker();
 
   constructor(private readonly audio: AudioManager) {}
 
@@ -94,7 +98,13 @@ export class EffectsAudioBridge {
         if (this.isOwn(ev.fighterIndex)) {
           this.audio.playKnockout();
           showKoPop();
+          for (const call of this.announcer.onLocalKnockout(performance.now())) {
+            this.audio.playAnnouncer(call.tier);
+            showAnnouncerCall(call.text);
+          }
         }
+      } else if (ev.type === 'death') {
+        if (this.isOwn(ev.fighterIndex)) this.announcer.onLocalDeath();
       } else if (ev.type === 'itemPickup') {
         this.audio.playItemPickup(this.isOwn(ev.fighterIndex));
       } else if (ev.type === 'itemUse') {

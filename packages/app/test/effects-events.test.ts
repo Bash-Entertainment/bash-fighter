@@ -158,3 +158,9 @@ test('detectFighterEvents: a rising koCount fires a knockout for that fighter', 
   const curr = [baseFighter({ koCount: 2 }), baseFighter({})];
   assert.deepEqual(detectFighterEvents(prev, curr, 2), [{ type: 'knockout', fighterIndex: 0 }]);
 });
+
+test('detectFighterEvents: a rising deathCount fires a death for that fighter', () => {
+  const prev = [baseFighter({}), baseFighter({ deathCount: 1 })];
+  const curr = [baseFighter({}), baseFighter({ deathCount: 2 })];
+  assert.deepEqual(detectFighterEvents(prev, curr, 2), [{ type: 'death', fighterIndex: 1 }]);
+});

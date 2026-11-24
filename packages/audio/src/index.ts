@@ -565,6 +565,16 @@ export class AudioManager {
     this.playChirp(880, true, 0.22, 0.45, true);
   }
 
+  /** Announcer sting: a rising run of notes, one more note and a higher pitch per tier (1 = lowest). */
+  playAnnouncer(tier: number): void {
+    this.logCue('playAnnouncer');
+    const notes = Math.min(5, tier + 1);
+    this.playTone(110, 0.4, 0.5, true, 'sawtooth');
+    for (let i = 0; i < notes; i++) {
+      setTimeout(() => this.playChirp(520 * 1.25 ** i, true, 0.12, 0.4, true), i * 70);
+    }
+  }
+
   playElimination(isOwn: boolean): void {
     this.logCue('playElimination');
     if (isOwn) this.playChirp(220, false, 0.5, 0.65);

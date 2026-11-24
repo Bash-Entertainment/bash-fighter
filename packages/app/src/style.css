@@ -2783,3 +2783,26 @@ body:has(.leave-prompt) #attract-frame, body:has(.leave-prompt) .attract-caption
   min-height: 48px; padding: 0 16px; background: var(--accent); color: var(--bg);
   border: 0; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer;
 }
+
+.announcer-call {
+  position: fixed;
+  left: 50%;
+  top: 52%;
+  transform: translate(-50%, -50%);
+  z-index: 60;
+  pointer-events: none;
+  font: 700 clamp(18px, 4vw, 30px) / 1.2 var(--font-ui);
+  color: var(--accent);
+  background: rgba(10, 10, 12, 0.85);
+  border-left: 3px solid var(--accent);
+  padding: 8px 18px;
+  animation: announcer-in 1400ms ease-out forwards;
+}
+.announcer-call-still { animation: announcer-fade 1400ms linear forwards; }
+@keyframes announcer-in {
+  0% { transform: translate(-50%, -50%) scale(1.25); opacity: 0; }
+  12% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes announcer-fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }

@@ -19,6 +19,7 @@ export type EffectEvent =
   | { type: 'block'; fighterIndex: number }
   | { type: 'eliminated'; fighterIndex: number }
   | { type: 'knockout'; fighterIndex: number }
+  | { type: 'death'; fighterIndex: number }
   | { type: 'itemPickup'; fighterIndex: number }
   | { type: 'itemUse'; slot: number }
   | { type: 'jump'; fighterIndex: number }
@@ -122,6 +123,7 @@ export function detectFighterEvents(
     }
 
     if (c.koCount > p.koCount) events.push({ type: 'knockout', fighterIndex: i });
+    if (c.deathCount > p.deathCount) events.push({ type: 'death', fighterIndex: i });
 
     const wasEliminated = p.eliminated;
     const isEliminated = c.eliminated;
