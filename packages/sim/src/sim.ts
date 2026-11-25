@@ -1110,6 +1110,7 @@ export class Sim {
       let timer = (d[base + FighterField.RESPAWN_TIMER] as number) - 1;
       if (timer <= 0) {
         this.respawnFighter(index);
+        if (this.settings.weaponOnRespawn && this.settings.weaponSlots.includes(index)) this.giveBat(index);
       } else {
         d[base + FighterField.RESPAWN_TIMER] = timer;
       }
@@ -1921,28 +1922,33 @@ export class Sim {
     if (s.weaponSlots.length === 0) return;
     const t = this.tick - s.introFreezeTicks;
     if (t < 0 || t >= s.weaponUntilTick || t % Math.max(1, s.weaponRefillTicks) !== 0) return;
-    const bat = findItemType(this.itemSet, ItemTypeId.BAT);
-    if (!bat) return;
     for (const fighter of s.weaponSlots) {
       if (fighter < 0 || fighter >= this.numFighters) continue;
-      if (!this.isTargetable(fighter) || this.findHeldItemSlot(fighter) !== -1) continue;
-      const fBase = fighter * FighterField.FIELD_COUNT;
-      for (let slot = 0; slot < MAX_ITEMS; slot++) {
-        const base = slot * ItemField.FIELD_COUNT;
-        if ((this.itemsData[base + ItemField.ACTIVE] as number) === 1) continue;
-        this.itemsData[base + ItemField.ACTIVE] = 1;
-        this.itemsData[base + ItemField.TYPE] = bat.id;
-        this.itemsData[base + ItemField.POS_X] = this.data[fBase + FighterField.POS_X] as number;
-        this.itemsData[base + ItemField.POS_Y] = fx.add(this.data[fBase + FighterField.POS_Y] as number, ITEM_HELD_OFFSET_Y);
-        this.itemsData[base + ItemField.VEL_X] = 0;
-        this.itemsData[base + ItemField.VEL_Y] = 0;
-        this.itemsData[base + ItemField.STATE] = ItemState.HELD;
-        this.itemsData[base + ItemField.HOLDER] = fighter;
-        this.itemsData[base + ItemField.OWNER] = fighter;
-        this.itemsData[base + ItemField.TIMER] = bat.despawnTicks;
-        this.itemsData[base + ItemField.FUSE] = -1;
-        break;
-      }
+      if (!this.isTargetable(fighter)) continue;
+      this.giveBat(fighter);
+    }
+  }
+
+  /** Puts a Slam Bat in an empty-handed fighter's hand if a slot is free. */
+  private giveBat(fighter: number): void {
+    const bat = findItemType(this.itemSet, ItemTypeId.BAT);
+    if (!bat || this.findHeldItemSlot(fighter) !== -1) return;
+    const fBase = fighter * FighterField.FIELD_COUNT;
+    for (let slot = 0; slot < MAX_ITEMS; slot++) {
+      const base = slot * ItemField.FIELD_COUNT;
+      if ((this.itemsData[base + ItemField.ACTIVE] as number) === 1) continue;
+      this.itemsData[base + ItemField.ACTIVE] = 1;
+      this.itemsData[base + ItemField.TYPE] = bat.id;
+      this.itemsData[base + ItemField.POS_X] = this.data[fBase + FighterField.POS_X] as number;
+      this.itemsData[base + ItemField.POS_Y] = fx.add(this.data[fBase + FighterField.POS_Y] as number, ITEM_HELD_OFFSET_Y);
+      this.itemsData[base + ItemField.VEL_X] = 0;
+      this.itemsData[base + ItemField.VEL_Y] = 0;
+      this.itemsData[base + ItemField.STATE] = ItemState.HELD;
+      this.itemsData[base + ItemField.HOLDER] = fighter;
+      this.itemsData[base + ItemField.OWNER] = fighter;
+      this.itemsData[base + ItemField.TIMER] = bat.despawnTicks;
+      this.itemsData[base + ItemField.FUSE] = -1;
+      return;
     }
   }
 

@@ -670,6 +670,7 @@ export class Match {
     settingsOverride.weaponSlots = this.seats.filter((s) => !s.isBot).map((s) => s.slot);
     settingsOverride.weaponUntilTick = ONLINE_WEAPON_UNTIL_TICK;
     settingsOverride.weaponRefillTicks = ONLINE_WEAPON_REFILL_TICKS;
+    settingsOverride.weaponOnRespawn = true;
     settingsOverride.itemSpawnIntervalTicks = ONLINE_ITEM_SPAWN_INTERVAL_TICKS;
     this.sim = createMatchSim(this.seed, this.seats.length, settingsOverride, characters, this.arenaId);
     this.lastPercent = new Array(this.seats.length).fill(0);

@@ -53,6 +53,9 @@ export interface MatchSettings {
   weaponSlots: number[];
   weaponUntilTick: number;
   weaponRefillTicks: number;
+  /** Also hand weapon slots a bat on every respawn, all match long
+   * (Brawlhalla Timed mode spawns an item on each respawning player). */
+  weaponOnRespawn: boolean;
   /** Ticks between world item spawns. */
   itemSpawnIntervalTicks: number;
 }
@@ -113,6 +116,7 @@ export const DEFAULT_MATCH_SETTINGS: MatchSettings = {
   weaponSlots: [],
   weaponUntilTick: 0,
   weaponRefillTicks: 120,
+  weaponOnRespawn: false,
   itemSpawnIntervalTicks: 300,
   shrinkFullyClosedTick: 60 * 60 * 8, // 8 minutes (was 6) -- Lever 6, 2026-09-10 pass 3: individual fights now last longer with Levers 3/4, ease ring pacing further
 };

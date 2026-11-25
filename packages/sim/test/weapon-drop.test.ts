@@ -2,9 +2,11 @@
 // refill follows a swing, and it all stops at weaponUntilTick.
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { Sim, MAX_ITEMS } from '../src/sim.ts';
+import { Sim, MAX_ITEMS, FighterField } from '../src/sim.ts';
 import { makeInputFrame, BUTTON_ATTACK } from '../src/types.ts';
 import { ItemTypeId } from '../src/items/types.ts';
+import * as fx from '../src/math/fixed.ts';
+import { FighterStateId } from '../src/entities/fighter.ts';
 import { PLACEHOLDER_CHARACTER } from '../../content/src/characters/placeholder/data.ts';
 import { BASH_FIGHTER_ITEM_SET } from '../../content/src/items/data.ts';
 
@@ -50,6 +52,25 @@ describe('Weapon Drop', () => {
     run(sim, 1, ATTACK);
     run(sim, 300);
     assert.equal(heldBy(sim, 0), null, 'no refills after weaponUntilTick');
+  });
+
+  it('with weaponOnRespawn, a respawn comes with a bat after the first minute', () => {
+    const sim = new Sim(7, 2, CHARS, undefined, {
+      winCondition: 'timedKO', weaponSlots: [0], weaponUntilTick: 0, weaponOnRespawn: true,
+      itemSpawnIntervalTicks: 1_000_000,
+    }, BASH_FIGHTER_ITEM_SET);
+    const buf = sim.createStateBuffer();
+    sim.saveState(buf);
+    buf[FighterField.POS_Y] = fx.fromInt(-500) as number;
+    buf[FighterField.GROUNDED] = 0;
+    sim.loadState(buf);
+    let respawned = false;
+    for (let t = 0; t < 1200 && !respawned; t++) {
+      sim.advance([NEUTRAL, NEUTRAL]);
+      respawned = sim.getFighter(0).deathCount > 0 && sim.getFighter(0).state !== FighterStateId.RESPAWN;
+    }
+    assert.ok(respawned, 'a blast-zone exit leads to a respawn');
+    assert.equal(heldBy(sim, 0), ItemTypeId.BAT);
   });
 
   it('is off by default', () => {
