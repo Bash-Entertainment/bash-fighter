@@ -2,6 +2,7 @@ import type { LeaveReasonId } from './leave-prompt.ts';
 import type { QuickRatingId } from './quick-rating.ts';
 import { recentErrors } from './error-buffer.ts';
 import { readBuildSha } from './ui/feedback-panel.ts';
+import { apiRequest } from './portal.ts';
 
 export interface LeaveReasonExtra {
   trigger?: string;
@@ -15,10 +16,11 @@ export interface LeaveReasonExtra {
 export function postLeaveReason(reason: LeaveReasonId | QuickRatingId, comment: string, touchControls: boolean, extra: LeaveReasonExtra = {}): void {
   const buildSha = readBuildSha();
   const errors = recentErrors();
-  void fetch('/api/feedback', {
+  const api = apiRequest('/api/feedback');
+  void fetch(api.url, {
     method: 'POST',
     keepalive: true,
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': api.contentType },
     body: JSON.stringify({
       ...(new URLSearchParams(location.search).get('qa') === '1' ? { qa: true } : {}),
       kind: 'leave-reason',

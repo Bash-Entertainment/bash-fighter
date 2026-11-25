@@ -1,3 +1,4 @@
+import { apiRequest, outboundLinksAllowed } from '../portal.ts';
 // Account-free player feedback (2026-09-13, owner directive: an agent has
 // no human feel for the game, so real players need a dead-simple way to
 // say what felt off, landing somewhere it can actually be read and acted
@@ -87,7 +88,7 @@ export class FeedbackPanel {
       '  <div class="feedback-status" aria-live="polite"></div>',
       '  <div class="feedback-actions">',
       '    <button type="button" class="btn btn-primary feedback-submit-btn">Send feedback</button>',
-      '    <a class="feedback-github-link" href="' + GITHUB_ISSUES_URL + '" target="_blank" rel="noopener noreferrer">Or file an issue on GitHub</a>',
+      outboundLinksAllowed() ? '    <a class="feedback-github-link" href="' + GITHUB_ISSUES_URL + '" target="_blank" rel="noopener noreferrer">Or file an issue on GitHub</a>' : '',
       '  </div>',
       '</div>',
     ].join('\n');
@@ -201,9 +202,10 @@ export class FeedbackPanel {
     }
     const buildSha = readBuildSha();
     try {
-      const res = await fetch('/api/feedback', {
+      const api = apiRequest('/api/feedback');
+      const res = await fetch(api.url, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': api.contentType },
         body: JSON.stringify({
           ...(new URLSearchParams(location.search).get('qa') === '1' ? { qa: true } : {}),
           comment: comment.length > 0 ? comment : undefined,

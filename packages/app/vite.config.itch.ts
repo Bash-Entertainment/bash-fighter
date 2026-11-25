@@ -46,7 +46,7 @@ export default defineConfig({
   root: __dirname,
   base: './',
   build: { outDir: 'dist-itch' },
-  define: { __ITCH_BUILD__: true },
+  define: { __ITCH_BUILD__: true, __PORTAL__: JSON.stringify(process.env.PORTAL ?? 'itch') },
   plugins: [serveAudioAssets()],
   server: {
     host: '0.0.0.0',

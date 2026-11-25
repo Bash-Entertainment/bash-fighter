@@ -6,6 +6,7 @@ import { DEFAULT_P1_BINDING, DEFAULT_P2_BINDING, type KeyBinding } from '@bash-f
 import { DEFAULT_CHARACTER_ID } from '@bash-fighter/content';
 import { MAX_NAME_LENGTH } from '@bash-fighter/net/src/protocol.ts';
 import { CharacterSelect } from './character-select.ts';
+import { outboundLinksAllowed } from '../portal.ts';
 
 /** localStorage key the chosen display name is persisted under, so a
  *  returning player never has to retype it. Deliberately separate from
@@ -110,7 +111,7 @@ export class StartScreen {
           />
         </div>
         <div id="primary-actions"></div>
-        <button type="button" class="btn btn-plain" id="play-with-friend-btn">Play with a friend</button>
+        ${outboundLinksAllowed() ? '<button type="button" class="btn btn-plain" id="play-with-friend-btn">Play with a friend</button>' : ''}
       </div>
       <div class="below-fold">
         <section class="fighter-select">
@@ -119,7 +120,7 @@ export class StartScreen {
           <p class="hint">The arena shrinks as fighters are eliminated. Empty slots are filled by bots so a match always starts.</p>
         </section>
         <button class="btn btn-secondary" id="watch-replay-btn">Watch a replay</button>
-        <a class="btn-plain" id="contribute-link" href="https://github.com/Bash-Entertainment/bash-fighter/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer">Contribute</a>
+        ${outboundLinksAllowed() ? '<a class="btn-plain" id="contribute-link" href="https://github.com/Bash-Entertainment/bash-fighter/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer">Contribute</a>' : ''}
         <details class="local-play">
           <summary>Play locally on one keyboard</summary>
           <div class="select-row">
@@ -150,7 +151,7 @@ export class StartScreen {
       (this.root.querySelector('#watch-replay-btn') as HTMLButtonElement).addEventListener('click', onWatchReplay);
     }
     if (onPlayWithFriend) {
-      (this.root.querySelector('#play-with-friend-btn') as HTMLButtonElement).addEventListener('click', onPlayWithFriend);
+      this.root.querySelector('#play-with-friend-btn')?.addEventListener('click', onPlayWithFriend);
     }
 
     this.nameInput = this.root.querySelector('#player-name-input') as HTMLInputElement;

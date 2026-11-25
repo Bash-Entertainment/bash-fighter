@@ -128,11 +128,23 @@ test('feedback: rejects a submission with neither comment nor ratings', async ()
   });
 });
 
+test('feedback: accepts a JSON body sent as text/plain (portal builds post cross-origin without a preflight)', async () => {
+  await withServer(undefined, async (baseUrl, logPath) => {
+    const res = await fetch(`${baseUrl}/api/feedback`, {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain;charset=UTF-8' },
+      body: JSON.stringify({ comment: 'fun with the bat' }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal(readLines(logPath).length, 1);
+  });
+});
+
 test('feedback: rejects non-JSON content type and malformed JSON, always with a JSON response', async () => {
   await withServer(undefined, async (baseUrl, logPath) => {
     const wrongType = await fetch(`${baseUrl}/api/feedback`, {
       method: 'POST',
-      headers: { 'content-type': 'text/plain' },
+      headers: { 'content-type': 'text/html' },
       body: 'comment=hello',
     });
     assert.equal(wrongType.status, 400);

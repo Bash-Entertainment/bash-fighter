@@ -14,6 +14,7 @@
 // This only rewrites the *query string* the already-loaded main.ts will
 // read via `location.search`; it does not navigate or reload the page.
 declare const __ITCH_BUILD__: boolean | undefined;
+declare const __PORTAL__: string | undefined;
 
 (function bootstrapItchServerOverride(): void {
   // Only active in the itch.io build (set via `define` in
@@ -33,6 +34,9 @@ declare const __ITCH_BUILD__: boolean | undefined;
   if (params.get('server')) return; // explicit override already present
 
   params.set('server', PRODUCTION_WS);
+  // Tag the session source (session-report.ts visitSource) so portal players
+  // can be read out separately from bashfighter.com traffic.
+  if (!params.get('ref')) params.set('ref', typeof __PORTAL__ === 'string' && __PORTAL__ ? __PORTAL__ : 'itch');
   const newSearch = params.toString();
   const newUrl = `${location.pathname}?${newSearch}${location.hash}`;
   history.replaceState(history.state, '', newUrl);

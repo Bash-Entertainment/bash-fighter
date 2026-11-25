@@ -27,6 +27,7 @@ import { tickMetricsSnapshot } from './tick-metrics.ts';
 import { modeDisplayName } from './mode-rotation.ts';
 import { SNAPSHOT_EVERY_N_TICKS, type Match } from './match.ts';
 import { createFeedbackHandler } from './feedback.ts';
+import { allowPortalOrigin } from './portal-cors.ts';
 
 export interface ServerOptions {
   port?: number;
@@ -390,6 +391,7 @@ const feedbackHandler = createFeedbackHandler();
 
 const server = http.createServer((req, res) => {
   if (req.url === '/api/feedback') {
+    allowPortalOrigin(req, res);
     feedbackHandler(req, res);
     return;
   }

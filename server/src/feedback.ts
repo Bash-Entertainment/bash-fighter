@@ -258,7 +258,10 @@ export function createFeedbackHandler(options: FeedbackHandlerOptions = {}) {
     }
 
     const contentType = req.headers['content-type'] ?? '';
-    if (!contentType.toLowerCase().includes('application/json')) {
+    // text/plain is what portal builds send cross-origin: it keeps the POST a
+    // CORS "simple request", so no preflight (keepalive fetches can't be preflighted).
+    const ct = contentType.toLowerCase();
+    if (!ct.includes('application/json') && !ct.includes('text/plain')) {
       sendJson(res, 400, { ok: false, error: 'expected application/json' });
       return;
     }
