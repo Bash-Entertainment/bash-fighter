@@ -69,7 +69,7 @@ test('a secondary link points at the real GitHub issue tracker', () => {
 });
 
 test('submit posts to /api/feedback and surfaces both success and failure plainly', () => {
-  assert.match(panel, /fetch\('\/api\/feedback'/);
+  assert.match(panel, /apiRequest\('\/api\/feedback'\)/);
   assert.match(panel, /method: 'POST'/);
   assert.match(panel, /Thanks -- that was sent\./);
   assert.match(panel, /Could not reach the server/);
