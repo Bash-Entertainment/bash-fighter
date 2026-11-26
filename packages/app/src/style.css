@@ -1246,24 +1246,25 @@ html, body {
   z-index: 5;
 }
 
+/* Same look as the Feedback/Controls/Moves buttons beside it, so the
+   top-right row reads as one menu rather than a mix of styles. */
 .mute-btn {
+  font-family: var(--font-mono);
   font-size: 12px;
+  font-weight: 600;
   color: var(--ink-dim);
-  background: var(--panel);
-  border: 1px solid var(--ink-dim);
-  padding: 6px 10px;
+  background: rgba(20, 23, 27, 0.85);
+  border: 1px solid #2c3037;
+  padding: 6px 12px;
   cursor: pointer;
 }
 
 .mute-btn:hover {
   color: var(--ink);
-  border-color: var(--ink);
 }
 
 .mute-btn[data-muted='true'] {
-  color: var(--ink-dim);
-  border-color: var(--ink-dim);
-  opacity: 0.7;
+  opacity: 0.6;
 }
 
 .survivors-line {

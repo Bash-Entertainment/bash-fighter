@@ -10,7 +10,7 @@ import { AutoContinue } from './auto-continue.ts';
 import { MatchRatingRow } from './match-rating-row.ts';
 import { buildStandings, placementOf, tiedHeadline, type TimedBrawlScore } from '../timed-brawl.ts';
 import { recordKos, nextGoalLine, standingScoreLabel, ZERO_KO_TIP } from '../personal-best.ts';
-import { copyToClipboard } from '../join-link.ts';
+import { shareResult } from '../share-result.ts';
 
 const PLAYER_HEX = PALETTE.playerColors.map((c) => `#${c.toString(16).padStart(6, '0')}`);
 
@@ -29,6 +29,12 @@ export class TimedBrawlEndScreen {
   private readonly onRematch: (autoContinued?: boolean) => void;
   private lastResult: 'won' | 'lost' | 'tied' = 'tied';
   private inviteLink: string | null = null;
+  private shareText = 'Come fight me in Bash Fighter.';
+
+  /** The brag line that goes with the invite link (see share-result.ts). */
+  setShareText(text: string): void {
+    this.shareText = text;
+  }
   private onInviteCopied: (() => void) | undefined;
 
   /** Same shareable-lobby-link code as WinScreen/WaitingScreen. */
@@ -60,7 +66,7 @@ export class TimedBrawlEndScreen {
         <div class="feedback-end-screen-copy">Got a minute? Tell us what felt off.</div>
         <button type="button" class="feedback-link-btn" id="tb-feedback-btn">Feedback</button>
       </div>
-      <button type="button" class="btn btn-plain hidden" id="tb-invite-btn">Copy invite link</button>
+      <button type="button" class="btn btn-plain hidden" id="tb-invite-btn">Share result</button>
     `;
     parent.appendChild(this.root);
     this.headline = this.root.querySelector('#tb-headline') as HTMLDivElement;
@@ -82,11 +88,11 @@ export class TimedBrawlEndScreen {
     inviteBtn.addEventListener('click', () => {
       if (!this.inviteLink) return;
       this.onInviteCopied?.();
-      void copyToClipboard(this.inviteLink).then((ok) => {
-        if (!ok) return;
-        inviteBtn.textContent = 'Copied';
+      void shareResult(this.shareText, this.inviteLink).then((outcome) => {
+        if (outcome === 'failed') return;
+        inviteBtn.textContent = outcome === 'shared' ? 'Shared' : 'Link copied';
         window.setTimeout(() => {
-          inviteBtn.textContent = 'Copy invite link';
+          inviteBtn.textContent = 'Share result';
         }, 2000);
       });
     });

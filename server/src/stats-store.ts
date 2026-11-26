@@ -174,6 +174,13 @@ export interface StatsRecorder {
   logPath: string;
   recordMatchSummary(summary: MatchSummary): void;
   recordSessionEnd(conn: SessionEndConnLike, match: Match): void;
+  recordShare(qa: boolean): void;
+}
+
+export interface StoredShareRecord {
+  type: 'share';
+  ts: string;
+  qa: boolean;
 }
 
 /** Builds the recorder wired into server/src/index.ts. Kept as a small
@@ -198,6 +205,10 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
       } catch (err) {
         console.log(`[stats] recordSessionEnd failed, dropping record: ${(err as Error).message}`);
       }
+    },
+    recordShare(qa: boolean): void {
+      const record: StoredShareRecord = { type: 'share', ts: new Date(now()).toISOString(), qa };
+      appendStatsLine(logPath, record);
     },
   };
 

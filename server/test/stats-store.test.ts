@@ -515,3 +515,18 @@ test('recordSessionEnd: the join-time requeued flag stands in when no report arr
     cleanup();
   }
 });
+
+test('recordShare: appends one share record carrying the qa flag', () => {
+  const { logPath, cleanup } = scratchDir();
+  try {
+    const recorder = createStatsRecorder({ logPath, now: () => 1_700_000_000_000 });
+    recorder.recordShare(false);
+    recorder.recordShare(true);
+    assert.deepEqual(readLines(logPath), [
+      { type: 'share', ts: new Date(1_700_000_000_000).toISOString(), qa: false },
+      { type: 'share', ts: new Date(1_700_000_000_000).toISOString(), qa: true },
+    ]);
+  } finally {
+    cleanup();
+  }
+});

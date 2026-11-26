@@ -22,14 +22,10 @@ test('clearStoredResumeToken is exported and clears the stored token', () => {
   assert.match(net, /export function clearStoredResumeToken\(\): void \{\s*saveResumeToken\(null\);/);
 });
 
-test('the end-screen invite mints a fresh code for the next match', () => {
-  // Handing out the finished match's code sent the friend into a dead
-  // private lobby while we had already requeued elsewhere.
-  assert.match(main, /function nextMatchInviteLink\(\): string \| null \{/);
-  assert.match(main, /if \(requeued && !joinCode && pendingInviteCode\) \{/);
+test('the end-screen Share links to the public game, not a private lobby', () => {
+  // A private-lobby invite made the sharer wait 60s alone for bot fill.
+  assert.match(main, /function endScreenShareLink\(\): string \| null \{/);
   assert.doesNotMatch(main, /setInviteLink\(currentJoinCode/);
-  // Showing the link must not commit this client to the private lobby:
-  // only an actual copy does, or every requeue leaves the public lobby.
-  assert.match(main, /function commitInvite\(\): void \{\s*\n\s*pendingInviteCode = reservedInviteCode;/);
-  assert.match(main, /setInviteLink\(nextMatchInviteLink\(\), commitInvite\)/);
+  assert.doesNotMatch(main, /pendingInviteCode/);
+  assert.match(main, /setInviteLink\(endScreenShareLink\(\), markShared\)/);
 });

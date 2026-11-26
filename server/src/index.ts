@@ -389,10 +389,37 @@ const statsRecorder = createStatsRecorder();
 
 const feedbackHandler = createFeedbackHandler();
 
+/** Counts end-screen "Share result" clicks; the body is only {qa}. */
+function handleShareClick(req: http.IncomingMessage, res: http.ServerResponse): void {
+  if (req.method !== 'POST') {
+    res.writeHead(405).end();
+    return;
+  }
+  let body = '';
+  req.on('data', (chunk: Buffer) => {
+    if (body.length < 256) body += chunk.toString('utf8');
+  });
+  req.on('end', () => {
+    let qa = false;
+    try {
+      qa = (JSON.parse(body) as { qa?: unknown }).qa === true;
+    } catch {
+      // A malformed body still counts as a click.
+    }
+    statsRecorder.recordShare(qa);
+    res.writeHead(204).end();
+  });
+}
+
 const server = http.createServer((req, res) => {
   if (req.url === '/api/feedback') {
     allowPortalOrigin(req, res);
     feedbackHandler(req, res);
+    return;
+  }
+  if (req.url === '/api/share') {
+    allowPortalOrigin(req, res);
+    handleShareClick(req, res);
     return;
   }
   // Activity numbers (how many matches, how many players) are deliberately

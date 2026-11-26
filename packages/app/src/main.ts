@@ -34,7 +34,9 @@ import { FeedbackPanel } from './ui/feedback-panel.ts';
 import { TouchControls } from './ui/touch-controls.ts';
 import { WaitingScreen } from './ui/waiting-screen.ts';
 import { AttractMode } from './attract-mode.ts';
-import { generateJoinCode, buildShareLink, copyToClipboard } from './join-link.ts';
+import { generateJoinCode, buildShareLink } from './join-link.ts';
+import { outboundLinksAllowed } from './portal.ts';
+import { postShareClick, shareMessage, shareResult, withShareRef } from './share-result.ts';
 import { sanitiseJoinCode } from '@bash-fighter/net';
 import {
   isTouchCapable,
@@ -589,43 +591,30 @@ let requestedSpectate = false;
 // label, exactly once per welcome.
 let spectateFallbackNotice: string | undefined;
 
-// The end-screen invite ("Copy invite link") must not hand out the code of
-// the match that has just finished: that lobby is gone, and this client
-// auto-requeues seconds later, so a friend following it would sit alone in a
-// dead private lobby. Instead the button mints a code for THIS client's next
-// match and holds it here; beginOnlineMatch consumes it on the requeue, so
-// the friend arrives into the match we are actually playing.
-let pendingInviteCode: string | null = null;
-// The code shown in the end-screen link before anyone has copied it. Showing
-// a link is not a decision: minting into pendingInviteCode here sent EVERY
-// requeue into its own private lobby, so nobody would have met a stranger in
-// the public lobby again (seen in production logs 2026-09-22 as one
-// `[codedLobby] created` per client per match end).
-let reservedInviteCode: string | null = null;
-
-/** Link for "invite a friend to my next match": a fresh code, minted once
- *  and reused until it is consumed by the requeue. */
-function nextMatchInviteLink(): string | null {
-  if (!lastMatchWasOnline) return null;
-  if (!reservedInviteCode) reservedInviteCode = generateJoinCode();
-  return buildShareLink(location.origin, reservedInviteCode);
+// End-screen "Share result" (2026-11-26). It replaced "Copy invite link",
+// which put the copier's next match in a private lobby that waits 60s for
+// bots and was never followed (no ?join= visit in the access logs). A
+// brag needs no lobby: the friend lands in the public queue, tagged
+// ref=share so these arrivals can be counted.
+function endScreenShareLink(): string | null {
+  if (!lastMatchWasOnline || !outboundLinksAllowed()) return null;
+  return withShareRef(`${location.origin}/`);
 }
 
-/** Called when the player actually copies an invite: only then does this
- *  client requeue into the private lobby the link points at. */
-function commitInvite(): void {
-  pendingInviteCode = reservedInviteCode;
+function markShared(): void {
+  postShareClick();
 }
 
-function inviteLinkAction(): { label: string; onClick: () => void; kind: 'plain' } | null {
+function inviteLinkAction(placement: number, totalFighters: number): { label: string; onClick: () => void; kind: 'plain' } | null {
+  if (!endScreenShareLink()) return null;
   return {
-    label: 'Copy invite link',
+    label: 'Share result',
     kind: 'plain',
     onClick: () => {
-      const link = nextMatchInviteLink();
+      const link = endScreenShareLink();
       if (!link) return;
-      commitInvite();
-      void copyToClipboard(link);
+      markShared();
+      void shareResult(shareMessage(placement, totalFighters), link);
     },
   };
 }
@@ -724,11 +713,6 @@ function serverUrl(): string {
 // spectate-stall chip) rather than the start screen's "Play online"
 // button -- feeds the requeued session-report field (see net-match.ts).
 async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = false, autoContinued = false): Promise<void> {
-  if (requeued && !joinCode && pendingInviteCode) {
-    joinCode = pendingInviteCode;
-  }
-  pendingInviteCode = null;
-  reservedInviteCode = null;
   lastMatchWasOnline = true;
   requestedJoinCode = joinCode;
   requestedSpectate = spectate;
@@ -928,11 +912,22 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
           deathCount: s.deathCount,
         }));
         timedBrawlEndScreen.autoContinueEnabled = playerWasActive;
-        timedBrawlEndScreen.setInviteLink(nextMatchInviteLink(), commitInvite);
+        // A tie at the top (winnerIndex null) must not be shared as a win.
+        const localPlace = netMatch ? leaderboard.indexOf(netMatch.localSlot()) + 1 : 0;
+        const tiedAtTop = localPlace === 1 && winnerIndex !== netMatch?.localSlot();
+        timedBrawlEndScreen.setShareText(
+          localPlace > 0 && !tiedAtTop ? shareMessage(localPlace, leaderboard.length) : 'Come fight me in Bash Fighter.',
+        );
+        timedBrawlEndScreen.setInviteLink(endScreenShareLink(), markShared);
         timedBrawlEndScreen.show(winnerIndex, leaderboard, scores, netMatch?.localSlot(), netMatch ? (slot) => netMatch!.nameFor(slot) : undefined);
       } else {
         winScreen.autoContinueEnabled = playerWasActive;
-        winScreen.setInviteLink(nextMatchInviteLink(), commitInvite);
+        winScreen.setShareText(
+          netMatch && winnerIndex === netMatch.localSlot()
+            ? shareMessage(1, netMatch.currentSnapshots().length)
+            : 'Come fight me in Bash Fighter.',
+        );
+        winScreen.setInviteLink(endScreenShareLink(), markShared);
         winScreen.show(winnerIndex, netMatch?.localSlot(), netMatch ? (slot) => netMatch!.nameFor(slot) : undefined);
       }
     },
@@ -963,7 +958,7 @@ async function beginOnlineMatch(requeued = false, joinCode?: string, spectate = 
           // another match rather than the end of the session. Pressing
           // "Keep spectating" cancels it.
           { label: 'Play again', autoAfterSec: 4, onClick: (auto) => void beginOnlineMatch(true, undefined, false, auto === true) },
-          ...(inviteLinkAction() ? [inviteLinkAction()!] : []),
+          ...(inviteLinkAction(placement, totalFighters) ? [inviteLinkAction(placement, totalFighters)!] : []),
           {
             label: 'Keep spectating',
             onClick: () => {
