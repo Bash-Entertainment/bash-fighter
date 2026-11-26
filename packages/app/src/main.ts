@@ -73,10 +73,14 @@ const canvasRoot = document.createElement('div');
 canvasRoot.id = 'canvas-root';
 appRoot.appendChild(canvasRoot);
 
-// Keyboard-only shortcuts (F3/TAB/O) are meaningless on touch devices, and
-// this hint's bottom-right position collides with the touch attack/special
-// button cluster (also bottom-right) on phones. Skip it on touch devices.
-if (!isTouchCapable()) {
+// Developer shortcuts (F3/TAB/O). Hidden from players: a CrazyGames
+// reviewer rejected the game on overall quality (2026-11-26) and a
+// permanent debug line on every match screen reads as unfinished. Shown
+// in dev builds or with ?debug=1; never on touch, where it collided with
+// the attack/special button cluster.
+const showDebugHint =
+  (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) && !isTouchCapable();
+if (showDebugHint) {
   const debugHint = document.createElement('div');
   debugHint.className = 'debug-hint';
   debugHint.textContent = 'F3 debug · TAB cycle survivors · O overview';
