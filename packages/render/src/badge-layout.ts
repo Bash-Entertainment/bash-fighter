@@ -125,10 +125,37 @@ export function computeBadgePlacements(
   const placements: BadgePlacement[] = [];
   for (const c of ordered) {
     const numberLabel = String(c.slot + 1);
+    // The local player's badge says YOU, nothing else: it is the label a
+    // first-time player looks for, and their damage already has the fixed
+    // corner readout. Placed first, so nothing it could collide with has
+    // been placed yet.
+    if (c.isLocalPlayer) {
+      const tier = { label: LOCAL_BADGE_LABEL, hasPercent: false };
+      const ownBox = badgeBox(c.headX, c.headY, tier, true, measureText);
+      const fitted = view ? clampBoxToView(ownBox, view) : { box: ownBox, dx: 0, dy: 0 };
+      placedBoxes.push(fitted.box);
+      // Keep the pointer above YOU clear too: another fighter's percent
+      // stacked right over it reads as the local player's own.
+      placedBoxes.push({ ...fitted.box, top: fitted.box.top - LOCAL_POINTER_CLEARANCE_PX, bottom: fitted.box.top });
+      placements.push({
+        candidate: c,
+        label: tier.label,
+        box: fitted.box,
+        x: c.headX + fitted.dx,
+        y: c.headY + fitted.dy,
+        isNameLabel: true,
+        hasPercent: false,
+      });
+      continue;
+    }
     // Only the local player's own body/pointer area is a collision
     // target now; everyone else's badge is free to overlap any other
     // fighter's body (but never the local player's).
-    const bodyGuard: BadgeBox[] = !c.isLocalPlayer && localExclusionZone ? [localExclusionZone] : [];
+    // A fighter whose head is off the view gets no badge: clamped to the
+    // edge it would float beside nobody, with a leader line running off
+    // screen.
+    if (view && (c.headX < 0 || c.headX > view.width || c.headY < 0 || c.headY > view.height)) continue;
+    const bodyGuard: BadgeBox[] = localExclusionZone ? [localExclusionZone] : [];
     // Prefer the chosen name over the bare slot number -- it's what
     // makes a fighter "Rook" instead of "#7" at a glance -- but a name
     // is longer and more likely to collide with a neighbour at
@@ -137,14 +164,6 @@ export function computeBadgePlacements(
     // with the shorter numeric label before giving up on this badge
     // entirely, so a name that merely doesn't fit still degrades to
     // the number rather than vanishing or drawing over someone else.
-    // The local player's own badge is exempt from being dropped
-    // outright -- it is the one identity cue this player actually needs
-    // every frame -- but it still goes through the same name-vs-number
-    // fallback as everyone else: a local name too wide to fit degrades
-    // to the local player's own number rather than being drawn on top of
-    // a neighbour at full width forever (checking this fallback only
-    // decided whether to *place* a badge, never whether to keep it once
-    // placed, so it costs the local player nothing to run it too).
     const rawName = names?.[c.slot];
     // World badges drop the "CPU " prefix bots carry in their full name
     // (packages/sim/src/ai/bot.ts's nameFor): the sidebar chip grid
@@ -153,14 +172,8 @@ export function computeBadgePlacements(
     // those four characters are exactly the width the damage numeral
     // needs to survive a mid-match cluster.
     const name = rawName?.startsWith('CPU ') ? rawName.slice(4) : rawName;
-    const nameLabel = name && name.length > 0 ? name : undefined;
-    // The local player already has a guaranteed, always-visible damage
-    // number in the fixed corner readout (computeLocalDamageReadout).
-    // Repeating it on the world badge over their own fighter -- the
-    // single widest label on screen, sitting right where the action is
-    // -- duplicates information without adding any, so the world badge
-    // keeps just the name/number that helps a player find themselves.
-    const pct = !c.isLocalPlayer && c.percent !== undefined ? Math.max(0, Math.round(c.percent)) : undefined;
+    const nameLabel = name && name.length > 0 ? shortenBadgeName(name) : undefined;
+    const pct = c.percent !== undefined ? Math.max(0, Math.round(c.percent)) : undefined;
     const pctSuffix = pct !== undefined ? ` ${pct}%` : '';
     const pctOnly = pct !== undefined ? `${pct}%` : undefined;
 
@@ -238,6 +251,8 @@ export function computeBadgePlacements(
       // few costs nothing and rescues the cases a single offset cannot.
       for (const offset of STAGGER_OFFSETS) {
         const staggered = badgeBox(anchorX, anchorY + offset, chosen, c.isLocalPlayer, measureText);
+        // A row that leaves the view would be cut off at the edge.
+        if (view && (staggered.top < 0 || staggered.bottom > view.height)) continue;
         const staggerCollides =
           placedBoxes.some((p) => boxesOverlap(p, staggered)) || bodyGuard.some((b) => boxesOverlap(b, staggered));
         if (!staggerCollides) {
@@ -254,16 +269,7 @@ export function computeBadgePlacements(
         }
       }
     }
-    // The local player used to be exempt from ever being dropped, on
-    // the theory that they must always be findable in-world. But since
-    // the fixed corner readout (computeLocalDamageReadout) already
-    // guarantees the local player's damage is always visible regardless
-    // of the world badge, that exemption had no upside left and a real
-    // cost: when a scrum left no collision-free spot, the local badge
-    // was placed anyway rather than hidden, which is exactly what live
-    // play showed (2026-09-18: "Sweeper" overlapping other badges in
-    // nearly every sample). Mush is worse than an absent numeral for
-    // every fighter now, local player included.
+    // Mush is worse than an absent numeral (2026-09-18 live play).
     if (collides) continue;
     placedBoxes.push(box);
     placements.push({
@@ -292,6 +298,9 @@ const BADGE_ROW_STAGGER_PX = 15;
 // scale-up in the first ~1s of a match, which is a spawn-row moment, not
 // a clustered one, so is out of scope here).
 const LOCAL_EXCLUSION_MARGIN_PX = 26;
+// Height kept free above the local player's YOU badge: the pointer (at
+// most ~12px with its gap) plus room so no other badge sits right on it.
+const LOCAL_POINTER_CLEARANCE_PX = 24;
 // Ladder of vertical offsets tried, in order, before a badge is dropped
 // entirely (or, for the exempt local player, placed wherever it lands).
 // A real mid-match huddle is dense enough that a single row of slack
@@ -309,18 +318,65 @@ const STAGGER_OFFSETS = [-1, 1, -2, 2, -3, 3].map((n) => n * BADGE_ROW_STAGGER_P
  * underneath the sidebar DOM element or off the far edge -- both places
  * a player near the edge of a cluster genuinely stood in a live match. */
 function clampBoxToView(box: BadgeBox, view: { width: number; height: number }): { box: BadgeBox; dx: number; dy: number } {
-  let dx = 0;
-  let dy = 0;
-  if (box.left < 0) dx = -box.left;
-  else if (box.right > view.width) dx = view.width - box.right;
-  if (box.top < 0) dy = -box.top;
-  else if (box.bottom > view.height) dy = view.height - box.bottom;
+  const dx = shiftIntoViewX(box, view);
+  const dy = shiftIntoViewY(box, view);
   if (dx === 0 && dy === 0) return { box, dx, dy };
   return {
     box: { left: box.left + dx, right: box.right + dx, top: box.top + dy, bottom: box.bottom + dy },
     dx,
     dy,
   };
+}
+
+function shiftIntoViewX(box: BadgeBox, view: { width: number }): number {
+  if (box.left < 0) return -box.left;
+  if (box.right > view.width) return view.width - box.right;
+  return 0;
+}
+
+function shiftIntoViewY(box: BadgeBox, view: { height: number }): number {
+  if (box.top < 0) return -box.top;
+  if (box.bottom > view.height) return view.height - box.bottom;
+  return 0;
+}
+
+/** A placed badge as drawn on a frame between two placement solves: moved
+ * along with its fighter since the solve, so it may have drifted off the
+ * view or onto a neighbour's badge. */
+export interface FollowedBadge {
+  x: number;
+  y: number;
+  box: BadgeBox;
+  visible: boolean;
+}
+
+/** Makes a frame's followed badges obey the two rules the solve
+ * guaranteed: every badge sits wholly inside the view, and no two badges
+ * overlap. Clamps each one back inside the view, then hides any that
+ * overlaps a badge earlier in the list; the list is in placement order,
+ * so the local player's badge and the nearest fighters' win. Mutates in
+ * place and allocates nothing, since it runs every frame. */
+export function settleFollowedBadges(badges: FollowedBadge[], view: { width: number; height: number }): void {
+  for (let i = 0; i < badges.length; i++) {
+    const b = badges[i] as FollowedBadge;
+    const box = b.box;
+    const dx = shiftIntoViewX(box, view);
+    const dy = shiftIntoViewY(box, view);
+    b.x += dx;
+    b.y += dy;
+    box.left += dx;
+    box.right += dx;
+    box.top += dy;
+    box.bottom += dy;
+    b.visible = true;
+    for (let j = 0; j < i; j++) {
+      const other = badges[j] as FollowedBadge;
+      if (other.visible && boxesOverlap(other.box, box)) {
+        b.visible = false;
+        break;
+      }
+    }
+  }
 }
 
 /** Fixed screen-space gap, in pixels, between the top of the local
@@ -452,14 +508,25 @@ export function computeLocalDamageReadout(
   };
 }
 
-export const BADGE_FONT_SIZE = 13;
-// How many extra px, on top of the existing local-player +3 badge
-// bonus, the local player's badge gets when it includes a damage
-// readout -- makes the local player's own percent the single most
-// prominent damage number on screen, per the 2026-09-18 design
-// direction. 3 (name/number bonus) + 4 here = +7 total over everyone
-// else's plain badge.
-export const LOCAL_DAMAGE_FONT_BONUS = 7;
+/** Everyone else's badge: small, so twenty of them leave the fighters
+ * visible, and so the local player's YOU is the one label that stands
+ * out. */
+export const BADGE_FONT_SIZE = 12;
+export const LOCAL_BADGE_FONT_SIZE = 15;
+export const LOCAL_BADGE_LABEL = 'YOU';
+/** Longest name a world badge shows before it is cut with an ellipsis.
+ * The full name stays in the sidebar; in the world a long name is width
+ * the damage numeral needs. */
+export const BADGE_NAME_MAX_CHARS = 8;
+
+export function badgeFontSize(isLocalPlayer: boolean): number {
+  return isLocalPlayer ? LOCAL_BADGE_FONT_SIZE : BADGE_FONT_SIZE;
+}
+
+export function shortenBadgeName(name: string): string {
+  const chars = [...name];
+  return chars.length <= BADGE_NAME_MAX_CHARS ? name : `${chars.slice(0, BADGE_NAME_MAX_CHARS - 1).join('')}…`;
+}
 const BADGE_BOX_MARGIN_PX = 3;
 // Stroke bleed is exact geometry (half the stroke width extends past
 // the glyph outline on every side), not a font-rendering guess, so it
@@ -474,13 +541,11 @@ function badgeBox(
   isLocalPlayer: boolean,
   measureText: MeasureText,
 ): BadgeBox {
-  // Must mirror the actual font-size bonus index.ts's layoutBadges
-  // applies (BADGE_FONT_SIZE + localBonus there): reserving less space
+  // index.ts draws with the same badgeFontSize: reserving less space
   // than what actually gets drawn is exactly the earlier '1714 6' bug
   // pattern -- a neighbour placed just outside a too-small reserved box
   // that still visually collides with the bigger text really on screen.
-  const localBonusPx = isLocalPlayer ? (tier.hasPercent ? LOCAL_DAMAGE_FONT_BONUS : 3) : 0;
-  const fontSize = BADGE_FONT_SIZE + localBonusPx;
+  const fontSize = badgeFontSize(isLocalPlayer);
   const { width, height } = measureText(tier.label, fontSize);
   const halfWidth = width / 2 + BADGE_BOX_MARGIN_PX + BADGE_STROKE_WIDTH_PX;
   const boxHeight = height + BADGE_STROKE_WIDTH_PX;

@@ -44,6 +44,6 @@ describe('badge layout throttle (render-perf pass 2026-09-19)', () => {
     // BADGE_LAYOUT_INTERVAL frames.
     assert.match(layoutBadgesBody!, /curHead\.x - cachedHead\.x/);
     assert.match(layoutBadgesBody!, /curHead\.y - cachedHead\.y/);
-    assert.match(layoutBadgesBody!, /text\.position\.set\(x, y\)/);
+    assert.match(layoutBadgesBody!, /text\.position\.set\(f\.x, f\.y\)/);
   });
 });

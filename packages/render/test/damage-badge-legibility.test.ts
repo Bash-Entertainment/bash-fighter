@@ -248,7 +248,7 @@ test('badge text (light fill + dark stroke) contrasts against the lightest and d
 // the middle of the action for no benefit. The world badge now keeps
 // the local player's name (helps find yourself) but never appends a
 // percent suffix -- that job belongs to the corner readout alone.
-test("the local player's world badge keeps its name but drops the percent (the corner readout already covers it)", () => {
+test("the local player's world badge reads YOU, with no percent (the corner readout already covers it)", () => {
   const candidates: BadgeCandidate[] = [
     { slot: 0, isLocalPlayer: true, headX: 200, headY: 200, percent: 87 },
     { slot: 1, isLocalPlayer: false, headX: 500, headY: 500, percent: 42 },
@@ -257,10 +257,9 @@ test("the local player's world badge keeps its name but drops the percent (the c
   const placements = computeBadgePlacements(candidates, [], names, undefined, fakeMeasureText);
   const local = placements.find((p) => p.candidate.isLocalPlayer)!;
   const other = placements.find((p) => !p.candidate.isLocalPlayer)!;
-  assert.ok(local.label.includes('Sweeper'), `expected local badge to keep its name, got "${local.label}"`);
-  assert.ok(!local.label.includes('%'), `expected local world badge to drop the percent suffix, got "${local.label}"`);
+  assert.equal(local.label, 'YOU');
   assert.equal(local.hasPercent, false);
-  assert.ok(other.label.includes('%'), `expected a non-local badge to still show its percent, got "${other.label}"`);
+  assert.equal(other.label, 'Cinder 42%');
 });
 
 // 2026-09-18, part 7. Live play on production showed nearly every badge

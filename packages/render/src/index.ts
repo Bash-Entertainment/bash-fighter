@@ -32,9 +32,12 @@ import {
   LOCAL_DAMAGE_READOUT_FONT_SIZE,
   BADGE_STROKE_WIDTH_PX,
   BADGE_FONT_SIZE,
+  badgeFontSize,
   badgeLeaderLine,
-  LOCAL_DAMAGE_FONT_BONUS,
+  settleFollowedBadges,
   type BadgeCandidate,
+  type BadgePlacement,
+  type FollowedBadge,
   type BodyBox,
 } from './badge-layout.ts';
 import { computePopulationAwareFramingFloor } from './framing.ts';
@@ -44,11 +47,9 @@ import { computePopulationAwareFramingFloor } from './framing.ts';
  * positions -- see layoutBadges' own comment for why positions are
  * recomputed every frame even though the underlying collision/tier
  * decision (computeBadgePlacements) is not. */
-interface FollowedBadgePlacement {
+interface FollowedBadgePlacement extends FollowedBadge {
   candidate: BadgeCandidate;
-  x: number;
-  y: number;
-  box: { left: number; right: number; top: number; bottom: number };
+  placement: BadgePlacement;
 }
 
 export { RenderItemTypeId } from './item-sprite.ts';
@@ -881,41 +882,46 @@ export class Renderer {
       this.lastBadgeCandidateSlotsKey = slotsKey;
     }
     const curHeadBySlot = new Map(candidates.map((c) => [c.slot, { x: c.headX, y: c.headY }]));
-    this.badgeLeaders.clear();
-    let textIndex = 0;
     const followedPlacements: FollowedBadgePlacement[] = [];
     for (const p of this.cachedBadgePlacements) {
       const cachedHead = this.cachedBadgeHeadBySlot.get(p.candidate.slot);
       const curHead = curHeadBySlot.get(p.candidate.slot);
       const dx = cachedHead && curHead ? curHead.x - cachedHead.x : 0;
       const dy = cachedHead && curHead ? curHead.y - cachedHead.y : 0;
-      const x = p.x + dx;
-      const y = p.y + dy;
       followedPlacements.push({
         candidate: p.candidate,
-        x,
-        y,
+        placement: p,
+        x: p.x + dx,
+        y: p.y + dy,
         box: { left: p.box.left + dx, right: p.box.right + dx, top: p.box.top + dy, bottom: p.box.bottom + dy },
+        visible: true,
       });
+    }
+    // Between solves each badge moves with its own fighter, so two can
+    // drift into each other or past the edge; settle that every frame.
+    settleFollowedBadges(followedPlacements, this.viewSize);
+    this.badgeLeaders.clear();
+    let textIndex = 0;
+    for (const f of followedPlacements) {
+      if (!f.visible) continue;
+      const p = f.placement;
       const text = this.badgeTexts[textIndex] as Text;
       textIndex += 1;
       text.text = p.label;
-      text.position.set(x, y);
+      text.position.set(f.x, f.y);
       text.visible = true;
-      // The local player's own badge gets the same bright fill as the
-      // rest for consistency, but a slightly larger size so it is the
-      // one badge a player can find at a glance without reading digits.
-      // The local player's damage readout gets a further size bump on
-      // top of that (see LOCAL_DAMAGE_FONT_BONUS) -- of every damage
-      // number on screen, this is the one the player must never have to
-      // hunt for (2026-09-17 player report: "had no idea how much hp
-      // anybody had"). Colour is a secondary, non-load-bearing cue: the
-      // numeral itself already carries the information, so this reads
-      // the same under grayscale.
-      const localBonus = p.candidate.isLocalPlayer ? (p.hasPercent ? LOCAL_DAMAGE_FONT_BONUS : 3) : 0;
-      text.style.fontSize = BADGE_FONT_SIZE + localBonus;
-      text.style.fill = p.hasPercent && (p.percent ?? 0) >= 100 ? PALETTE.danger : PALETTE.hud;
-      this.drawBadgeLeader(x, y, curHead);
+      // The local player's YOU is larger and amber, the one label a
+      // player can find at a glance; everyone else's is smaller so twenty
+      // of them do not bury the fighters. Damage at kill percent turns
+      // danger red, a second channel on top of the numeral itself.
+      const isLocal = p.candidate.isLocalPlayer;
+      text.style.fontSize = badgeFontSize(isLocal);
+      text.style.fill = isLocal
+        ? PALETTE.accent
+        : p.hasPercent && (p.percent ?? 0) >= 100
+          ? PALETTE.danger
+          : PALETTE.hud;
+      this.drawBadgeLeader(f.x, f.y, curHeadBySlot.get(p.candidate.slot));
     }
     for (let i = textIndex; i < this.badgeTexts.length; i++) {
       (this.badgeTexts[i] as Text).visible = false;
@@ -927,14 +933,14 @@ export class Renderer {
   /** Small flat amber crown, constant pixel size, above the crowned fighter's badge. */
   private drawCrown(placements: readonly FollowedBadgePlacement[]): void {
     this.crownMarker.clear();
-    const p = this.crownSlot === null ? undefined : placements.find((q) => q.candidate.slot === this.crownSlot);
+    const p = this.crownSlot === null ? undefined : placements.find((q) => q.visible && q.candidate.slot === this.crownSlot);
     this.crownMarker.visible = Boolean(p);
     if (!p) return;
     const x = p.x;
     const y = p.box.top - 3;
     this.crownMarker
       .poly([x - 8, y, x - 8, y - 9, x - 4, y - 4, x, y - 11, x + 4, y - 4, x + 8, y - 9, x + 8, y])
-      .fill({ color: 0xe8b23c })
+      .fill({ color: PALETTE.accent })
       .stroke({ color: PALETTE.fighterOutline, width: 1 });
   }
 
@@ -962,7 +968,7 @@ export class Renderer {
    * fighter itself down to a few pixels, which is exactly the
    * readability gap a real player reported. A fixed pixel size means
    * this pointer reads exactly the same whether the local player is
-   * alone on screen or one of twenty. Flat cream fill, no glow, no
+   * alone on screen or one of twenty. Flat amber fill, no glow, no
    * gradient, matches the rest of this project's austere HUD language;
    * no animation, so it costs nothing under reduced-motion. Hidden
    * automatically whenever there is no local-player badge placement --
@@ -1005,7 +1011,7 @@ export class Renderer {
       .lineTo(bx, by)
       .lineTo(pos.x, pos.y)
       .closePath()
-      .fill({ color: PALETTE.hud });
+      .fill({ color: PALETTE.accent });
   }
 
   /** Draws (or hides) the fixed corner readout of the local player's own

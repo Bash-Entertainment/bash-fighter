@@ -30,7 +30,9 @@ import { fakeMeasureText } from './fake-measure-text.ts';
 import {
   computeBadgePlacements,
   computeLocalPointer,
+  settleFollowedBadges,
   LOCAL_POINTER_GAP_PX,
+  type FollowedBadge,
   type BadgeCandidate,
   type BodyBox,
 } from '../src/badge-layout.ts';
@@ -199,22 +201,14 @@ test('the local player badge degrades to a number under real pressure, and is no
   assertNoOverlaps(placements, bodyBoxes);
 });
 
-test('a neighbour\'s body no longer forces the local player to degrade its label (2026-09-18 design call)', () => {
-  // Same tight geometry as before this design call, kept as a marker of
-  // the change: overlapping a *neighbour's* body used to force the
-  // local player's own badge down to its bare number. It no longer
-  // does, because badge-vs-body collision is no longer checked for
-  // anyone except against the local player's own body (see
-  // damage-badge-legibility.test.ts). The local player's badge still
-  // exists and still degrades under badge-vs-badge collision (covered
-  // elsewhere in this file); it just isn't this trigger any more.
+test('the local player badge reads YOU however long their name and however close a neighbour', () => {
   const bodyBoxes: BodyBox[] = [makeBodyBox(0, 400, 300), makeBodyBox(1, 415, 300)];
   const candidates: BadgeCandidate[] = [makeCandidate(0, 400, 300, true), makeCandidate(1, 415, 300, false)];
   const names = ['LocalPlayerVeryLongName', 'B'];
   const placements = computeBadgePlacements(candidates, bodyBoxes, names, undefined, fakeMeasureText);
   const local = placements.find((p) => p.candidate.isLocalPlayer);
-  assert.ok(local, 'local player badge must always be placed, even here');
-  assert.equal(local!.label, 'LocalPlayerVeryLongName', 'a non-local body should no longer force a degrade');
+  assert.equal(local?.label, 'YOU');
+  assertNoOverlaps(placements, bodyBoxes);
 });
 
 // Regression coverage for the local-player pointer (the "which one is
@@ -320,4 +314,85 @@ test('a named fighter never shows the "slot number + percent" label; it drops fr
     }
   }
   assert.ok(sawPercentOnly, 'expected crowded badges to fall back to percent-only');
+});
+
+// Readability pass 2026-11-27: a CrazyGames review saw labels cut off at
+// the screen edges and sitting on top of each other.
+const VIEW = { width: 907, height: 510 };
+
+function assertInsideView(box: { left: number; right: number; top: number; bottom: number }, label: string) {
+  assert.ok(
+    box.left >= 0 && box.top >= 0 && box.right <= VIEW.width && box.bottom <= VIEW.height,
+    `"${label}" box ${JSON.stringify(box)} leaves the ${VIEW.width}x${VIEW.height} view`,
+  );
+}
+
+test('a packed crowd along every edge of the view: every badge stays inside it and none overlap', () => {
+  const candidates: BadgeCandidate[] = [];
+  const names: string[] = [];
+  for (let i = 0; i < 20; i++) {
+    // Five per edge, heads right at the edge, so the name, the stagger
+    // rows and the clamp all get pushed against it.
+    const edge = i % 4;
+    const t = 30 + Math.floor(i / 4) * 12;
+    const x = edge === 0 ? 2 : edge === 1 ? VIEW.width - 2 : t * 4;
+    const y = edge === 2 ? 2 : edge === 3 ? VIEW.height - 2 : t * 3;
+    candidates.push({ slot: i, isLocalPlayer: i === 0, headX: x, headY: y, percent: i * 7 });
+    names.push(`FocusPractice${i}`);
+  }
+  const placements = computeBadgePlacements(candidates, [], names, VIEW, fakeMeasureText);
+  assert.ok(placements.length >= 10, `expected most fighters to keep a badge, got ${placements.length}`);
+  for (const p of placements) assertInsideView(p.box, p.label);
+  assertNoOverlaps(placements, []);
+});
+
+test('a fighter whose head is off the view gets no badge', () => {
+  const candidates: BadgeCandidate[] = [
+    { slot: 0, isLocalPlayer: false, headX: -40, headY: 200, percent: 10 },
+    { slot: 1, isLocalPlayer: false, headX: 300, headY: 200, percent: 10 },
+  ];
+  const placements = computeBadgePlacements(candidates, [], undefined, VIEW, fakeMeasureText);
+  assert.deepEqual(
+    placements.map((p) => p.candidate.slot),
+    [1],
+  );
+});
+
+test('a long name is shortened with an ellipsis on the world badge', () => {
+  const candidates: BadgeCandidate[] = [{ slot: 0, isLocalPlayer: false, headX: 300, headY: 200, percent: 12 }];
+  const placements = computeBadgePlacements(candidates, [], ['FocusPractice'], VIEW, fakeMeasureText);
+  assert.equal(placements[0]?.label, 'FocusPr… 12%');
+});
+
+function followed(left: number, top: number, width = 60): FollowedBadge {
+  return { x: left + width / 2, y: top + 16, box: { left, right: left + width, top, bottom: top + 16 }, visible: true };
+}
+
+test('settleFollowedBadges pulls badges that drifted past an edge back inside the view', () => {
+  const badges = [followed(-12, 100), followed(VIEW.width - 30, 200), followed(400, -5), followed(400, VIEW.height - 4)];
+  settleFollowedBadges(badges, VIEW);
+  for (const b of badges) {
+    assert.equal(b.visible, true);
+    assertInsideView(b.box, 'badge');
+    assert.equal(b.x, (b.box.left + b.box.right) / 2, 'the draw anchor moves with its box');
+  }
+});
+
+test('settleFollowedBadges hides a badge that drifted onto an earlier one, and keeps the earlier one', () => {
+  const badges = [followed(300, 100), followed(330, 108), followed(500, 100)];
+  settleFollowedBadges(badges, VIEW);
+  assert.deepEqual(
+    badges.map((b) => b.visible),
+    [true, false, true],
+  );
+});
+
+test('settleFollowedBadges: a badge clamped off the edge onto a neighbour is hidden, not drawn over it', () => {
+  const badges = [followed(VIEW.width - 60, 100), followed(VIEW.width - 20, 102)];
+  settleFollowedBadges(badges, VIEW);
+  assert.equal(badges[1]!.visible, false);
+  const visible = badges.filter((b) => b.visible);
+  for (let i = 0; i < visible.length; i++) {
+    for (let j = i + 1; j < visible.length; j++) assert.equal(boxesOverlap(visible[i]!.box, visible[j]!.box), false);
+  }
 });

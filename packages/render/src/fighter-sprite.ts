@@ -67,9 +67,38 @@ function lerpColor(a: number, b: number, t: number): number {
   return (r << 16) | (g << 8) | bl;
 }
 
+/** Screen-pixel width of the dark rim drawn around every fighter. The
+ * silhouettes' own strokes are in world units, so at 20-fighter zoom they
+ * shrink to about a pixel and a fighter loses its edge against the stage
+ * and against the fighter beside it. This rim is sized in pixels instead,
+ * so it holds at any zoom. */
+export const FIGHTER_RIM_PX = 1.5;
+
+/** Directions the rim copies are offset in. Four is enough at this width:
+ * the corner gaps between them are under a pixel. */
+const RIM_OFFSETS: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
 export class FighterSprite {
   readonly root = new Container();
+  // Pose transform lives on `figure`, so the rim copies lean and bob with
+  // the body they outline.
+  private readonly figure = new Container();
   private readonly body = new Graphics();
+  // Copies of the body's own geometry (a shared GraphicsContext: nothing
+  // is rebuilt for them), tinted near-black and nudged out by
+  // FIGHTER_RIM_PX in each direction behind the body. Tint multiplies
+  // every colour in the geometry, so each copy draws as a solid dark
+  // silhouette: a pixel-sized outline without a filter.
+  private readonly rimCopies: Graphics[] = RIM_OFFSETS.map(() => {
+    const copy = new Graphics(this.body.context);
+    copy.tint = PALETTE.fighterOutline;
+    return copy;
+  });
   private readonly shieldGfx = new Graphics();
   private readonly bodyColor: number;
 
@@ -91,7 +120,9 @@ export class FighterSprite {
 
   constructor(playerIndex: number) {
     this.bodyColor = PALETTE.playerColors[playerIndex % PALETTE.playerColors.length] as number;
-    this.root.addChild(this.body);
+    for (const copy of this.rimCopies) this.figure.addChild(copy);
+    this.figure.addChild(this.body);
+    this.root.addChild(this.figure);
     this.root.addChild(this.shieldGfx);
     this.root.addChild(this.localMarker);
     this.root.addChild(this.edgeWarning);
@@ -127,9 +158,10 @@ export class FighterSprite {
           } satisfies PoseInput)
         : NEUTRAL_POSE;
 
-    this.body.rotation = pose.bodyLean;
-    this.body.scale.set(pose.bodyScaleX, pose.bodyScaleY);
-    this.body.position.set(0, -pose.bodyBob);
+    this.figure.rotation = pose.bodyLean;
+    this.figure.scale.set(pose.bodyScaleX, pose.bodyScaleY);
+    this.figure.position.set(0, -pose.bodyBob);
+    this.placeRim();
 
     const g = this.body;
     g.clear();
@@ -154,6 +186,18 @@ export class FighterSprite {
     this.edgeWarning.clear();
     const danger = state.isLocalPlayer ? (state.edgeDangerFrac ?? 0) : 0;
     if (danger > 0) this.drawEdgeWarning(danger);
+  }
+
+  /** Offsets the rim copies by FIGHTER_RIM_PX on screen. The caller sets
+   * root.scale to the camera zoom before draw(), so dividing by it turns
+   * pixels back into the world units the copies are positioned in. */
+  private placeRim(): void {
+    const zoom = Math.abs(this.root.scale.x) || 1;
+    const d = FIGHTER_RIM_PX / zoom;
+    for (let i = 0; i < this.rimCopies.length; i++) {
+      const [dx, dy] = RIM_OFFSETS[i] as readonly [number, number];
+      (this.rimCopies[i] as Graphics).position.set(dx * d, dy * d);
+    }
   }
 
   /** World-space head-top offset used by the screen-space slot-number

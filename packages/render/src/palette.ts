@@ -15,6 +15,9 @@ export const PALETTE = {
   gridLine: 0x14171b,
   hud: 0xe8e6df,
   hudDim: 0x8a8f98,
+  // Brand accent: marks the local player's own badge and pointer, and the
+  // Timed Brawl crown.
+  accent: 0xe8b23c,
   danger: 0xd7593f,
   fighters: [0xe8b23c, 0x4fa3c4] as const, // P1 amber, P2 cyan-blue -- kept for any code that still only knows two slots
   // 20-entry FFA player palette. Hues are spread roughly every ~18deg
