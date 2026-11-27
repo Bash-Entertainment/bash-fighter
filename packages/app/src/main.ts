@@ -386,7 +386,7 @@ installExitIntentPrompt({
   isTouchActive: () => touchCapable,
 });
 if (shouldShowLeavePrompt()) {
-  mountLeavePrompt(startScreen.root.querySelector('#primary-actions') ?? onlineButton, () => touchCapable);
+  mountLeavePrompt(startScreen.root.querySelector('#secondary-actions') ?? onlineButton, () => touchCapable);
 }
 
 // Move reference (repo issue #5): reachable from the start screen at any
@@ -406,7 +406,7 @@ feedbackButton.className = 'btn btn-plain';
 feedbackButton.id = 'feedback-btn';
 feedbackButton.textContent = 'Feedback';
 feedbackButton.addEventListener('click', () => feedbackPanel.show());
-(startScreen.root.querySelector('#primary-actions') ?? startScreen.root).appendChild(feedbackButton);
+(startScreen.root.querySelector('#secondary-actions') ?? startScreen.root).appendChild(feedbackButton);
 
 // In-match entry point lives in the same wrap-safe row as the mute and
 // (once shown) Controls/Moves buttons -- see the comment on
@@ -486,11 +486,10 @@ const settingsPanel = new SettingsPanel(
 );
 startScreen.updateBindings(currentBindings.p1, currentBindings.p2);
 
-// Attract mode: a silent, self-running bot match in its own framed
-// window on the start screen, directly below the pitch line (see
-// #attract-frame in start-screen.ts/style.css and attract-mode.ts). It
-// is not a background layer under the hero text, so nothing else on
-// the page needs special contrast handling for it.
+// Attract mode: a silent, self-running bot match filling the title
+// screen as a full-bleed background behind the hero text (see
+// #attract-frame in start-screen.ts/style.css and attract-mode.ts); a
+// scrim in style.css keeps the text over it legible.
 const attractRoot = startScreen.root.querySelector('#attract-root') as HTMLDivElement;
 const attractMode = new AttractMode(attractRoot, () => reducedMotionPref);
 let startScreenActive = true;
@@ -515,7 +514,7 @@ settingsButton.className = 'btn btn-plain';
 settingsButton.id = 'settings-btn';
 settingsButton.textContent = 'Controls';
 settingsButton.addEventListener('click', () => settingsPanel.show());
-(startScreen.root.querySelector('#primary-actions') ?? startScreen.root).appendChild(settingsButton);
+(startScreen.root.querySelector('#secondary-actions') ?? startScreen.root).appendChild(settingsButton);
 
 const inMatchSettingsButton = document.createElement('button');
 inMatchSettingsButton.id = 'in-match-settings-btn';
@@ -552,7 +551,7 @@ movesButton.className = 'btn btn-plain';
 movesButton.id = 'moves-btn';
 movesButton.textContent = 'Move reference';
 movesButton.addEventListener('click', () => movesPanel.show(startScreen.selectedCharacterId));
-(startScreen.root.querySelector('#primary-actions') ?? startScreen.root).appendChild(movesButton);
+(startScreen.root.querySelector('#secondary-actions') ?? startScreen.root).appendChild(movesButton);
 
 const inMatchMovesButton = document.createElement('button');
 inMatchMovesButton.id = 'in-match-moves-btn';

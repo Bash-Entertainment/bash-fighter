@@ -52,20 +52,17 @@ export class StartScreen {
   private readonly p2BindingsEl: HTMLPreElement;
   private readonly nameInput: HTMLInputElement;
 
+  /** Hide the full-bleed attract background when attract mode will not run
+   *  (narrow viewports skip it for performance), so a phone gets the plain
+   *  dark title instead of an empty scrim layer. */
+  setAttractVisible(visible: boolean): void {
+    const frame = this.root.querySelector<HTMLElement>('#attract-frame');
+    if (frame) frame.hidden = !visible;
+  }
+
   /** Swap the keyboard control list for touch wording. Called from main.ts,
    *  which is where touch capability is decided once at load: a phone player
    *  reading "A/D move / Space jump" has been told nothing at all. */
-  /** Hide the attract window and its caption when attract mode will not
-   *  run (narrow viewports skip it for performance). Otherwise a phone
-   *  visitor sees an empty bordered box captioned "A live match, played by
-   *  bots", which is both dead space and untrue. */
-  setAttractVisible(visible: boolean): void {
-    const frame = this.root.querySelector<HTMLElement>('#attract-frame');
-    const caption = this.root.querySelector<HTMLElement>('.attract-caption');
-    if (frame) frame.hidden = !visible;
-    if (caption) caption.hidden = !visible;
-  }
-
   useTouchControls(): void {
     const row = this.root.querySelector('.how-to-play-controls');
     if (!row) return;
@@ -81,10 +78,25 @@ export class StartScreen {
     this.root.id = 'start-screen';
     this.root.innerHTML = `
       <div class="hero">
-        <div class="wordmark">BASH FIGHTER</div>
-        <div class="subtitle">Twenty fighters, a different arena every match. Free and open source, plays in your browser.</div>
-        <div class="how-to-play">
-          <div class="how-to-play-goal">Knock other fighters off the arena. Your first matches are short timed brawls: you respawn, and the most knockouts wins. The in-match HUD always shows the current rules.</div>
+        <div id="attract-frame">
+          <div id="attract-root"></div>
+        </div>
+        <div class="hero-copy">
+          <h1 class="title-wordmark"><span>BASH</span> <span>FIGHTER</span></h1>
+          <p class="title-hook">Knock the other fighters off the arena. Up to 20 in a match, free in your browser.</p>
+          <div class="title-play-row">
+            <label class="visually-hidden" for="player-name-input">Your name</label>
+            <input
+              class="name-entry-input"
+              id="player-name-input"
+              type="text"
+              maxlength="${MAX_NAME_LENGTH}"
+              placeholder="Your name (optional)"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <div id="primary-actions"></div>
+          </div>
           <div class="how-to-play-controls">
             <span><b>A/D</b> move</span>
             <span><b>Space</b> jump</span>
@@ -92,34 +104,22 @@ export class StartScreen {
             <span><b>G</b> special</span>
             <span><b>Shift</b> shield</span>
           </div>
-          <div class="how-to-play-damage">Damage makes you fly farther, so a damaged fighter is one hit from being knocked out.</div>
+          <div id="secondary-actions"></div>
         </div>
-        <div id="attract-frame">
-          <div id="attract-root"></div>
-        </div>
-        <p class="attract-caption">A live match, played by bots</p>
-        <div class="name-entry-row">
-          <label class="name-entry-label" for="player-name-input">Your name</label>
-          <input
-            class="name-entry-input"
-            id="player-name-input"
-            type="text"
-            maxlength="${MAX_NAME_LENGTH}"
-            placeholder="Optional"
-            autocomplete="off"
-            spellcheck="false"
-          />
-        </div>
-        <div id="primary-actions"></div>
-        ${outboundLinksAllowed() ? '<button type="button" class="btn btn-plain" id="play-with-friend-btn">Play with a friend</button>' : ''}
       </div>
       <div class="below-fold">
+        <section class="how-to-play">
+          <h2 class="section-label">How to play</h2>
+          <p>Knock other fighters off the arena. Your first matches are short timed brawls: you respawn, and the most knockouts wins. The in-match HUD always shows the current rules.</p>
+          <p>Damage makes you fly farther, so a damaged fighter is one hit from being knocked out.</p>
+        </section>
         <section class="fighter-select">
           <h2 class="section-label">Choose your fighter</h2>
           <div id="roster-mount"></div>
           <p class="hint">The arena shrinks as fighters are eliminated. Empty slots are filled by bots so a match always starts.</p>
         </section>
         <button class="btn btn-secondary" id="watch-replay-btn">Watch a replay</button>
+        ${outboundLinksAllowed() ? '<button type="button" class="btn btn-plain" id="play-with-friend-btn">Play with a friend</button>' : ''}
         ${outboundLinksAllowed() ? '<a class="btn-plain" id="contribute-link" href="https://github.com/Bash-Entertainment/bash-fighter/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer">Contribute</a>' : ''}
         <details class="local-play">
           <summary>Play locally on one keyboard</summary>

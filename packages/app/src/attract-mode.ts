@@ -1,6 +1,6 @@
-// Attract mode: a silent, self-running bot match rendered in its own
-// framed window on the start screen (#attract-frame, see style.css), so
-// a first-time visitor sees the game moving before they decide to press
+// Attract mode: a silent, self-running bot match rendered as the start
+// screen's full-bleed background (#attract-frame, see style.css), so a
+// first-time visitor sees the game moving before they decide to press
 // Play. Reuses the exact same Match
 // (real Sim via createMatchSim, real Renderer) every real local/online
 // match uses -- see docs/LOCAL_CROWD_TESTING.md and ?crowd20=1 for the
@@ -11,12 +11,11 @@ import { Match } from './match.ts';
 import { ALL_CHARACTERS, ALL_ARENAS } from '@bash-fighter/content';
 import { AudioManager } from '@bash-fighter/audio';
 
-// A small roster, not the full 20-fighter crowd: this plays inside a
-// bounded ~640x220 frame on the start screen (see #attract-frame in
-// style.css), and 20 fighters at that scale read as specks, not as
-// "the game is moving" -- the whole point of attract mode. Fewer,
-// bigger, readable fighters communicate the game far better than a
-// technically-accurate crowd size.
+// A small roster, not the full 20-fighter crowd: the demo camera frames
+// tightly on the fighters, and 20 of them would pull it out until they
+// read as specks, not as "the game is moving" -- the whole point of
+// attract mode. Fewer, bigger, readable fighters communicate the game far
+// better than a technically-accurate crowd size.
 const NUM_FIGHTERS = 8;
 
 /** Below this CSS width, attract mode never runs (a static frame is

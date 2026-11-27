@@ -17,9 +17,8 @@ test('main.ts calls it for touch-capable devices only', () => {
   assert.match(main, /if \(touchCapable\) startScreen\.useTouchControls\(\);/);
 });
 
-test('the attract window and its caption are hidden when attract mode cannot run', () => {
+test('the attract background is hidden when attract mode cannot run', () => {
   assert.match(startScreen, /setAttractVisible\(visible: boolean\): void \{/);
   assert.match(startScreen, /#attract-frame/);
-  assert.match(startScreen, /\.attract-caption/);
   assert.match(main, /startScreen\.setAttractVisible\(supported\);/);
 });

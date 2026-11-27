@@ -97,47 +97,174 @@ html, body {
   padding: 0;
 }
 
-/* Attract mode (packages/app/src/attract-mode.ts): a silent, self-
-   running bot match, framed as its own bounded "window" directly below
-   the pitch line -- not a background layer under the hero text. It
-   never sits underneath anything a visitor needs to read, so nothing
-   else on the start screen needs a special backing colour for it. */
-#attract-frame {
-  width: 100%;
-  max-width: 640px;
-  /* Shrinks on short viewports so it never pushes the roster out of
-     reach; see the .screen overflow note above. */
-  height: clamp(130px, 24vh, 220px);
-  margin: 4px 0 2px;
-  border: 1px solid var(--ink-dim);
-  background: var(--bg);
-  overflow: hidden;
+/* Title screen (start-screen.ts): the first viewport is one screen with
+   no scrolling at any size down to 800x450 / 844x400 / 390x844. The live
+   attract-mode bot match (attract-mode.ts) fills it as a full-bleed
+   background; the wordmark, hook, name + Play online and key chips sit
+   over it bottom-left behind a scrim. Everything else is in .below-fold. */
+.hero {
+  flex: 0 0 auto;
   position: relative;
+  width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: clamp(56px, 10vh, 96px) clamp(20px, 5vw, 80px) clamp(20px, 6vh, 64px);
+  isolation: isolate;
 }
 
-#attract-root {
+#attract-frame {
   position: absolute;
   inset: 0;
+  z-index: -1;
+  overflow: hidden;
   pointer-events: none;
 }
 
-.attract-caption {
-  margin: 0 0 18px;
-  color: var(--ink-dim);
-  font-size: 0.85rem;
+#attract-frame[hidden] {
+  display: none;
 }
 
-/* Title, pitch and the primary action ("Play online") always fit above
-   the fold, at any viewport down to 720px tall -- this is the one thing
-   a first-time visitor must see without scrolling. Character select and
-   everything else lives in .below-fold, which scrolls independently. */
-.hero {
-  flex: 0 0 auto;
+/* The demo camera frames the fighters at the centre of its canvas, so the
+   canvas sits top-right, clear of the copy, and its left and bottom edges
+   fade out instead of ending on a seam. */
+#attract-root {
+  position: absolute;
+  inset: 0 0 18% 28%;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 30%), linear-gradient(to top, transparent 0%, #000 25%);
+  mask-image: linear-gradient(to right, transparent 0%, #000 30%), linear-gradient(to top, transparent 0%, #000 25%);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+/* Scrim: --bg where the text sits (bottom, left) fading to clear, so the
+   copy stays legible over any arena while the fight stays visible
+   top-right. The bottom edge reaches solid --bg so the hero runs into
+   .below-fold without a seam. */
+#attract-frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to top, var(--bg) 0%, rgba(11, 13, 16, 0.85) 22%, rgba(11, 13, 16, 0) 60%),
+    linear-gradient(to right, rgba(11, 13, 16, 0.85) 0%, rgba(11, 13, 16, 0.4) 35%, rgba(11, 13, 16, 0) 60%);
+}
+
+/* margin-top:auto (not justify-content:flex-end) anchors the copy to the
+   bottom without letting taller content, such as the leave prompt,
+   overflow off the top of the screen where it could not be scrolled to. */
+.hero-copy {
+  margin-top: auto;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  padding: clamp(20px, 5vh, 48px) 24px clamp(16px, 3vh, 28px);
+  align-items: flex-start;
+  gap: 16px;
+  max-width: min(100%, 760px);
+}
+
+.title-wordmark {
+  margin: 0;
+  font-size: clamp(48px, min(9vw, 17vh), 128px);
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: -0.035em;
+  color: var(--ink);
+}
+
+.title-wordmark span {
+  display: block;
+}
+
+.title-hook {
+  margin: 0 0 8px;
+  text-shadow: 0 0 10px var(--bg);
+  font-size: 18px;
+  line-height: 1.4;
+  color: var(--ink);
+  max-width: 36em;
+  text-wrap: balance;
+}
+
+.title-play-row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.title-play-row .name-entry-input {
+  width: 240px;
+  min-height: 56px;
+  padding: 0 14px;
+  font-size: 18px;
+  background: rgba(11, 13, 16, 0.8);
+  border-color: var(--ink-dim);
+  border-radius: 0;
+}
+
+#primary-actions {
+  display: flex;
+}
+
+#primary-actions .btn-primary {
+  min-height: 56px;
+  padding: 0 44px;
+  font-size: 18px;
+  letter-spacing: 0.02em;
+}
+
+.how-to-play-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 13px;
+  color: var(--ink-dim);
+  text-wrap: balance;
+}
+
+.how-to-play-controls b {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 2px 6px;
+  border: 1px solid rgba(138, 143, 152, 0.5);
+  border-radius: 3px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+#secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 14px;
+  margin-left: -6px;
+}
+
+.hero-copy .leave-prompt {
+  margin: 0;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* The long-form rules, below the fold above "Choose your fighter". */
+.how-to-play {
+  width: min(760px, 92vw);
+  padding-top: 28px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.how-to-play p {
+  margin: 0 0 8px;
+  text-wrap: pretty;
 }
 
 .below-fold {
@@ -172,43 +299,6 @@ html, body {
   text-align: center;
 }
 
-/* Always-visible how-to-play summary (2026-09-19): a real player
-   finished a full match and said they didn't understand how to win or
-   what to do. This sits above the fold, visible without opening the
-   Controls (C) or Moves (M) panels -- a short summary, not a
-   replacement for either. */
-.how-to-play {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  max-width: 560px;
-  text-align: center;
-  /* Balance the centred lines: unbalanced wrapping left a one-word
-     last line under a full one, which read as ragged. */
-  text-wrap: balance;
-}
-
-.how-to-play-goal,
-.how-to-play-damage {
-  font-size: 13px;
-  color: var(--ink-dim);
-}
-
-.how-to-play-controls {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 14px;
-  font-size: 13px;
-  color: var(--ink);
-}
-
-.how-to-play-controls b {
-  color: var(--accent);
-  font-weight: 700;
-}
-
 .wordmark {
   font-size: 56px;
   font-weight: 800;
@@ -219,20 +309,8 @@ html, body {
 }
 
 /* Name entry, on the start screen: austere, one line, no forced input --
-   the field is a plain text box with a placeholder that shows what
-   joining looks like if you skip it (the slot label), not a validation
-   error waiting to fire. */
-.name-entry-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.name-entry-label {
-  font-size: 13px;
-  color: var(--ink-dim);
-}
-
+   a plain text box with a placeholder, not a validation error waiting to
+   fire. */
 .name-entry-input {
   background: var(--panel);
   border: 1px solid #262a30;
@@ -1887,9 +1965,47 @@ body.end-screen-open #net-mode-line {
     flex: 1 1 auto;
   }
 
+  /* Portrait phones: attract mode does not run below 700px (see
+     attract-mode.ts), so the title is a centred column on a plain dark
+     field with a soft light behind the wordmark. */
   .hero {
-    padding: 16px 16px 12px;
-    gap: 12px;
+    align-items: center;
+    padding: 16px 20px 24px;
+    text-align: center;
+    background: radial-gradient(ellipse 80% 45% at 50% 42%, rgba(232, 230, 223, 0.06), transparent 70%);
+  }
+
+  .hero-copy {
+    margin: auto 0;
+    align-items: center;
+    width: 100%;
+  }
+
+  .title-wordmark {
+    font-size: min(20vw, 96px);
+  }
+
+  .title-play-row {
+    flex-direction: column;
+    width: 100%;
+    max-width: 360px;
+  }
+
+  .title-play-row .name-entry-input {
+    width: 100%;
+  }
+
+  #primary-actions .btn-primary {
+    flex: 1;
+  }
+
+  .how-to-play-controls,
+  #secondary-actions {
+    justify-content: center;
+  }
+
+  #secondary-actions {
+    margin-left: 0;
   }
 
   .wordmark {
@@ -2644,8 +2760,6 @@ body.end-screen-open #net-mode-line {
 }
 .leave-prompt-send:disabled { opacity: 0.4; cursor: default; }
 
-/* A returning player already saw the attract match; keep Play and the leave prompt above the fold. */
-body:has(.leave-prompt) #attract-frame, body:has(.leave-prompt) .attract-caption { display: none; }
 
 /* One-tap match rating on the end screens. */
 .match-rating { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 14px; font-size: 13px; color: var(--ink-dim); }
