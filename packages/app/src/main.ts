@@ -37,6 +37,7 @@ import { AttractMode } from './attract-mode.ts';
 import { generateJoinCode, buildShareLink } from './join-link.ts';
 import { outboundLinksAllowed } from './portal.ts';
 import { postShareClick, shareMessage, shareResult, withShareRef } from './share-result.ts';
+import { fullyOnScreen, postTitleEvent, titleBeaconBody } from './title-beacon.ts';
 import { sanitiseJoinCode } from '@bash-fighter/net';
 import {
   isTouchCapable,
@@ -567,7 +568,27 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+// Title beacon (title-beacon.ts): measured a second after load so fonts
+// and the attract frame have settled; skipped if the visitor already left
+// the title (join links, a very fast click).
+let titlePlayVisible: boolean | null = null;
+let titlePlaySent = false;
+window.setTimeout(() => {
+  if (titlePlayVisible !== null || startScreen.root.classList.contains('hidden')) return;
+  titlePlayVisible = fullyOnScreen(onlineButton.getBoundingClientRect(), window.innerHeight);
+  postTitleEvent(titleBeaconBody('view', titlePlayVisible, touchCapable));
+}, 1000);
+
 onlineButton.addEventListener('click', () => {
+  if (titlePlayVisible === null) {
+    // Clicked before the measurement ran: it was on screen.
+    titlePlayVisible = true;
+    postTitleEvent(titleBeaconBody('view', true, touchCapable));
+  }
+  if (!titlePlaySent) {
+    titlePlaySent = true;
+    postTitleEvent(titleBeaconBody('play', titlePlayVisible, touchCapable));
+  }
   void beginOnlineMatch();
 });
 

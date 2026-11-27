@@ -21,7 +21,7 @@ import {
   type SessionReportMessage,
 } from '@bash-fighter/net/src/protocol.ts';
 import { logSessionEnd } from './session-telemetry.ts';
-import { createStatsRecorder } from './stats-store.ts';
+import { createStatsRecorder, parseTitleBeacon } from './stats-store.ts';
 import { RoomManager, DEFAULT_CAPACITY, DEFAULT_MINIMUM } from './rooms.ts';
 import { tickMetricsSnapshot } from './tick-metrics.ts';
 import { modeDisplayName } from './mode-rotation.ts';
@@ -411,6 +411,28 @@ function handleShareClick(req: http.IncomingMessage, res: http.ServerResponse): 
   });
 }
 
+/** Title-screen view/play beacon; see stats-store.ts parseTitleBeacon. */
+function handleTitleBeacon(req: http.IncomingMessage, res: http.ServerResponse): void {
+  if (req.method !== 'POST') {
+    res.writeHead(405).end();
+    return;
+  }
+  let body = '';
+  req.on('data', (chunk: Buffer) => {
+    if (body.length < 512) body += chunk.toString('utf8');
+  });
+  req.on('end', () => {
+    let parsed = null;
+    try {
+      parsed = parseTitleBeacon(JSON.parse(body));
+    } catch {
+      parsed = null;
+    }
+    if (parsed) statsRecorder.recordTitle(parsed);
+    res.writeHead(204).end();
+  });
+}
+
 const server = http.createServer((req, res) => {
   if (req.url === '/api/feedback') {
     allowPortalOrigin(req, res);
@@ -420,6 +442,11 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/share') {
     allowPortalOrigin(req, res);
     handleShareClick(req, res);
+    return;
+  }
+  if (req.url === '/api/title') {
+    allowPortalOrigin(req, res);
+    handleTitleBeacon(req, res);
     return;
   }
   // Activity numbers (how many matches, how many players) are deliberately

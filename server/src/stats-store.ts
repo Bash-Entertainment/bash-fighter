@@ -175,6 +175,41 @@ export interface StatsRecorder {
   recordMatchSummary(summary: MatchSummary): void;
   recordSessionEnd(conn: SessionEndConnLike, match: Match): void;
   recordShare(qa: boolean): void;
+  recordTitle(event: TitleBeaconEvent): void;
+}
+
+/** One title-screen beacon from the client (packages/app/src/title-beacon.ts),
+ *  already sanitised by parseTitleBeacon. */
+export interface TitleBeaconEvent {
+  event: 'view' | 'play';
+  qa: boolean;
+  w: number;
+  h: number;
+  touch: boolean;
+  playVisible: boolean;
+  source: string | null;
+}
+
+export type StoredTitleRecord = { type: 'title'; ts: string } & TitleBeaconEvent;
+
+/** Untrusted body -> TitleBeaconEvent, or null when it is not one. */
+export function parseTitleBeacon(raw: unknown): TitleBeaconEvent | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const b = raw as Record<string, unknown>;
+  if (b.event !== 'view' && b.event !== 'play') return null;
+  const dim = (v: unknown): number =>
+    typeof v === 'number' && Number.isFinite(v) ? Math.min(10000, Math.max(0, Math.round(v))) : 0;
+  const source =
+    typeof b.source === 'string' && /^[a-z0-9.-]{1,64}$/.test(b.source) ? b.source : null;
+  return {
+    event: b.event,
+    qa: b.qa === true,
+    w: dim(b.w),
+    h: dim(b.h),
+    touch: b.touch === true,
+    playVisible: b.playVisible === true,
+    source,
+  };
 }
 
 export interface StoredShareRecord {
@@ -208,6 +243,10 @@ export function createStatsRecorder(options: StatsRecorderOptions = {}): StatsRe
     },
     recordShare(qa: boolean): void {
       const record: StoredShareRecord = { type: 'share', ts: new Date(now()).toISOString(), qa };
+      appendStatsLine(logPath, record);
+    },
+    recordTitle(event: TitleBeaconEvent): void {
+      const record: StoredTitleRecord = { type: 'title', ts: new Date(now()).toISOString(), ...event };
       appendStatsLine(logPath, record);
     },
   };

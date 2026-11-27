@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createStatsRecorder, appendStatsLine, defaultStatsLogPath } from '../src/stats-store.ts';
+import { createStatsRecorder, appendStatsLine, defaultStatsLogPath, parseTitleBeacon } from '../src/stats-store.ts';
 import { Match, type MatchEvents, type MatchSummary } from '../src/match.ts';
 import type { SessionEndConnLike } from '../src/session-telemetry.ts';
 
@@ -526,6 +526,28 @@ test('recordShare: appends one share record carrying the qa flag', () => {
       { type: 'share', ts: new Date(1_700_000_000_000).toISOString(), qa: false },
       { type: 'share', ts: new Date(1_700_000_000_000).toISOString(), qa: true },
     ]);
+  } finally {
+    cleanup();
+  }
+});
+
+test('parseTitleBeacon: keeps a valid beacon, clamps sizes, drops junk', () => {
+  assert.deepEqual(
+    parseTitleBeacon({ event: 'view', qa: false, w: 907.4, h: 99999, touch: true, playVisible: false, source: 'ref.itch' }),
+    { event: 'view', qa: false, w: 907, h: 10000, touch: true, playVisible: false, source: 'ref.itch' },
+  );
+  assert.equal(parseTitleBeacon({ event: 'click' }), null);
+  assert.equal(parseTitleBeacon('view'), null);
+  assert.equal(parseTitleBeacon({ event: 'play', source: '<script>' })?.source, null);
+});
+
+test('recordTitle: appends one title record', () => {
+  const { logPath, cleanup } = scratchDir();
+  try {
+    const recorder = createStatsRecorder({ logPath, now: () => 1_700_000_000_000 });
+    const event = { event: 'play' as const, qa: true, w: 390, h: 844, touch: true, playVisible: true, source: null };
+    recorder.recordTitle(event);
+    assert.deepEqual(readLines(logPath), [{ type: 'title', ts: new Date(1_700_000_000_000).toISOString(), ...event }]);
   } finally {
     cleanup();
   }
