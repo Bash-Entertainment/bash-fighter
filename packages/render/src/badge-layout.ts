@@ -512,7 +512,7 @@ export function computeLocalDamageReadout(
  * visible, and so the local player's YOU is the one label that stands
  * out. */
 export const BADGE_FONT_SIZE = 12;
-export const LOCAL_BADGE_FONT_SIZE = 15;
+export const LOCAL_BADGE_FONT_SIZE = 16;
 export const LOCAL_BADGE_LABEL = 'YOU';
 /** Longest name a world badge shows before it is cut with an ellipsis.
  * The full name stays in the sidebar; in the world a long name is width

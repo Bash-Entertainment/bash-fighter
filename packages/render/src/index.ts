@@ -318,6 +318,10 @@ function clampHeadOffsetPx(px: number): number {
   return Math.min(BADGE_OFFSET_MAX_PX, Math.max(BADGE_OFFSET_MIN_PX, px));
 }
 
+// Clear space between the top of the local fighter's drawn silhouette and
+// its YOU badge, so the badge never sits on the fighter it names.
+const LOCAL_BADGE_HEAD_GAP_PX = 3;
+
 const PLAYER_COLOR_COUNT = PALETTE.playerColors.length;
 
 // How far inside the current blast-zone boundary the local player's own
@@ -436,6 +440,8 @@ export class Renderer {
   // damage was 0%.
   private readonly badgeLeaders = new Graphics();
   private readonly localPointer = new Graphics();
+  // Dark plate behind the YOU badge, so it reads over any fighter colour.
+  private readonly localBadgePlate = new Graphics();
   private readonly crownMarker = new Graphics();
   private crownSlot: number | null = null;
   // Fixed screen-space corner readout of the local player's own damage --
@@ -658,6 +664,7 @@ export class Renderer {
     this.app.stage.addChild(this.debugText);
     this.app.stage.addChild(this.badgeContainer);
     this.badgeContainer.addChild(this.badgeLeaders);
+    this.badgeContainer.addChild(this.localBadgePlate);
     this.badgeContainer.addChild(this.localPointer);
     this.badgeContainer.addChild(this.crownMarker);
     this.localDamageText.anchor.set(0, 1);
@@ -901,6 +908,7 @@ export class Renderer {
     // drift into each other or past the edge; settle that every frame.
     settleFollowedBadges(followedPlacements, this.viewSize);
     this.badgeLeaders.clear();
+    this.localBadgePlate.clear();
     let textIndex = 0;
     for (const f of followedPlacements) {
       if (!f.visible) continue;
@@ -910,17 +918,23 @@ export class Renderer {
       text.text = p.label;
       text.position.set(f.x, f.y);
       text.visible = true;
-      // The local player's YOU is larger and amber, the one label a
-      // player can find at a glance; everyone else's is smaller so twenty
-      // of them do not bury the fighters. Damage at kill percent turns
-      // danger red, a second channel on top of the numeral itself.
+      // The local player's YOU is the one bright label: larger, amber, on
+      // a dark plate. Everyone else's is smaller and dim so twenty of them
+      // recede behind the fighters. Damage at kill percent turns danger
+      // red, a second channel on top of the numeral itself.
       const isLocal = p.candidate.isLocalPlayer;
       text.style.fontSize = badgeFontSize(isLocal);
       text.style.fill = isLocal
         ? PALETTE.accent
         : p.hasPercent && (p.percent ?? 0) >= 100
           ? PALETTE.danger
-          : PALETTE.hud;
+          : PALETTE.hudDim;
+      if (isLocal) {
+        const b = f.box;
+        this.localBadgePlate
+          .roundRect(b.left, b.top, b.right - b.left, b.bottom - b.top, 2)
+          .fill({ color: PALETTE.background, alpha: 0.85 });
+      }
       this.drawBadgeLeader(f.x, f.y, curHeadBySlot.get(p.candidate.slot));
     }
     for (let i = textIndex; i < this.badgeTexts.length; i++) {
@@ -1311,11 +1325,12 @@ export class Renderer {
         isLocalPlayer,
         edgeDangerFrac: isLocalPlayer ? computeEdgeDangerFrac(f.x, f.y, stageForDraw) : undefined,
       });
+      const headY = screen.y - clampHeadOffsetPx(FighterSprite.HEAD_TOP_OFFSET_WORLD * cam.scale);
       badgeCandidates.push({
         slot: i,
         isLocalPlayer,
         headX: screen.x,
-        headY: screen.y - clampHeadOffsetPx(FighterSprite.HEAD_TOP_OFFSET_WORLD * cam.scale),
+        headY: isLocalPlayer ? Math.min(headY, sprite.silhouetteTopY() - LOCAL_BADGE_HEAD_GAP_PX) : headY,
         // Presentation only: percent already lives on the RenderFighterState
         // snapshot the sim handed this frame -- nothing here reads or
         // derives sim state, it only decides whether/how to draw a number

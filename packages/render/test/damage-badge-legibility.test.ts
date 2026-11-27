@@ -225,10 +225,12 @@ test('badge text (light fill + dark stroke) contrasts against the lightest and d
   const bodyColors = [...PALETTE.playerColors].sort((a, b) => luminance(a) - luminance(b));
   const darkest = bodyColors[0]!;
   const lightest = bodyColors[bodyColors.length - 1]!;
-  const fillLum = luminance(PALETTE.hud);
   const strokeLum = luminance(PALETTE.fighterOutline);
   const MIN_CONTRAST = 60; // out of 255, comfortably perceptible
-  for (const body of [darkest, lightest]) {
+  // Other fighters' badges are dim; the local YOU badge is amber.
+  const pairs = [PALETTE.hudDim, PALETTE.accent].flatMap((fill) => [darkest, lightest].map((body) => ({ fill, body })));
+  for (const { fill, body } of pairs) {
+    const fillLum = luminance(fill);
     const bodyLum = luminance(body);
     const fillContrast = Math.abs(fillLum - bodyLum);
     const strokeContrast = Math.abs(strokeLum - bodyLum);

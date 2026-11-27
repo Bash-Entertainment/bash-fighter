@@ -72,7 +72,7 @@ function lerpColor(a: number, b: number, t: number): number {
  * shrink to about a pixel and a fighter loses its edge against the stage
  * and against the fighter beside it. This rim is sized in pixels instead,
  * so it holds at any zoom. */
-export const FIGHTER_RIM_PX = 1.5;
+export const FIGHTER_RIM_PX = 2.5;
 
 /** Directions the rim copies are offset in. Four is enough at this width:
  * the corner gaps between them are under a pixel. */
@@ -198,6 +198,14 @@ export class FighterSprite {
       const [dx, dy] = RIM_OFFSETS[i] as readonly [number, number];
       (this.rimCopies[i] as Graphics).position.set(dx * d, dy * d);
     }
+  }
+
+  /** Screen-space y of the top of the drawn silhouette, pose included.
+   * Characters are not all the placeholder's height, so a label meant to
+   * sit clear above the head cannot rely on HEAD_TOP_OFFSET_WORLD alone.
+   * Valid after draw(). */
+  silhouetteTopY(): number {
+    return this.figure.getBounds().minY;
   }
 
   /** World-space head-top offset used by the screen-space slot-number
