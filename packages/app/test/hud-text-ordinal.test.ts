@@ -54,3 +54,19 @@ test('koStandingLineText formats the rank with ordinal, teens included', () => {
   assert.equal(koStandingLineText(0, 12, 20, 3), '0 KOs · 12th of 20 · leader has 3 KOs');
   assert.equal(koStandingLineText(0, 13, 20, 3), '0 KOs · 13th of 20 · leader has 3 KOs');
 });
+
+test('big-match sidebar keeps the leaders plus you; BR leaders are survivors with least damage', async () => {
+  const { hudFocusSlots, hudFocusTop, battleRoyaleRank } = await import('../src/ui/hud-text.ts');
+  assert.equal(hudFocusTop(8, 1280), null);
+  assert.equal(hudFocusTop(20, 1280), 5);
+  assert.equal(hudFocusTop(8, 390), 3);
+  assert.equal(hudFocusTop(4, 390), null);
+  assert.deepEqual([...hudFocusSlots([3, 1, 4, 0, 5, 9, 2], 2)].sort(), [0, 1, 2, 3, 4, 5]);
+  const rank = battleRoyaleRank([
+    { eliminated: true, stocks: 0, percent: 0 },
+    { eliminated: false, stocks: 1, percent: 80 },
+    { eliminated: false, stocks: 1, percent: 20 },
+    { eliminated: false, stocks: 2, percent: 90 },
+  ]);
+  assert.deepEqual(rank, [3, 2, 1, 0]);
+});

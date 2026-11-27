@@ -1317,6 +1317,14 @@ html, body {
      so amber stays reserved as the design language requires. */
   color: var(--ink);
   letter-spacing: 0.02em;
+  max-height: 8em;
+  overflow: hidden;
+  transition: opacity 0.6s ease, max-height 0.6s ease 0.6s;
+}
+
+.match-status-mode.faded {
+  opacity: 0;
+  max-height: 0;
 }
 
 .match-status-clock {

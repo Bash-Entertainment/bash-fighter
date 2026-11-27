@@ -158,3 +158,33 @@ export function koStandingLineText(
     crownHolder === null ? '' : crownHolder === localIndex ? ' \u00b7 you hold the crown' : ` \u00b7 crown on #${crownHolder + 1}`;
   return `${ownKo} KO${ownKo === 1 ? '' : 's'} \u00b7 ${ordinal(ownRank)} of ${totalFighters}${leaderPart}${crownPart}`;
 }
+
+/** Above this many fighters the sidebar shows only the leaders plus you. */
+export const HUD_FOCUS_THRESHOLD = 8;
+
+/** How many leaders the HUD lists before "you", or null to list everyone.
+ *  Phones get fewer: eight full-size cards covered half a 390px screen. */
+export function hudFocusTop(count: number, viewportWidth: number): number | null {
+  if (viewportWidth < 600) return count > 4 ? 3 : null;
+  return count > HUD_FOCUS_THRESHOLD ? 5 : null;
+}
+
+/** Slots the sidebar shows: the first `top` of a best-to-worst order,
+ *  plus the local player wherever they rank. */
+export function hudFocusSlots(rankedSlots: readonly number[], localIndex: number, top = 5): Set<number> {
+  const shown = new Set(rankedSlots.slice(0, top));
+  if (localIndex >= 0) shown.add(localIndex);
+  return shown;
+}
+
+/** Battle Royale has no score mid-match, so "leaders" are the fighters
+ *  still standing, most stocks first, least damage next. */
+export function battleRoyaleRank(fighters: readonly { eliminated: boolean; stocks: number; percent: number }[]): number[] {
+  return fighters
+    .map((f, slot) => ({ ...f, slot }))
+    .sort((a, b) => Number(a.eliminated) - Number(b.eliminated) || b.stocks - a.stocks || a.percent - b.percent || a.slot - b.slot)
+    .map((f) => f.slot);
+}
+
+/** The objective paragraph is read once; after this it fades out. */
+export const OBJECTIVE_LINE_VISIBLE_MS = 8000;

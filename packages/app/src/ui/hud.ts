@@ -7,8 +7,8 @@
 // from spectator/types.ts's MatchAdapter once wired up.
 import { fixed as fx, FighterStateId, crownHolderOf, type FighterSnapshot } from '@bash-fighter/sim';
 import { PALETTE } from '@bash-fighter/render';
-import { survivorsLineText, objectiveLineText, koStandingLineText, eliminationFeedLine, chipDisplayName, sortFeedEntriesNewestFirst, type EliminationFeedEntry } from './hud-text.ts';
-import { koStandingInfo, type TimedBrawlScore } from '../timed-brawl.ts';
+import { survivorsLineText, objectiveLineText, koStandingLineText, eliminationFeedLine, chipDisplayName, sortFeedEntriesNewestFirst, hudFocusSlots, hudFocusTop, battleRoyaleRank, OBJECTIVE_LINE_VISIBLE_MS, type EliminationFeedEntry } from './hud-text.ts';
+import { koStandingInfo, standingsFromScores, type TimedBrawlScore } from '../timed-brawl.ts';
 
 export interface HudFighterExtra {
   eliminated: boolean;
@@ -51,6 +51,7 @@ export class Hud {
   private readonly clockLine: HTMLDivElement;
   private readonly matchStatus: HTMLDivElement;
   private readonly matchModeLine: HTMLDivElement;
+  private objectiveShownAt: number | null = null;
   private readonly matchClockLine: HTMLDivElement;
   private readonly koStandingLine: HTMLDivElement;
   private readonly eliminationFeed: HTMLDivElement;
@@ -104,6 +105,9 @@ export class Hud {
   }
 
   show(): void {
+    // main.ts calls show() every frame, so only a hidden-to-shown change
+    // restarts the objective line's timer.
+    if (this.root.classList.contains('hidden')) this.objectiveShownAt = null;
     this.root.classList.remove('hidden');
     // New match: forget the previous match's elimination feed so a
     // rematch starts clean instead of showing stale "X eliminated"
@@ -211,9 +215,28 @@ export class Hud {
         stocksEl.textContent = '●'.repeat(Math.max(0, s.stocks)) || '—';
       }
     }
+    this.focusCards(snapshots, extras, localIndex, Boolean(timedBrawl));
     this.survivorsLine.textContent = survivorsLineText(survivors, snapshots.length, Boolean(timedBrawl));
     this.survivorsLine.style.display = this.survivorsLine.textContent ? '' : 'none';
     this.updateMatchStatus(snapshots, extras, names, matchInfo, localIndex);
+  }
+
+  /** In big matches, show only the leaders plus you, leaders first. */
+  private focusCards(snapshots: readonly FighterSnapshot[], extras: readonly HudFighterExtra[] | undefined, localIndex: number, timedBrawl: boolean): void {
+    const top = hudFocusTop(snapshots.length, window.innerWidth);
+    if (top === null) {
+      for (const card of this.cards) card.style.order = '';
+      return;
+    }
+    const ranked = timedBrawl
+      ? standingsFromScores(snapshots.map((s, i) => ({ slot: i, koCount: s.koCount, deathCount: s.deathCount }))).map((r) => r.slot)
+      : battleRoyaleRank(snapshots.map((s, i) => ({ eliminated: extras?.[i]?.eliminated ?? s.eliminated, stocks: s.stocks, percent: fx.toFloat(s.percent) })));
+    const shown = hudFocusSlots(ranked, localIndex, top);
+    ranked.forEach((slot, rank) => {
+      const card = this.cards[slot] as HTMLDivElement;
+      card.style.order = String(rank);
+      card.style.display = shown.has(slot) ? '' : 'none';
+    });
   }
 
   /** Renders the mode/win-condition/clock line plus a capped elimination
@@ -234,6 +257,8 @@ export class Hud {
     }
     this.matchStatus.style.display = '';
     this.matchModeLine.textContent = objectiveLineText(matchInfo.winCondition, localIndex < 0);
+    this.objectiveShownAt ??= performance.now();
+    this.matchModeLine.classList.toggle('faded', performance.now() - this.objectiveShownAt > OBJECTIVE_LINE_VISIBLE_MS);
     this.matchClockLine.textContent = matchInfo.clockText;
     // Timed Brawl already gets the big amber .hud-clock-line at the top
     // of the HUD, so showing the same countdown again here printed the

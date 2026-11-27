@@ -8,7 +8,7 @@
 import { PALETTE } from '@bash-fighter/render';
 import { AutoContinue } from './auto-continue.ts';
 import { MatchRatingRow } from './match-rating-row.ts';
-import { buildStandings, placementOf, tiedHeadline, type TimedBrawlScore } from '../timed-brawl.ts';
+import { buildStandings, focusStandings, ownResultHeadline, sharedFirstLine, tiedHeadline, type TimedBrawlScore } from '../timed-brawl.ts';
 import { recordKos, nextGoalLine, standingScoreLabel, ZERO_KO_TIP } from '../personal-best.ts';
 import { shareResult } from '../share-result.ts';
 
@@ -125,23 +125,23 @@ export class TimedBrawlEndScreen {
     this.headline.style.color = '';
     this.headline.style.borderBottomColor = '';
     this.winnerSwatch.style.display = 'none';
-    if (winnerSlot === null) {
-      // Naming the tied leaders matters: playing this at phone width I
-      // finished 20th of 20 with no knockouts and the headline still
-      // read "tied for first", which at a glance says I tied for first.
-      // The subtitle below corrects it, but the biggest text on the
-      // screen should never be the wrong answer to "how did I do?".
-      this.headline.textContent = tiedHeadline(standings, localSlot, nameFor);
-    } else {
-      const colour = PLAYER_HEX[winnerSlot % PLAYER_HEX.length] as string;
-      const label = nameFor ? nameFor(winnerSlot) : `#${winnerSlot + 1}`;
-      this.headline.textContent = won ? 'You win' : `${label} won`;
-      this.winnerSwatch.style.background = colour;
-      this.winnerSwatch.style.display = 'inline-block';
+    const ownHeadline = ownResultHeadline(standings, winnerSlot, localSlot);
+    const winnerLine = winnerSlot === null
+      ? tiedHeadline(standings, localSlot, nameFor)
+      : `${nameFor ? nameFor(winnerSlot) : `#${winnerSlot + 1}`} won`;
+    if (winnerSlot !== null) {
+      this.winnerSwatch.style.background = PLAYER_HEX[winnerSlot % PLAYER_HEX.length] as string;
+      this.winnerSwatch.style.display = won || ownHeadline === null ? 'inline-block' : 'none';
     }
-    const myPlacement = localSlot !== undefined && localSlot !== null && localSlot >= 0 ? placementOf(standings, localSlot) : null;
-    this.subtitle.textContent =
-      myPlacement !== null ? `You finished ${myPlacement} of ${standings.length} on knockouts.` : 'Highest knockout count wins.';
+    // The biggest text answers "how did I do?"; who won goes underneath.
+    this.headline.textContent = ownHeadline ?? winnerLine;
+    this.subtitle.textContent = ownHeadline === null
+      ? 'Highest knockout count wins.'
+      : won
+        ? `Most knockouts out of ${standings.length}.`
+        : ownHeadline === 'You tied for first'
+          ? sharedFirstLine(standings)
+          : winnerLine;
     const me = localSlot !== undefined && localSlot !== null && localSlot >= 0 ? scores.find((s) => s.slot === localSlot) : undefined;
     const bestEl = this.root.querySelector('#tb-best') as HTMLDivElement;
     const newBestEl = this.root.querySelector('#tb-new-best') as HTMLDivElement;
@@ -153,8 +153,9 @@ export class TimedBrawlEndScreen {
     this.lastResult = winnerSlot === null ? 'tied' : won ? 'won' : 'lost';
 
     this.list.innerHTML = '';
-    this.list.classList.toggle('tb-standings-single', standings.length <= 10);
-    for (const row of standings) {
+    const rows = focusStandings(standings, localSlot);
+    this.list.classList.add('tb-standings-single');
+    for (const row of rows) {
       const el = document.createElement('div');
       el.className = 'tb-standing-row';
       el.classList.toggle('is-you', row.slot === localSlot);

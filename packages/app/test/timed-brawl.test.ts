@@ -106,3 +106,15 @@ test('koStandingInfo returns null for an out-of-range slot', () => {
   assert.equal(koStandingInfo(scores, -1), null);
   assert.equal(koStandingInfo(scores, 5), null);
 });
+
+test('end screen shows the top 5 plus your own row, and leads with your place', async () => {
+  const { focusStandings, ownResultHeadline, standingsFromScores } = await import('../src/timed-brawl.ts');
+  const scores = Array.from({ length: 20 }, (_, slot) => ({ slot, koCount: 20 - slot, deathCount: 0 }));
+  const standings = standingsFromScores(scores);
+  assert.deepEqual(focusStandings(standings, 11).map((r) => r.slot), [0, 1, 2, 3, 4, 11]);
+  assert.deepEqual(focusStandings(standings, 2).map((r) => r.slot), [0, 1, 2, 3, 4]);
+  assert.equal(ownResultHeadline(standings, 0, 11), 'You finished 12th of 20');
+  assert.equal(ownResultHeadline(standings, 0, 0), 'You win');
+  assert.equal(ownResultHeadline(standings, 0, undefined), null);
+  assert.equal(focusStandings(standings.slice(0, 8), 7).length, 8);
+});

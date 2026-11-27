@@ -3,6 +3,7 @@
 // so the actual logic -- clock formatting, standings ordering, placement --
 // has regression coverage without needing a browser.
 import type { MatchSettings } from '@bash-fighter/sim';
+import { HUD_FOCUS_THRESHOLD, ordinal } from './ui/hud-text.ts';
 
 /** True when the match is running the timed, respawn, highest-KO-count
  * mode -- the one condition every Timed-Brawl-only client affordance
@@ -144,4 +145,38 @@ export function tiedHeadline(
   if (leaders.length === 1) return `Time out — ${label(leaders[0]!.slot)} led`;
   if (leaders.length === 2) return `Time out — ${label(leaders[0]!.slot)} and ${label(leaders[1]!.slot)} tied`;
   return `Time out — ${label(leaders[0]!.slot)} and ${leaders.length - 1} others tied`;
+}
+
+/** End-screen rows: the top `top` standings plus the local player's own
+ *  row when they finished below that, so 20 rows never bury "you". */
+export function focusStandings(
+  standings: readonly TimedBrawlStanding[],
+  localSlot: number | undefined | null,
+  top = 5,
+): TimedBrawlStanding[] {
+  if (standings.length <= HUD_FOCUS_THRESHOLD) return [...standings];
+  const rows = standings.slice(0, top);
+  const own = standings.find((s) => s.slot === localSlot);
+  if (own && !rows.includes(own)) rows.push(own);
+  return rows;
+}
+
+/** Headline that answers "how did I do?" first. Null when the local
+ *  player isn't in the standings (spectating), so the caller falls back
+ *  to naming the winner. */
+export function ownResultHeadline(standings: readonly TimedBrawlStanding[], winnerSlot: number | null, localSlot: number | undefined | null): string | null {
+  const own = standings.find((s) => s.slot === localSlot);
+  if (!own) return null;
+  if (winnerSlot !== null && winnerSlot === localSlot) return 'You win';
+  if (own.place === 1) return 'You tied for first';
+  return `You finished ${ordinal(own.place)} of ${standings.length}`;
+}
+
+
+/** Subtitle under ownResultHeadline when the player shares first place. */
+export function sharedFirstLine(standings: readonly TimedBrawlStanding[]): string {
+  const leaders = standings.filter((s) => s.place === 1);
+  const others = leaders.length - 1;
+  const kos = leaders[0]?.koCount ?? 0;
+  return `Level with ${others} other${others === 1 ? '' : 's'} on ${kos} KO${kos === 1 ? '' : 's'}.`;
 }
